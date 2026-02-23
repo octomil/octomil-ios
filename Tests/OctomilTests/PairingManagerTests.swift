@@ -205,7 +205,7 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertEqual(decoded.modelLoadTimeMs, 1200.0, accuracy: 0.01)
         XCTAssertEqual(decoded.coldInferenceMs, 78.5, accuracy: 0.01)
         XCTAssertEqual(decoded.warmInferenceMs, 11.2, accuracy: 0.01)
-        XCTAssertEqual(decoded.batteryLevel, 0.85, accuracy: 0.01)
+        XCTAssertEqual(decoded.batteryLevel ?? -1, 0.85, accuracy: 0.01)
         XCTAssertEqual(decoded.thermalState, "nominal")
         // New optional fields should be nil when not provided
         XCTAssertNil(decoded.promptTokens)
@@ -808,7 +808,7 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertEqual(decoded.disabledDelegates, [])
 
         // Existing context fields still work
-        XCTAssertEqual(decoded.batteryLevel, 0.72, accuracy: 0.01)
+        XCTAssertEqual(decoded.batteryLevel ?? -1, 0.72, accuracy: 0.01)
         XCTAssertEqual(decoded.thermalState, "fair")
 
         // Inference count reflects 50 warm + overhead

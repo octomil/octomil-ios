@@ -477,7 +477,9 @@ final class ServerModelContractTests: XCTestCase {
         )
 
         let validResult = contract.validateInput([1.0])
-        XCTAssertTrue(validResult == .success(()))
+        if case .failure(let err) = validResult {
+            XCTFail("Expected success, got failure: \(err)")
+        }
 
         let invalidResult = contract.validateInput([1.0, 2.0])
         if case .failure(let error) = invalidResult {
@@ -568,7 +570,9 @@ final class ServerModelContractTests: XCTestCase {
         // Valid MNIST input: 1 * 28 * 28 * 1 = 784 elements
         let validInput = [Float](repeating: 0.5, count: 784)
         let validResult = contract.validateInput(validInput)
-        XCTAssertTrue(validResult == .success(()))
+        if case .failure(let err) = validResult {
+            XCTFail("Expected success, got failure: \(err)")
+        }
 
         // Wrong size: user accidentally passed raw image bytes (28 * 28 = 784, but wrong channel count)
         let wrongInput = [Float](repeating: 0.5, count: 28 * 28 * 3) // RGB instead of grayscale
@@ -582,17 +586,3 @@ final class ServerModelContractTests: XCTestCase {
     }
 }
 
-// MARK: - Result Equatable helper for tests
-
-extension Result: @retroactive Equatable where Success: Equatable, Failure: Equatable {
-    public static func == (lhs: Result, rhs: Result) -> Bool {
-        switch (lhs, rhs) {
-        case (.success(let lVal), .success(let rVal)):
-            return lVal == rVal
-        case (.failure(let lErr), .failure(let rErr)):
-            return lErr == rErr
-        default:
-            return false
-        }
-    }
-}

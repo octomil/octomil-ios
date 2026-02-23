@@ -69,7 +69,7 @@ final class PairingScreenStateTests: XCTestCase {
         XCTAssertEqual(info.version, "v1.2")
         XCTAssertEqual(info.sizeString, "2.7 GB")
         XCTAssertEqual(info.runtime, "CoreML")
-        XCTAssertEqual(info.tokensPerSecond, 85.3, accuracy: 0.01)
+        XCTAssertEqual(info.tokensPerSecond ?? -1, 85.3, accuracy: 0.01)
     }
 
     func testPairedModelInfoNilTokensPerSecond() {
