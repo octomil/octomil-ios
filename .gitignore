@@ -7,7 +7,12 @@ xcuserdata/
 
 # Swift Package Manager
 .build/
-.swiftpm/
+.swiftpm/*
+!.swiftpm/xcode/
+.swiftpm/xcode/*
+!.swiftpm/xcode/xcshareddata/
+.swiftpm/xcode/xcshareddata/*
+!.swiftpm/xcode/xcshareddata/xcschemes/
 Package.resolved
 
 # CocoaPods
