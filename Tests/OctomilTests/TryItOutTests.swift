@@ -159,7 +159,7 @@ final class ChatMessageTests: XCTestCase {
         let msg = ChatMessage(isUser: false, text: "Response", latencyMs: 123.4)
         XCTAssertFalse(msg.isUser)
         XCTAssertEqual(msg.text, "Response")
-        XCTAssertEqual(msg.latencyMs, 123.4, accuracy: 0.01)
+        XCTAssertEqual(msg.latencyMs ?? -1, 123.4, accuracy: 0.01)
     }
 
     func testUniqueIds() {
@@ -630,7 +630,7 @@ final class PairedModelInfoModalityTests: XCTestCase {
             tokensPerSecond: 42.0
         )
         XCTAssertEqual(info.name, "test")
-        XCTAssertEqual(info.tokensPerSecond, 42.0, accuracy: 0.01)
+        XCTAssertEqual(info.tokensPerSecond ?? -1, 42.0, accuracy: 0.01)
         XCTAssertNil(info.modality)
     }
 }
