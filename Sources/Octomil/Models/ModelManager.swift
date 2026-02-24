@@ -164,6 +164,12 @@ public actor ModelManager {
                 self.logger.info("Model downloaded: \(modelId)@\(version)")
             }
 
+            TelemetryQueue.shared?.reportFunnelEvent(
+                stage: "first_deploy",
+                success: true,
+                modelId: modelId
+            )
+
             return model
         }
 

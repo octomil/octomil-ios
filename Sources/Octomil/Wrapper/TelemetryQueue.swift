@@ -44,6 +44,13 @@ public struct InferenceTelemetryEvent: Codable, Sendable {
 /// to disk so they survive app termination and can be retried on next launch.
 public final class TelemetryQueue: @unchecked Sendable {
 
+    // MARK: - Shared Funnel Reporter
+
+    /// Shared instance used for funnel event reporting from classes that don't hold
+    /// a direct TelemetryQueue reference (PairingManager, ModelManager, Deploy).
+    /// Set automatically when the first TelemetryQueue is created with a serverURL.
+    public private(set) static var shared: TelemetryQueue?
+
     // MARK: - Properties
 
     private let modelId: String
@@ -106,6 +113,10 @@ public final class TelemetryQueue: @unchecked Sendable {
 
         restorePersistedEvents()
         startFlushTimer()
+
+        if serverURL != nil && TelemetryQueue.shared == nil {
+            TelemetryQueue.shared = self
+        }
     }
 
     /// Creates a telemetry queue using an explicit persistence URL (for testing).
@@ -282,6 +293,55 @@ public final class TelemetryQueue: @unchecked Sendable {
             logger.warning("Failed to restore persisted events: \(error.localizedDescription)")
         }
     }
+
+    // MARK: - Funnel Events
+
+    /// Report a funnel analytics event. Fire-and-forget, never propagates errors.
+    public func reportFunnelEvent(
+        stage: String,
+        success: Bool = true,
+        deviceId: String? = nil,
+        modelId: String? = nil,
+        rolloutId: String? = nil,
+        sessionId: String? = nil,
+        failureReason: String? = nil,
+        failureCategory: String? = nil,
+        durationMs: Int? = nil,
+        platform: String? = nil,
+        metadata: [String: String]? = nil
+    ) {
+        let event = FunnelEvent(
+            stage: stage,
+            success: success,
+            source: "sdk_ios",
+            deviceId: deviceId,
+            modelId: modelId,
+            rolloutId: rolloutId,
+            sessionId: sessionId,
+            failureReason: failureReason,
+            failureCategory: failureCategory,
+            durationMs: durationMs,
+            sdkVersion: "1.0.0",
+            platform: platform ?? "ios",
+            metadata: metadata
+        )
+
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self = self, let serverURL = self.serverURL else { return }
+            do {
+                var request = URLRequest(url: serverURL.appendingPathComponent("api/v1/funnel/events"))
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                if let apiKey = self.apiKey {
+                    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+                }
+                request.httpBody = try JSONEncoder().encode(event)
+                let (_, _) = try await URLSession.shared.data(for: request)
+            } catch {
+                // Fire-and-forget — never propagate errors
+            }
+        }
+    }
 }
 
 // MARK: - Codable Payload
@@ -294,5 +354,35 @@ struct TelemetryBatchPayload: Codable {
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
         case events
+    }
+}
+
+/// A single funnel analytics event.
+public struct FunnelEvent: Codable, Sendable {
+    public let stage: String
+    public let success: Bool
+    public let source: String
+    public let deviceId: String?
+    public let modelId: String?
+    public let rolloutId: String?
+    public let sessionId: String?
+    public let failureReason: String?
+    public let failureCategory: String?
+    public let durationMs: Int?
+    public let sdkVersion: String?
+    public let platform: String?
+    public let metadata: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case stage, success, source
+        case deviceId = "device_id"
+        case modelId = "model_id"
+        case rolloutId = "rollout_id"
+        case sessionId = "session_id"
+        case failureReason = "failure_reason"
+        case failureCategory = "failure_category"
+        case durationMs = "duration_ms"
+        case sdkVersion = "sdk_version"
+        case platform, metadata
     }
 }

@@ -71,6 +71,12 @@ public enum Deploy {
             deployed.warmupResult = try runBenchmark(model: octomilModel, url: compiledURL)
         }
 
+        TelemetryQueue.shared?.reportFunnelEvent(
+            stage: "first_inference",
+            success: true,
+            modelId: resolvedName
+        )
+
         return deployed
     }
 
