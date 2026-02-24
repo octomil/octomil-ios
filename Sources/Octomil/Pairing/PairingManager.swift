@@ -108,6 +108,13 @@ public actor PairingManager {
             logger.info("Connected to session \(session.id), model: \(session.modelName)")
         }
 
+        TelemetryQueue.shared?.reportFunnelEvent(
+            stage: "app_pair",
+            success: true,
+            deviceId: UUID().uuidString,
+            platform: "ios"
+        )
+
         return session
     }
 
