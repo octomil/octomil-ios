@@ -88,7 +88,7 @@ class OctomilDemoViewModel: ObservableObject {
         do {
             let registration = try await client.register(
                 metadata: [
-                    "app_version": "1.0.0",
+                    "app_version": "1.1.0",
                     "demo_app": "true"
                 ]
             )
