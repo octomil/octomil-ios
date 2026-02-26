@@ -1,6 +1,9 @@
 [package]
 versioned_files = [
     { path = "Sources/Octomil/Version.swift", regex = 'current = "(?<version>\d+\.\d+\.\d+)"' },
+    { path = "README.md", regex = 'from: "(?<version>\d+\.\d+\.\d+)"' },
+    { path = "sonar-project.properties", regex = 'sonar.projectVersion=(?<version>\d+\.\d+\.\d+)' },
+    { path = "Examples/OctomilDemo/OctomilDemoViewModel.swift", regex = '"app_version": "(?<version>\d+\.\d+\.\d+)"' },
 ]
 changelog = "CHANGELOG.md"
 
