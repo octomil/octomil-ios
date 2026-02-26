@@ -1,19 +1,43 @@
 [package]
-versioned_files = ["Sources/Octomil/Version.swift"]
+versioned_files = [
+    { path = "Sources/Octomil/Version.swift", regex = 'current = "(?<version>\d+\.\d+\.\d+)"' },
+]
 changelog = "CHANGELOG.md"
 
-# Custom regex to find version in Version.swift
-# knope looks for semantic version patterns in listed files
-# Version.swift contains: public static let current = "X.Y.Z"
+[[workflows]]
+name = "release"
 
-[workflows.release]
-[[workflows.release.steps]]
+[[workflows.steps]]
+type = "Command"
+command = "git switch -c release"
+
+[[workflows.steps]]
 type = "PrepareRelease"
 
-[[workflows.release.steps]]
+[[workflows.steps]]
+type = "Command"
+command = "git add -A && git commit -m \"chore: prepare release $version\""
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force --set-upstream origin release"
+
+[[workflows.steps]]
 type = "CreatePullRequest"
 base = "main"
 
-[workflows.release-pr-merged]
-[[workflows.release-pr-merged.steps]]
+[workflows.steps.title]
+template = "chore: release v$version"
+
+[workflows.steps.body]
+template = "Automated release PR created by Knope.\n\n$changelog"
+
+[[workflows]]
+name = "release-pr-merged"
+
+[[workflows.steps]]
 type = "Release"
+
+[github]
+owner = "octomil"
+repo = "octomil-ios"
