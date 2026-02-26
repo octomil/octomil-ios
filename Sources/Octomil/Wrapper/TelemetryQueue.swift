@@ -321,7 +321,7 @@ public final class TelemetryQueue: @unchecked Sendable {
             failureReason: failureReason,
             failureCategory: failureCategory,
             durationMs: durationMs,
-            sdkVersion: "1.0.0",
+            sdkVersion: OctomilVersion.current,
             platform: platform ?? "ios",
             metadata: metadata
         )

@@ -230,7 +230,7 @@ public final class OctomilClient: @unchecked Sendable {
             orgId: orgId,
             platform: "ios",
             osVersion: deviceInfo.osVersion,
-            sdkVersion: "1.0.0",
+            sdkVersion: OctomilVersion.current,
             appVersion: appVersion,
             deviceInfo: hardwareInfo,
             locale: deviceInfo.locale,

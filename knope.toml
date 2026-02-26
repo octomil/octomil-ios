@@ -1,0 +1,19 @@
+[package]
+versioned_files = ["Sources/Octomil/Version.swift"]
+changelog = "CHANGELOG.md"
+
+# Custom regex to find version in Version.swift
+# knope looks for semantic version patterns in listed files
+# Version.swift contains: public static let current = "X.Y.Z"
+
+[workflows.release]
+[[workflows.release.steps]]
+type = "PrepareRelease"
+
+[[workflows.release.steps]]
+type = "CreatePullRequest"
+base = "main"
+
+[workflows.release-pr-merged]
+[[workflows.release-pr-merged.steps]]
+type = "Release"
