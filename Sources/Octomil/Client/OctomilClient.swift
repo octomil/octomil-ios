@@ -460,27 +460,26 @@ public final class OctomilClient: @unchecked Sendable {
         let orgId = self.orgId
         let sessionId = UUID().uuidString
 
-        // Report generation_started
+        // Report generation_started via v2 OTLP
         if let deviceId = deviceId {
             Task {
-                let ctx = InferenceEventContext(
-                    deviceId: deviceId,
-                    modelId: model.id,
-                    version: model.version,
-                    modality: modality.rawValue,
-                    sessionId: sessionId
+                let resource = TelemetryResource(deviceId: deviceId, orgId: orgId)
+                let event = TelemetryEvent(
+                    name: "inference.generation_started",
+                    attributes: [
+                        "model.id": .string(model.id),
+                        "model.version": .string(model.version),
+                        "inference.modality": .string(modality.rawValue),
+                        "inference.session_id": .string(sessionId),
+                        "model.format": .string("coreml"),
+                    ]
                 )
-                let event = InferenceEventRequest(
-                    context: ctx,
-                    eventType: "generation_started",
-                    timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
-                    orgId: orgId
-                )
-                try? await apiClient.reportInferenceEvent(event)
+                let envelope = TelemetryEnvelope(resource: resource, events: [event])
+                try? await apiClient.reportTelemetryEvents(envelope)
             }
         }
 
-        // Wrap the stream to report completion
+        // Wrap the stream to report completion via v2 OTLP
         return AsyncThrowingStream<InferenceChunk, Error> { continuation in
             let task = Task {
                 var failed = false
@@ -497,29 +496,27 @@ public final class OctomilClient: @unchecked Sendable {
                     continuation.finish()
                 }
 
-                // Report completion event
+                // Report completion event via v2 OTLP
                 if let deviceId = deviceId, let result = getResult() {
-                    let metrics = InferenceEventMetrics(
-                        ttfcMs: result.ttfcMs,
-                        totalChunks: result.totalChunks,
-                        totalDurationMs: result.totalDurationMs,
-                        throughput: result.throughput
-                    )
-                    let ctx = InferenceEventContext(
-                        deviceId: deviceId,
-                        modelId: model.id,
-                        version: model.version,
-                        modality: modality.rawValue,
-                        sessionId: sessionId
-                    )
-                    let event = InferenceEventRequest(
-                        context: ctx,
-                        eventType: failed ? "generation_failed" : "generation_completed",
-                        timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
-                        metrics: metrics,
-                        orgId: orgId
-                    )
-                    try? await apiClient.reportInferenceEvent(event)
+                    let eventName = failed ? "inference.generation_failed" : "inference.generation_completed"
+                    var attrs: [String: TelemetryValue] = [
+                        "model.id": .string(model.id),
+                        "model.version": .string(model.version),
+                        "inference.modality": .string(modality.rawValue),
+                        "inference.session_id": .string(sessionId),
+                        "inference.ttft_ms": .double(result.ttfcMs),
+                        "inference.duration_ms": .double(result.totalDurationMs),
+                        "inference.total_chunks": .int(result.totalChunks),
+                        "inference.throughput": .double(result.throughput),
+                        "model.format": .string("coreml"),
+                    ]
+                    if failed {
+                        attrs["inference.success"] = .bool(false)
+                    }
+                    let resource = TelemetryResource(deviceId: deviceId, orgId: orgId)
+                    let event = TelemetryEvent(name: eventName, attributes: attrs)
+                    let envelope = TelemetryEnvelope(resource: resource, events: [event])
+                    try? await apiClient.reportTelemetryEvents(envelope)
                 }
             }
 

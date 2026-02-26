@@ -428,8 +428,9 @@ public actor APIClient {
 
     // MARK: - Inference Events
 
-    /// Reports a streaming inference event to the server.
+    /// Reports a streaming inference event to the server (v1 legacy endpoint).
     /// - Parameter request: Inference event request.
+    @available(*, deprecated, message: "Use reportTelemetryEvents(_:) with v2 OTLP envelope instead")
     public func reportInferenceEvent(_ request: InferenceEventRequest) async throws {
         let url = serverURL.appendingPathComponent("api/v1/inference/events")
 
@@ -438,6 +439,22 @@ public actor APIClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         try configureHeaders(&urlRequest)
         urlRequest.httpBody = try jsonEncoder.encode(request)
+
+        let _: EmptyResponse = try await performRequest(urlRequest)
+    }
+
+    // MARK: - V2 Telemetry
+
+    /// Sends a batch of telemetry events to the v2 OTLP endpoint.
+    /// - Parameter envelope: The v2 OTLP telemetry envelope.
+    public func reportTelemetryEvents(_ envelope: TelemetryEnvelope) async throws {
+        let url = serverURL.appendingPathComponent("api/v2/telemetry/events")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        try configureHeaders(&urlRequest)
+        urlRequest.httpBody = try jsonEncoder.encode(envelope)
 
         let _: EmptyResponse = try await performRequest(urlRequest)
     }

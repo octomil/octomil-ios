@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-/// A single inference telemetry event.
+/// A single inference telemetry event (v1 legacy format, kept for persistence compatibility).
 public struct InferenceTelemetryEvent: Codable, Sendable {
     /// Model identifier.
     public let modelId: String
@@ -35,19 +35,47 @@ public struct InferenceTelemetryEvent: Codable, Sendable {
         self.success = success
         self.errorMessage = errorMessage
     }
+
+    /// Converts this legacy event to a v2 `TelemetryEvent`.
+    func toV2Event() -> TelemetryEvent {
+        let name = success ? "inference.completed" : "inference.failed"
+        let iso = ISO8601DateFormatter()
+        let date = Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
+
+        var attrs: [String: TelemetryValue] = [
+            "model.id": .string(modelId),
+            "inference.duration_ms": .double(latencyMs),
+            "model.format": .string("coreml"),
+        ]
+        if !success {
+            attrs["inference.success"] = .bool(false)
+        }
+        if let errorMessage {
+            attrs["error.message"] = .string(errorMessage)
+        }
+
+        return TelemetryEvent(
+            name: name,
+            timestamp: iso.string(from: date),
+            attributes: attrs
+        )
+    }
 }
 
-/// Batches inference telemetry events and sends them to the Octomil server.
+/// Batches telemetry events and sends them to the Octomil server using the
+/// v2 OTLP envelope format (`POST /api/v2/telemetry/events`).
 ///
 /// Events are accumulated in memory and flushed either when the batch size
-/// is reached or when a periodic timer fires.  Unsent events are persisted
+/// is reached or when a periodic timer fires. Unsent events are persisted
 /// to disk so they survive app termination and can be retried on next launch.
+///
+/// Both inference events and funnel events are sent through the unified v2 endpoint.
 public final class TelemetryQueue: @unchecked Sendable {
 
     // MARK: - Shared Funnel Reporter
 
-    /// Shared instance used for funnel event reporting from classes that don't hold
-    /// a direct TelemetryQueue reference (PairingManager, ModelManager, Deploy).
+    /// Shared instance used for funnel/telemetry event reporting from classes
+    /// that don't hold a direct TelemetryQueue reference.
     /// Set automatically when the first TelemetryQueue is created with a serverURL.
     public private(set) static var shared: TelemetryQueue?
 
@@ -60,8 +88,13 @@ public final class TelemetryQueue: @unchecked Sendable {
     private let flushInterval: TimeInterval
     private let logger: Logger
 
+    /// Device ID for the v2 resource envelope. Populated lazily.
+    private var deviceId: String?
+    /// Org ID for the v2 resource envelope.
+    private var orgId: String?
+
     private let lock = NSLock()
-    private var buffer: [InferenceTelemetryEvent] = []
+    private var buffer: [TelemetryEvent] = []
     private var flushTimer: DispatchSourceTimer?
     private let timerQueue = DispatchQueue(label: "ai.octomil.telemetry.timer")
     private let persistenceURL: URL
@@ -83,18 +116,24 @@ public final class TelemetryQueue: @unchecked Sendable {
     ///   - apiKey: API key for authentication.
     ///   - batchSize: Flush when this many events have accumulated.
     ///   - flushInterval: Maximum seconds between automatic flushes.
+    ///   - deviceId: Stable device identifier for the v2 resource.
+    ///   - orgId: Organization identifier for the v2 resource.
     public init(
         modelId: String,
         serverURL: URL? = nil,
         apiKey: String? = nil,
         batchSize: Int = 50,
-        flushInterval: TimeInterval = 30
+        flushInterval: TimeInterval = 30,
+        deviceId: String? = nil,
+        orgId: String? = nil
     ) {
         self.modelId = modelId
         self.serverURL = serverURL
         self.apiKey = apiKey
         self.batchSize = max(batchSize, 1)
         self.flushInterval = flushInterval
+        self.deviceId = deviceId
+        self.orgId = orgId
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "TelemetryQueue")
 
         // Persistence location
@@ -104,7 +143,7 @@ public final class TelemetryQueue: @unchecked Sendable {
         ).first!
         self.persistenceURL = appSupport
             .appendingPathComponent("octomil_telemetry", isDirectory: true)
-            .appendingPathComponent("\(modelId)_events.json")
+            .appendingPathComponent("\(modelId)_v2_events.json")
 
         try? FileManager.default.createDirectory(
             at: persistenceURL.deletingLastPathComponent(),
@@ -126,13 +165,17 @@ public final class TelemetryQueue: @unchecked Sendable {
         apiKey: String?,
         batchSize: Int,
         flushInterval: TimeInterval,
-        persistenceURL: URL
+        persistenceURL: URL,
+        deviceId: String? = nil,
+        orgId: String? = nil
     ) {
         self.modelId = modelId
         self.serverURL = serverURL
         self.apiKey = apiKey
         self.batchSize = max(batchSize, 1)
         self.flushInterval = flushInterval
+        self.deviceId = deviceId
+        self.orgId = orgId
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "TelemetryQueue")
         self.persistenceURL = persistenceURL
 
@@ -150,13 +193,22 @@ public final class TelemetryQueue: @unchecked Sendable {
         persistEvents()
     }
 
-    // MARK: - Public API
+    // MARK: - Resource Configuration
 
-    /// Records a single inference event.
+    /// Sets the device and org IDs for the v2 OTLP resource envelope.
+    public func setResourceContext(deviceId: String, orgId: String) {
+        lock.lock()
+        self.deviceId = deviceId
+        self.orgId = orgId
+        lock.unlock()
+    }
+
+    // MARK: - Public API (v2 TelemetryEvent)
+
+    /// Records a v2 telemetry event.
     ///
-    /// When the buffer reaches ``batchSize`` the queue is flushed
-    /// automatically in the background.
-    public func record(_ event: InferenceTelemetryEvent) {
+    /// When the buffer reaches ``batchSize`` the queue is flushed automatically.
+    public func recordEvent(_ event: TelemetryEvent) {
         lock.lock()
         buffer.append(event)
         let shouldFlush = buffer.count >= batchSize
@@ -167,19 +219,37 @@ public final class TelemetryQueue: @unchecked Sendable {
         }
     }
 
+    /// Records a legacy v1 inference event by converting it to v2 format.
+    public func record(_ event: InferenceTelemetryEvent) {
+        recordEvent(event.toV2Event())
+    }
+
     /// Convenience to record a successful inference.
     public func recordSuccess(latencyMs: Double) {
-        record(InferenceTelemetryEvent(modelId: modelId, latencyMs: latencyMs))
+        let event = TelemetryEvent(
+            name: "inference.completed",
+            attributes: [
+                "model.id": .string(modelId),
+                "inference.duration_ms": .double(latencyMs),
+                "model.format": .string("coreml"),
+            ]
+        )
+        recordEvent(event)
     }
 
     /// Convenience to record a failed inference.
     public func recordFailure(latencyMs: Double, error: String) {
-        record(InferenceTelemetryEvent(
-            modelId: modelId,
-            latencyMs: latencyMs,
-            success: false,
-            errorMessage: error
-        ))
+        let event = TelemetryEvent(
+            name: "inference.failed",
+            attributes: [
+                "model.id": .string(modelId),
+                "inference.duration_ms": .double(latencyMs),
+                "inference.success": .bool(false),
+                "error.message": .string(error),
+                "model.format": .string("coreml"),
+            ]
+        )
+        recordEvent(event)
     }
 
     /// Forces an immediate async flush of all buffered events.
@@ -209,30 +279,32 @@ public final class TelemetryQueue: @unchecked Sendable {
 
     // MARK: - Internal / Private
 
-    /// Sends all buffered events to the server and clears the buffer.
+    /// Sends all buffered events to the server using v2 OTLP envelope.
     internal func flush() async {
         let batch = drainBuffer()
 
         guard !batch.isEmpty else { return }
 
         guard let serverURL else {
-            // No server configured -- discard events silently.
             logger.debug("No server URL configured; discarding \(batch.count) telemetry events")
             return
         }
 
-        let url = serverURL.appendingPathComponent("api/v1/telemetry/inference")
+        let resource = buildResource()
+        let envelope = TelemetryEnvelope(resource: resource, events: batch)
+
+        let url = serverURL.appendingPathComponent("api/v2/telemetry/events")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("octomil-ios/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("octomil-ios/\(OctomilVersion.current)", forHTTPHeaderField: "User-Agent")
         if let apiKey {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
         do {
             let encoder = JSONEncoder()
-            request.httpBody = try encoder.encode(TelemetryBatchPayload(modelId: modelId, events: batch))
+            request.httpBody = try encoder.encode(envelope)
 
             let (_, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse,
@@ -240,7 +312,6 @@ public final class TelemetryQueue: @unchecked Sendable {
                 logger.warning("Telemetry upload returned HTTP \(httpResponse.statusCode)")
                 requeueEvents(batch)
             } else {
-                // Success -- remove persisted file if present
                 try? FileManager.default.removeItem(at: persistenceURL)
             }
         } catch {
@@ -249,8 +320,20 @@ public final class TelemetryQueue: @unchecked Sendable {
         }
     }
 
+    private func buildResource() -> TelemetryResource {
+        lock.lock()
+        let devId = deviceId ?? "unknown"
+        let org = orgId ?? "unknown"
+        lock.unlock()
+
+        return TelemetryResource(
+            deviceId: devId,
+            orgId: org
+        )
+    }
+
     /// Atomically drains the buffer and returns the events.
-    private func drainBuffer() -> [InferenceTelemetryEvent] {
+    private func drainBuffer() -> [TelemetryEvent] {
         lock.lock()
         let batch = buffer
         buffer.removeAll()
@@ -259,7 +342,7 @@ public final class TelemetryQueue: @unchecked Sendable {
     }
 
     /// Re-inserts events at the front of the buffer after a failed upload.
-    private func requeueEvents(_ events: [InferenceTelemetryEvent]) {
+    private func requeueEvents(_ events: [TelemetryEvent]) {
         lock.lock()
         buffer.insert(contentsOf: events, at: 0)
         lock.unlock()
@@ -283,7 +366,7 @@ public final class TelemetryQueue: @unchecked Sendable {
         guard FileManager.default.fileExists(atPath: persistenceURL.path) else { return }
         do {
             let data = try Data(contentsOf: persistenceURL)
-            let events = try JSONDecoder().decode([InferenceTelemetryEvent].self, from: data)
+            let events = try JSONDecoder().decode([TelemetryEvent].self, from: data)
             lock.lock()
             buffer.insert(contentsOf: events, at: 0)
             lock.unlock()
@@ -294,9 +377,12 @@ public final class TelemetryQueue: @unchecked Sendable {
         }
     }
 
-    // MARK: - Funnel Events
+    // MARK: - Funnel Events (now via v2 unified endpoint)
 
-    /// Report a funnel analytics event. Fire-and-forget, never propagates errors.
+    /// Report a funnel analytics event via the v2 telemetry endpoint.
+    ///
+    /// Funnel events are converted to v2 `TelemetryEvent` with `funnel.*` names
+    /// and sent through the same batched queue as inference events.
     public func reportFunnelEvent(
         stage: String,
         success: Bool = true,
@@ -310,43 +396,38 @@ public final class TelemetryQueue: @unchecked Sendable {
         platform: String? = nil,
         metadata: [String: String]? = nil
     ) {
-        let event = FunnelEvent(
-            stage: stage,
-            success: success,
-            source: "sdk_ios",
-            deviceId: deviceId,
-            modelId: modelId,
-            rolloutId: rolloutId,
-            sessionId: sessionId,
-            failureReason: failureReason,
-            failureCategory: failureCategory,
-            durationMs: durationMs,
-            sdkVersion: OctomilVersion.current,
-            platform: platform ?? "ios",
-            metadata: metadata
-        )
+        var attrs: [String: TelemetryValue] = [
+            "funnel.success": .bool(success),
+            "funnel.source": .string("sdk_ios"),
+        ]
 
-        Task.detached(priority: .utility) { [weak self] in
-            guard let self = self, let serverURL = self.serverURL else { return }
-            do {
-                var request = URLRequest(url: serverURL.appendingPathComponent("api/v1/funnel/events"))
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                if let apiKey = self.apiKey {
-                    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-                }
-                request.httpBody = try JSONEncoder().encode(event)
-                let (_, _) = try await URLSession.shared.data(for: request)
-            } catch {
-                // Fire-and-forget — never propagate errors
+        if let deviceId { attrs["device.id"] = .string(deviceId) }
+        if let modelId { attrs["model.id"] = .string(modelId) }
+        if let rolloutId { attrs["funnel.rollout_id"] = .string(rolloutId) }
+        if let sessionId { attrs["funnel.session_id"] = .string(sessionId) }
+        if let failureReason { attrs["error.message"] = .string(failureReason) }
+        if let failureCategory { attrs["error.category"] = .string(failureCategory) }
+        if let durationMs { attrs["funnel.duration_ms"] = .int(durationMs) }
+        attrs["funnel.platform"] = .string(platform ?? "ios")
+        attrs["funnel.sdk_version"] = .string(OctomilVersion.current)
+
+        if let metadata {
+            for (key, value) in metadata {
+                attrs["funnel.metadata.\(key)"] = .string(value)
             }
         }
+
+        let event = TelemetryEvent(
+            name: "funnel.\(stage)",
+            attributes: attrs
+        )
+        recordEvent(event)
     }
 }
 
-// MARK: - Codable Payload
+// MARK: - Legacy Codable Payload (kept for backward compatibility)
 
-/// Batch payload sent to `POST /api/v1/telemetry/inference`.
+/// Batch payload sent to `POST /api/v1/telemetry/inference` (v1 legacy).
 struct TelemetryBatchPayload: Codable {
     let modelId: String
     let events: [InferenceTelemetryEvent]
@@ -357,7 +438,7 @@ struct TelemetryBatchPayload: Codable {
     }
 }
 
-/// A single funnel analytics event.
+/// A single funnel analytics event (v1 legacy format).
 public struct FunnelEvent: Codable, Sendable {
     public let stage: String
     public let success: Bool
