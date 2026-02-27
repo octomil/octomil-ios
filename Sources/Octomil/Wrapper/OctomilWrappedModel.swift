@@ -44,12 +44,21 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     /// Telemetry queue for batched inference event reporting.
     public let telemetry: TelemetryQueue
 
+    /// Optional routing client for device/cloud inference decisions.
+    /// When set, predictions may be routed to the cloud instead of
+    /// running locally. Set via ``configureRouting(_:)``.
+    public private(set) var routingClient: RoutingClient?
+
+    /// Routing configuration, if routing is enabled.
+    public private(set) var routingConfig: RoutingConfig?
+
     /// The model description from the underlying CoreML model.
     public var modelDescription: MLModelDescription {
         underlyingModel.modelDescription
     }
 
     private let logger: Logger
+    private let deviceMetadata = DeviceMetadata()
 
     // MARK: - Initialization
 
@@ -96,6 +105,17 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     ///   the input doesn't match the contract, or any error from CoreML.
     public func prediction(from input: MLFeatureProvider) throws -> MLFeatureProvider {
         try validateIfNeeded(input)
+
+        // Attempt cloud routing if configured.
+        if let routingClient = routingClient {
+            if let cloudResult = try? cloudPredictionSync(
+                input: input,
+                routingClient: routingClient
+            ) {
+                return cloudResult
+            }
+            // Fall through to local inference on any failure.
+        }
 
         let start = CFAbsoluteTimeGetCurrent()
         do {
@@ -153,6 +173,27 @@ public final class OctomilWrappedModel: @unchecked Sendable {
         }
     }
 
+    // MARK: - Routing Configuration
+
+    /// Enables cloud routing for this model.
+    ///
+    /// When configured, each ``prediction(from:)`` call first consults the
+    /// routing API. If the server recommends cloud execution, inference is
+    /// sent to `POST /api/v1/inference`. On any routing or cloud failure,
+    /// the SDK falls back to local CoreML inference silently.
+    ///
+    /// - Parameter config: Routing configuration with server URL and API key.
+    public func configureRouting(_ config: RoutingConfig) {
+        self.routingConfig = config
+        self.routingClient = RoutingClient(config: config)
+    }
+
+    /// Disables cloud routing, reverting to local-only inference.
+    public func disableRouting() {
+        self.routingClient = nil
+        self.routingConfig = nil
+    }
+
     // MARK: - OTA Updates
 
     /// Replaces the underlying model with a new version.
@@ -188,6 +229,92 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     }
 
     // MARK: - Private
+
+    /// Synchronously bridge into async routing and cloud inference.
+    /// Returns an MLFeatureProvider wrapping the cloud output, or nil
+    /// to fall back to local inference.
+    private func cloudPredictionSync(
+        input: MLFeatureProvider,
+        routingClient: RoutingClient
+    ) throws -> MLFeatureProvider? {
+        // Bridge async → sync using a semaphore. CoreML's prediction API
+        // is synchronous, so we must block here.
+        let semaphore = DispatchSemaphore(value: 0)
+        var cloudOutput: MLFeatureProvider?
+
+        Task.detached { [weak self] in
+            defer { semaphore.signal() }
+            guard let self = self else { return }
+
+            let caps = self.deviceMetadata.routingCapabilities()
+            let decision = await routingClient.route(
+                modelId: self.modelId,
+                deviceCapabilities: caps
+            )
+
+            guard let decision = decision, decision.target == "cloud" else {
+                return
+            }
+
+            // Convert MLFeatureProvider to a dictionary for the cloud API.
+            var inputDict: [String: Any] = [:]
+            for name in input.featureNames {
+                if let value = input.featureValue(for: name) {
+                    switch value.type {
+                    case .double:
+                        inputDict[name] = value.doubleValue
+                    case .int64:
+                        inputDict[name] = value.int64Value
+                    case .string:
+                        inputDict[name] = value.stringValue
+                    case .multiArray:
+                        if let arr = value.multiArrayValue {
+                            inputDict[name] = self.multiArrayToList(arr)
+                        }
+                    default:
+                        inputDict[name] = "unsupported_type"
+                    }
+                }
+            }
+
+            do {
+                let start = CFAbsoluteTimeGetCurrent()
+                let response = try await routingClient.cloudInfer(
+                    modelId: self.modelId,
+                    inputData: inputDict
+                )
+                let latencyMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+
+                self.recordTelemetry(latencyMs: latencyMs, success: true)
+
+                // Wrap cloud output as an MLFeatureProvider.
+                if let dict = response.output.value as? [String: Any] {
+                    let features = try MLDictionaryFeatureProvider(dictionary: dict)
+                    cloudOutput = features
+                }
+            } catch {
+                self.logger.warning("Cloud inference failed: \(error.localizedDescription)")
+                // cloudOutput stays nil → fall back to local
+            }
+        }
+
+        // Wait with a timeout to avoid blocking forever.
+        let result = semaphore.wait(timeout: .now() + 15)
+        if result == .timedOut {
+            logger.warning("Cloud routing timed out, falling back to local inference")
+            return nil
+        }
+
+        return cloudOutput
+    }
+
+    private func multiArrayToList(_ array: MLMultiArray) -> [Double] {
+        var result: [Double] = []
+        for i in 0..<array.count {
+            result.append(array[i].doubleValue)
+        }
+        return result
+    }
 
     private func validateIfNeeded(_ input: MLFeatureProvider) throws {
         guard config.validateInputs, let contract = serverContract else { return }
