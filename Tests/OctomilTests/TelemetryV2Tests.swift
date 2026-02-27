@@ -595,3 +595,329 @@ final class APIClientTelemetryV2Tests: XCTestCase {
         XCTAssertFalse(request.url!.absoluteString.contains("/api/v1/"))
     }
 }
+
+// MARK: - Phase 4 Tests: trace_id/span_id, inference.started, training, experiment, deploy
+
+final class TelemetryV2Phase4Tests: XCTestCase {
+
+    private var tempDir: URL!
+    private var persistenceURL: URL!
+
+    override func setUp() {
+        super.setUp()
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        persistenceURL = tempDir.appendingPathComponent("test_phase4_events.json")
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: tempDir)
+        super.tearDown()
+    }
+
+    private func makeQueue() -> TelemetryQueue {
+        TelemetryQueue(
+            modelId: "test",
+            serverURL: nil,
+            apiKey: nil,
+            batchSize: 100,
+            flushInterval: 0,
+            persistenceURL: persistenceURL
+        )
+    }
+
+    // MARK: - trace_id / span_id Encoding
+
+    func testTraceIdSpanIdEncoding() throws {
+        let event = TelemetryEvent(
+            name: "inference.completed",
+            timestamp: "2026-02-27T00:00:00Z",
+            attributes: ["model.id": .string("m1")],
+            traceId: "abc123trace",
+            spanId: "def456span"
+        )
+
+        let data = try JSONEncoder().encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["trace_id"] as? String, "abc123trace")
+        XCTAssertEqual(json["span_id"] as? String, "def456span")
+        XCTAssertEqual(json["name"] as? String, "inference.completed")
+        XCTAssertEqual(json["timestamp"] as? String, "2026-02-27T00:00:00Z")
+    }
+
+    func testTraceIdSpanIdRoundtrip() throws {
+        let event = TelemetryEvent(
+            name: "inference.started",
+            attributes: ["model.id": .string("m1")],
+            traceId: "trace-001",
+            spanId: "span-002"
+        )
+
+        let data = try JSONEncoder().encode(event)
+        let decoded = try JSONDecoder().decode(TelemetryEvent.self, from: data)
+
+        XCTAssertEqual(decoded.traceId, "trace-001")
+        XCTAssertEqual(decoded.spanId, "span-002")
+        XCTAssertEqual(decoded.name, "inference.started")
+    }
+
+    func testTraceIdSpanIdNilWhenOmitted() throws {
+        let event = TelemetryEvent(
+            name: "inference.completed",
+            attributes: ["model.id": .string("m1")]
+        )
+
+        XCTAssertNil(event.traceId)
+        XCTAssertNil(event.spanId)
+
+        let data = try JSONEncoder().encode(event)
+        let decoded = try JSONDecoder().decode(TelemetryEvent.self, from: data)
+        XCTAssertNil(decoded.traceId)
+        XCTAssertNil(decoded.spanId)
+    }
+
+    func testTraceIdSpanIdOmittedFromJSON() throws {
+        let event = TelemetryEvent(
+            name: "inference.completed",
+            attributes: ["model.id": .string("m1")]
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(event)
+
+        // When nil, the keys should not appear (or appear as null)
+        // Either way, decoding should give nil
+        let decoded = try JSONDecoder().decode(TelemetryEvent.self, from: data)
+        XCTAssertNil(decoded.traceId)
+        XCTAssertNil(decoded.spanId)
+    }
+
+    // MARK: - inference.started
+
+    func testRecordStartedEmitsEvent() {
+        let queue = makeQueue()
+        queue.recordStarted(modelId: "fraud_detection")
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "inference.started")
+        XCTAssertEqual(event.attributes["model.id"], .string("fraud_detection"))
+        XCTAssertEqual(event.attributes["model.format"], .string("coreml"))
+    }
+
+    // MARK: - Training Events
+
+    func testReportTrainingStarted() {
+        let queue = makeQueue()
+        queue.reportTrainingStarted(
+            modelId: "classifier",
+            version: "1.0.0",
+            roundId: "round-42",
+            numSamples: 500
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "training.started")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["model.version"], .string("1.0.0"))
+        XCTAssertEqual(event.attributes["training.round_id"], .string("round-42"))
+        XCTAssertEqual(event.attributes["training.num_samples"], .int(500))
+    }
+
+    func testReportTrainingCompleted() {
+        let queue = makeQueue()
+        queue.reportTrainingCompleted(
+            modelId: "classifier",
+            version: "1.0.0",
+            durationMs: 12345.6,
+            loss: 0.05,
+            accuracy: 0.97
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "training.completed")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["model.version"], .string("1.0.0"))
+        XCTAssertEqual(event.attributes["training.duration_ms"], .double(12345.6))
+        XCTAssertEqual(event.attributes["training.loss"], .double(0.05))
+        XCTAssertEqual(event.attributes["training.accuracy"], .double(0.97))
+    }
+
+    func testReportTrainingFailed() {
+        let queue = makeQueue()
+        queue.reportTrainingFailed(
+            modelId: "classifier",
+            version: "1.0.0",
+            errorType: "OOM",
+            errorMessage: "Out of memory during backward pass"
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "training.failed")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["model.version"], .string("1.0.0"))
+        XCTAssertEqual(event.attributes["error.type"], .string("OOM"))
+        XCTAssertEqual(event.attributes["error.message"], .string("Out of memory during backward pass"))
+    }
+
+    func testReportWeightUpload() {
+        let queue = makeQueue()
+        queue.reportWeightUpload(
+            modelId: "classifier",
+            roundId: "round-42",
+            sampleCount: 250
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "training.weight_upload")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["training.round_id"], .string("round-42"))
+        XCTAssertEqual(event.attributes["training.sample_count"], .int(250))
+    }
+
+    // MARK: - Experiment Events
+
+    func testReportExperimentAssigned() {
+        let queue = makeQueue()
+        queue.reportExperimentAssigned(
+            modelId: "classifier",
+            experimentId: "exp-001",
+            variant: "treatment_a"
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "experiment.assigned")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["experiment.id"], .string("exp-001"))
+        XCTAssertEqual(event.attributes["experiment.variant"], .string("treatment_a"))
+    }
+
+    func testReportExperimentMetric() {
+        let queue = makeQueue()
+        queue.reportExperimentMetric(
+            experimentId: "exp-001",
+            metricName: "click_rate",
+            metricValue: 0.15
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "experiment.metric_recorded")
+        XCTAssertEqual(event.attributes["experiment.id"], .string("exp-001"))
+        XCTAssertEqual(event.attributes["experiment.metric_name"], .string("click_rate"))
+        XCTAssertEqual(event.attributes["experiment.metric_value"], .double(0.15))
+    }
+
+    // MARK: - Deploy Events
+
+    func testReportDeployStarted() {
+        let queue = makeQueue()
+        queue.reportDeployStarted(modelId: "classifier", version: "2.0.0")
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "deploy.started")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["model.version"], .string("2.0.0"))
+    }
+
+    func testReportDeployCompleted() {
+        let queue = makeQueue()
+        queue.reportDeployCompleted(
+            modelId: "classifier",
+            version: "2.0.0",
+            durationMs: 5432.1
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "deploy.completed")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["model.version"], .string("2.0.0"))
+        XCTAssertEqual(event.attributes["deploy.duration_ms"], .double(5432.1))
+    }
+
+    func testReportDeployRollback() {
+        let queue = makeQueue()
+        queue.reportDeployRollback(
+            modelId: "classifier",
+            fromVersion: "2.0.0",
+            toVersion: "1.5.0",
+            reason: "accuracy regression"
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "deploy.rollback")
+        XCTAssertEqual(event.attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(event.attributes["deploy.from_version"], .string("2.0.0"))
+        XCTAssertEqual(event.attributes["deploy.to_version"], .string("1.5.0"))
+        XCTAssertEqual(event.attributes["deploy.reason"], .string("accuracy regression"))
+    }
+
+    // MARK: - Multiple Event Types in One Queue
+
+    func testMixedEventTypes() {
+        let queue = makeQueue()
+
+        queue.recordStarted(modelId: "m1")
+        queue.recordSuccess(latencyMs: 10.0)
+        queue.reportTrainingStarted(modelId: "m1", version: "1.0", roundId: "r1", numSamples: 100)
+        queue.reportExperimentAssigned(modelId: "m1", experimentId: "e1", variant: "control")
+        queue.reportDeployStarted(modelId: "m1", version: "1.0")
+
+        XCTAssertEqual(queue.pendingCount, 5)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "inference.started")
+        XCTAssertEqual(events[1].name, "inference.completed")
+        XCTAssertEqual(events[2].name, "training.started")
+        XCTAssertEqual(events[3].name, "experiment.assigned")
+        XCTAssertEqual(events[4].name, "deploy.started")
+    }
+
+    // MARK: - Persistence of New Event Types
+
+    func testNewEventTypesPersistAndRestore() {
+        let queue1 = makeQueue()
+        queue1.reportTrainingStarted(modelId: "m1", version: "1.0", roundId: "r1", numSamples: 50)
+        queue1.reportExperimentMetric(experimentId: "e1", metricName: "latency_p99", metricValue: 42.5)
+        queue1.reportDeployRollback(modelId: "m1", fromVersion: "2.0", toVersion: "1.0", reason: "crash")
+        queue1.persistEvents()
+
+        let queue2 = TelemetryQueue(
+            modelId: "test",
+            serverURL: nil,
+            apiKey: nil,
+            batchSize: 100,
+            flushInterval: 0,
+            persistenceURL: persistenceURL
+        )
+        XCTAssertEqual(queue2.pendingCount, 3)
+
+        let events = queue2.bufferedEvents
+        XCTAssertEqual(events[0].name, "training.started")
+        XCTAssertEqual(events[0].attributes["training.num_samples"], .int(50))
+        XCTAssertEqual(events[1].name, "experiment.metric_recorded")
+        XCTAssertEqual(events[1].attributes["experiment.metric_value"], .double(42.5))
+        XCTAssertEqual(events[2].name, "deploy.rollback")
+        XCTAssertEqual(events[2].attributes["deploy.reason"], .string("crash"))
+    }
+}
