@@ -10,11 +10,12 @@ final class StreamingInferenceTests: XCTestCase {
 
     func testModalityAllCases() {
         let cases = Modality.allCases
-        XCTAssertEqual(cases.count, 4)
+        XCTAssertEqual(cases.count, 5)
         XCTAssertTrue(cases.contains(.text))
         XCTAssertTrue(cases.contains(.image))
         XCTAssertTrue(cases.contains(.audio))
         XCTAssertTrue(cases.contains(.video))
+        XCTAssertTrue(cases.contains(.timeSeries))
     }
 
     func testModalityRawValues() {
@@ -22,6 +23,7 @@ final class StreamingInferenceTests: XCTestCase {
         XCTAssertEqual(Modality.image.rawValue, "image")
         XCTAssertEqual(Modality.audio.rawValue, "audio")
         XCTAssertEqual(Modality.video.rawValue, "video")
+        XCTAssertEqual(Modality.timeSeries.rawValue, "time_series")
     }
 
     func testModalityCodableRoundtrip() throws {

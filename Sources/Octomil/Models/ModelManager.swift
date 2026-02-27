@@ -111,7 +111,7 @@ public actor ModelManager {
             // Compile model
             let compiledURL: URL
             do {
-                compiledURL = try MLModel.compileModel(at: tempFile)
+                compiledURL = try await MLModel.compileModel(at: tempFile)
             } catch {
                 throw OctomilError.modelCompilationFailed(reason: error.localizedDescription)
             }

@@ -24,9 +24,15 @@ public enum Deploy {
         engine: Engine = .auto,
         name: String? = nil,
         benchmark: Bool = true
-    ) throws -> DeployedModel {
+    ) async throws -> DeployedModel {
         let resolvedName = name ?? url.deletingPathExtension().lastPathComponent
         let resolvedEngine = resolveEngine(engine: engine)
+
+        if resolvedEngine == .mlx {
+            throw DeployError.unsupportedFormat(
+                "mlx — add the OctomilMLX package product and use Deploy.mlxModel(at:) instead"
+            )
+        }
 
         let mlModel: MLModel
         let compiledURL: URL
@@ -37,7 +43,7 @@ public enum Deploy {
             mlModel = try MLModel(contentsOf: url)
             compiledURL = url
         case "mlmodel", "mlpackage":
-            let compiled = try MLModel.compileModel(at: url)
+            let compiled = try await MLModel.compileModel(at: url)
             mlModel = try MLModel(contentsOf: compiled)
             compiledURL = compiled
         default:
@@ -68,7 +74,7 @@ public enum Deploy {
         let deployed = DeployedModel(name: resolvedName, engine: resolvedEngine, model: octomilModel)
 
         if benchmark {
-            deployed.warmupResult = try runBenchmark(model: octomilModel, url: compiledURL)
+            deployed.warmupResult = try await runBenchmark(model: octomilModel, url: compiledURL)
         }
 
         TelemetryQueue.shared?.reportFunnelEvent(
@@ -80,17 +86,17 @@ public enum Deploy {
         return deployed
     }
 
-    private static func runBenchmark(model: OctomilModel, url: URL) throws -> WarmupResult {
+    private static func runBenchmark(model: OctomilModel, url: URL) async throws -> WarmupResult {
         let dummyInput = try makeDummyInput(for: model.mlModel)
 
         // Cold inference
         let coldStart = CFAbsoluteTimeGetCurrent()
-        _ = try? model.mlModel.prediction(from: dummyInput)
+        _ = try? await model.mlModel.prediction(from: dummyInput)
         let coldMs = (CFAbsoluteTimeGetCurrent() - coldStart) * 1000
 
         // Warm inference (default compute units — typically Neural Engine)
         let warmStart = CFAbsoluteTimeGetCurrent()
-        _ = try? model.mlModel.prediction(from: dummyInput)
+        _ = try? await model.mlModel.prediction(from: dummyInput)
         let warmMs = (CFAbsoluteTimeGetCurrent() - warmStart) * 1000
 
         // CPU-only baseline
@@ -102,9 +108,9 @@ public enum Deploy {
         let cpuConfig = MLModelConfiguration()
         cpuConfig.computeUnits = .cpuOnly
         if let cpuModel = try? MLModel(contentsOf: url, configuration: cpuConfig) {
-            _ = try? cpuModel.prediction(from: dummyInput)
+            _ = try? await cpuModel.prediction(from: dummyInput)
             let cpuStart = CFAbsoluteTimeGetCurrent()
-            _ = try? cpuModel.prediction(from: dummyInput)
+            _ = try? await cpuModel.prediction(from: dummyInput)
             let measured = (CFAbsoluteTimeGetCurrent() - cpuStart) * 1000
             cpuMs = measured
 
@@ -149,13 +155,12 @@ public enum Deploy {
         return try MLDictionaryFeatureProvider(dictionary: dict as! [String: Any])
     }
 
-    private static func resolveEngine(engine: Engine) -> Engine {
-        switch engine {
-        case .auto:
-            return .coreml
-        case .coreml:
-            return .coreml
+    private static func resolveEngine(engine: Engine, url: URL? = nil) -> Engine {
+        if engine != .auto { return engine }
+        if let url = url, let inferred = EngineRegistry.engineFromURL(url) {
+            return inferred
         }
+        return .coreml
     }
 }
 
