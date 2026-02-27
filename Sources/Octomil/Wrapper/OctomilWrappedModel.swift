@@ -108,7 +108,7 @@ public final class OctomilWrappedModel: @unchecked Sendable {
 
         // Record inference started telemetry
         if config.telemetryEnabled {
-            telemetry.recordStarted(modelId: modelId)
+            telemetry.reportInferenceStarted(modelId: modelId)
         }
 
         // Attempt cloud routing if configured.
@@ -149,7 +149,7 @@ public final class OctomilWrappedModel: @unchecked Sendable {
 
         // Record inference started telemetry
         if config.telemetryEnabled {
-            telemetry.recordStarted(modelId: modelId)
+            telemetry.reportInferenceStarted(modelId: modelId)
         }
 
         let start = CFAbsoluteTimeGetCurrent()
@@ -172,7 +172,7 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     public func predictions(from batch: MLBatchProvider) throws -> MLBatchProvider {
         // Record inference started telemetry
         if config.telemetryEnabled {
-            telemetry.recordStarted(modelId: modelId)
+            telemetry.reportInferenceStarted(modelId: modelId)
         }
 
         let start = CFAbsoluteTimeGetCurrent()
@@ -339,9 +339,9 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     private func recordTelemetry(latencyMs: Double, success: Bool, error: Error? = nil) {
         guard config.telemetryEnabled else { return }
         if success {
-            telemetry.recordSuccess(latencyMs: latencyMs)
+            telemetry.reportInferenceCompleted(latencyMs: latencyMs)
         } else {
-            telemetry.recordFailure(
+            telemetry.reportInferenceFailed(
                 latencyMs: latencyMs,
                 error: error?.localizedDescription ?? "unknown"
             )

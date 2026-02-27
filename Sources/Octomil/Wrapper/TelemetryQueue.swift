@@ -224,8 +224,8 @@ public final class TelemetryQueue: @unchecked Sendable {
         recordEvent(event.toV2Event())
     }
 
-    /// Convenience to record a successful inference.
-    public func recordSuccess(latencyMs: Double) {
+    /// Convenience to report a completed inference.
+    public func reportInferenceCompleted(latencyMs: Double) {
         let event = TelemetryEvent(
             name: "inference.completed",
             attributes: [
@@ -237,8 +237,8 @@ public final class TelemetryQueue: @unchecked Sendable {
         recordEvent(event)
     }
 
-    /// Convenience to record a failed inference.
-    public func recordFailure(latencyMs: Double, error: String) {
+    /// Convenience to report a failed inference.
+    public func reportInferenceFailed(latencyMs: Double, error: String) {
         let event = TelemetryEvent(
             name: "inference.failed",
             attributes: [
@@ -254,10 +254,10 @@ public final class TelemetryQueue: @unchecked Sendable {
 
     // MARK: - Inference Started
 
-    /// Records an `inference.started` event before inference runs.
+    /// Reports an `inference.started` event before inference runs.
     ///
     /// - Parameter modelId: The model identifier for the inference.
-    public func recordStarted(modelId: String) {
+    public func reportInferenceStarted(modelId: String) {
         let event = TelemetryEvent(
             name: "inference.started",
             attributes: [
