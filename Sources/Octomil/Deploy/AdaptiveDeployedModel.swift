@@ -120,7 +120,7 @@ public actor AdaptiveDeployedModel {
         currentInferenceCount += 1
         defer { currentInferenceCount -= 1 }
 
-        return try model.prediction(from: input)
+        return try await model.prediction(from: input)
     }
 
     /// Run inference with a dictionary of inputs.

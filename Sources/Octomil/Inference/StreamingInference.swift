@@ -8,6 +8,7 @@ public enum Modality: String, Codable, Hashable, Sendable, CaseIterable {
     case image
     case audio
     case video
+    case timeSeries = "time_series"
 }
 
 // MARK: - InferenceChunk
@@ -31,6 +32,14 @@ public struct InferenceChunk: Sendable {
 
     /// Milliseconds elapsed since the previous chunk (or since session start for the first chunk).
     public let latencyMs: Double
+
+    public init(index: Int, data: Data, modality: Modality, timestamp: Date, latencyMs: Double) {
+        self.index = index
+        self.data = data
+        self.modality = modality
+        self.timestamp = timestamp
+        self.latencyMs = latencyMs
+    }
 }
 
 // MARK: - StreamingInferenceResult

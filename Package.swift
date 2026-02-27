@@ -6,8 +6,8 @@ import PackageDescription
 let package = Package(
     name: "Octomil",
     platforms: [
-        .iOS(.v15),
-        .macOS(.v11)
+        .iOS(.v17),
+        .macOS(.v14)
     ],
     products: [
         .library(
@@ -18,8 +18,20 @@ let package = Package(
             name: "OctomilClip",
             targets: ["OctomilClip"]
         ),
+        .library(
+            name: "OctomilMLX",
+            targets: ["OctomilMLX"]
+        ),
+        .library(
+            name: "OctomilTimeSeries",
+            targets: ["OctomilTimeSeries"]
+        ),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.25.4"),
+        .package(url: "https://github.com/kunal732/MLX-Swift-TS", branch: "main"),
+    ],
     targets: [
         .target(
             name: "Octomil",
@@ -31,10 +43,39 @@ let package = Package(
             dependencies: ["Octomil"],
             path: "Sources/OctomilClip"
         ),
+        .target(
+            name: "OctomilMLX",
+            dependencies: [
+                "Octomil",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+            ],
+            path: "Sources/OctomilMLX"
+        ),
+        .target(
+            name: "OctomilTimeSeries",
+            dependencies: [
+                "Octomil",
+                .product(name: "MLXTimeSeries", package: "MLX-Swift-TS"),
+            ],
+            path: "Sources/OctomilTimeSeries"
+        ),
         .testTarget(
             name: "OctomilTests",
             dependencies: ["Octomil"],
             path: "Tests/OctomilTests"
+        ),
+        .testTarget(
+            name: "OctomilMLXTests",
+            dependencies: ["OctomilMLX"],
+            path: "Tests/OctomilMLXTests"
+        ),
+        .testTarget(
+            name: "OctomilTimeSeriesTests",
+            dependencies: ["OctomilTimeSeries"],
+            path: "Tests/OctomilTimeSeriesTests"
         ),
     ]
 )
