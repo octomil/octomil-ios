@@ -51,10 +51,44 @@ public struct RoutingDecision: Codable, Sendable {
     public let format: String
     public let engine: String
     public let fallbackTarget: RoutingFallbackTarget?
+    /// `true` when this decision was loaded from persistent cache (server was unreachable).
+    public let cached: Bool
+    /// `true` when this is a synthetic offline-default decision (no cache, no server).
+    public let offline: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, target, format, engine
         case fallbackTarget = "fallback_target"
+        case cached, offline
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        target = try container.decode(String.self, forKey: .target)
+        format = try container.decode(String.self, forKey: .format)
+        engine = try container.decode(String.self, forKey: .engine)
+        fallbackTarget = try container.decodeIfPresent(RoutingFallbackTarget.self, forKey: .fallbackTarget)
+        cached = try container.decodeIfPresent(Bool.self, forKey: .cached) ?? false
+        offline = try container.decodeIfPresent(Bool.self, forKey: .offline) ?? false
+    }
+
+    internal init(
+        id: String,
+        target: String,
+        format: String,
+        engine: String,
+        fallbackTarget: RoutingFallbackTarget? = nil,
+        cached: Bool = false,
+        offline: Bool = false
+    ) {
+        self.id = id
+        self.target = target
+        self.format = format
+        self.engine = engine
+        self.fallbackTarget = fallbackTarget
+        self.cached = cached
+        self.offline = offline
     }
 }
 
@@ -122,6 +156,7 @@ public struct RoutingConfig: Sendable {
 
 /// Calls the Octomil routing API to decide whether inference should run
 /// on-device or in the cloud. Caches decisions with a configurable TTL.
+/// On network failure, falls back to persistent cache, then to a synthetic device decision.
 public actor RoutingClient {
 
     // MARK: - Properties
@@ -131,12 +166,18 @@ public actor RoutingClient {
     private let jsonEncoder: JSONEncoder
     private let jsonDecoder: JSONDecoder
     private let logger: Logger
+    private let persistentCacheURL: URL
 
     private var cache: [String: CacheEntry] = [:]
 
     private struct CacheEntry {
         let decision: RoutingDecision
         let expiresAt: Date
+    }
+
+    /// Persistent cache format written to disk.
+    private struct PersistentCacheFile: Codable {
+        var entries: [String: RoutingDecision]
     }
 
     // MARK: - Initialization
@@ -151,18 +192,30 @@ public actor RoutingClient {
 
         self.jsonEncoder = JSONEncoder()
         self.jsonDecoder = JSONDecoder()
+
+        // Persistent cache in the app's caches directory.
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        self.persistentCacheURL = cacheDir.appendingPathComponent("octomil_routing_cache.json")
     }
 
     // MARK: - Public API
 
+    /// Whether the last `route()` call was answered from offline fallback.
+    /// Reset on every call to `route()`.
+    public private(set) var lastRouteWasOffline = false
+
     /// Ask the routing API whether to run on-device or in the cloud.
     ///
     /// Returns a cached decision when available and not expired.
-    /// Returns `nil` on any failure so the caller can fall back to local inference.
+    /// On network failure, returns a persistent-cached decision or a synthetic device decision.
+    /// Never returns `nil` — always provides a usable decision.
     public func route(
         modelId: String,
         deviceCapabilities: RoutingDeviceCapabilities
-    ) async -> RoutingDecision? {
+    ) async -> RoutingDecision {
+        lastRouteWasOffline = false
+
+        // 1. In-memory TTL cache.
         if let cached = cache[modelId], cached.expiresAt > Date() {
             return cached.decision
         }
@@ -188,8 +241,8 @@ public actor RoutingClient {
 
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
-                logger.warning("Routing API returned non-200, falling back to device")
-                return nil
+                logger.warning("Routing API returned non-200, using offline fallback")
+                return offlineFallback(modelId: modelId)
             }
 
             let decision = try jsonDecoder.decode(RoutingDecision.self, from: data)
@@ -199,10 +252,13 @@ public actor RoutingClient {
                 expiresAt: Date().addingTimeInterval(config.cacheTtlSeconds)
             )
 
+            // Persist to disk for offline fallback.
+            persistToDisk(modelId: modelId, decision: decision)
+
             return decision
         } catch {
-            logger.warning("Routing request failed: \(error.localizedDescription), falling back to device")
-            return nil
+            logger.warning("Routing request failed: \(error.localizedDescription), using offline fallback")
+            return offlineFallback(modelId: modelId)
         }
     }
 
@@ -242,14 +298,76 @@ public actor RoutingClient {
         return try jsonDecoder.decode(CloudInferenceResponse.self, from: data)
     }
 
-    /// Invalidate all cached routing decisions.
+    /// Invalidate all cached routing decisions (in-memory and persistent).
     public func clearCache() {
         cache.removeAll()
+        try? FileManager.default.removeItem(at: persistentCacheURL)
     }
 
     /// Invalidate the cached routing decision for a specific model.
     public func invalidate(modelId: String) {
         cache.removeValue(forKey: modelId)
+        var persistent = loadPersistentCache()
+        persistent.entries.removeValue(forKey: modelId)
+        savePersistentCache(persistent)
+    }
+
+    // MARK: - Offline Fallback
+
+    private func offlineFallback(modelId: String) -> RoutingDecision {
+        lastRouteWasOffline = true
+
+        // Try persistent cache first.
+        let persistent = loadPersistentCache()
+        if let persisted = persistent.entries[modelId] {
+            logger.info("Returning persistent-cached routing decision for \(modelId)")
+            return RoutingDecision(
+                id: persisted.id,
+                target: persisted.target,
+                format: persisted.format,
+                engine: persisted.engine,
+                fallbackTarget: persisted.fallbackTarget,
+                cached: true,
+                offline: false
+            )
+        }
+
+        // No cache at all — return synthetic device decision.
+        logger.info("No cached decision for \(modelId), returning offline device default")
+        return RoutingDecision(
+            id: "offline-\(modelId)",
+            target: "device",
+            format: "coreml",
+            engine: "coreml",
+            fallbackTarget: nil,
+            cached: false,
+            offline: true
+        )
+    }
+
+    // MARK: - Persistent Cache I/O
+
+    private func persistToDisk(modelId: String, decision: RoutingDecision) {
+        var file = loadPersistentCache()
+        file.entries[modelId] = decision
+        savePersistentCache(file)
+    }
+
+    private func loadPersistentCache() -> PersistentCacheFile {
+        guard let data = try? Data(contentsOf: persistentCacheURL),
+              let file = try? jsonDecoder.decode(PersistentCacheFile.self, from: data) else {
+            return PersistentCacheFile(entries: [:])
+        }
+        return file
+    }
+
+    private func savePersistentCache(_ file: PersistentCacheFile) {
+        do {
+            let data = try jsonEncoder.encode(file)
+            try data.write(to: persistentCacheURL, options: .atomic)
+        } catch {
+            logger.warning("Failed to write persistent routing cache: \(error.localizedDescription)")
+        }
     }
 }
 

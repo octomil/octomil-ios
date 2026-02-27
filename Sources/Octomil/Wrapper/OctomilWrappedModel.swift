@@ -252,7 +252,7 @@ public final class OctomilWrappedModel: @unchecked Sendable {
                 deviceCapabilities: caps
             )
 
-            guard let decision = decision, decision.target == "cloud" else {
+            guard decision.target == "cloud" else {
                 return
             }
 
