@@ -135,10 +135,10 @@ final class TelemetryQueueTests: XCTestCase {
         )
         XCTAssertEqual(queue.pendingCount, 0)
 
-        queue.recordSuccess(latencyMs: 12.5)
+        queue.reportInferenceCompleted(latencyMs: 12.5)
         XCTAssertEqual(queue.pendingCount, 1)
 
-        queue.recordFailure(latencyMs: 5.0, error: "timeout")
+        queue.reportInferenceFailed(latencyMs: 5.0, error: "timeout")
         XCTAssertEqual(queue.pendingCount, 2)
     }
 
@@ -171,9 +171,9 @@ final class TelemetryQueueTests: XCTestCase {
             flushInterval: 0,
             persistenceURL: persistenceURL
         )
-        queue1.recordSuccess(latencyMs: 10.0)
-        queue1.recordSuccess(latencyMs: 20.0)
-        queue1.recordFailure(latencyMs: 5.0, error: "crash")
+        queue1.reportInferenceCompleted(latencyMs: 10.0)
+        queue1.reportInferenceCompleted(latencyMs: 20.0)
+        queue1.reportInferenceFailed(latencyMs: 5.0, error: "crash")
         queue1.persistEvents()
 
         // Verify file exists
@@ -200,8 +200,8 @@ final class TelemetryQueueTests: XCTestCase {
             flushInterval: 0,
             persistenceURL: persistenceURL
         )
-        queue.recordSuccess(latencyMs: 10.0)
-        queue.recordSuccess(latencyMs: 20.0)
+        queue.reportInferenceCompleted(latencyMs: 10.0)
+        queue.reportInferenceCompleted(latencyMs: 20.0)
         XCTAssertEqual(queue.pendingCount, 2)
 
         await queue.flush()
@@ -305,14 +305,14 @@ final class OctomilWrappedModelTests: XCTestCase {
 
     func testTelemetryRecordingWithSuccess() {
         let queue = makeTelemetryQueue()
-        queue.recordSuccess(latencyMs: 15.3)
+        queue.reportInferenceCompleted(latencyMs: 15.3)
 
         XCTAssertEqual(queue.pendingCount, 1)
     }
 
     func testTelemetryRecordingWithFailure() {
         let queue = makeTelemetryQueue()
-        queue.recordFailure(latencyMs: 5.0, error: "model error")
+        queue.reportInferenceFailed(latencyMs: 5.0, error: "model error")
 
         XCTAssertEqual(queue.pendingCount, 1)
     }
@@ -359,7 +359,7 @@ final class OctomilWrappedModelTests: XCTestCase {
             flushInterval: 0,
             persistenceURL: persistURL
         )
-        queue.recordSuccess(latencyMs: 10.0)
+        queue.reportInferenceCompleted(latencyMs: 10.0)
 
         queue.persistEvents()
         XCTAssertTrue(

@@ -147,7 +147,7 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
 
                 // Record inference started telemetry
                 if let modelId = modelId {
-                    TelemetryQueue.shared?.recordStarted(modelId: modelId)
+                    TelemetryQueue.shared?.reportInferenceStarted(modelId: modelId)
                 }
 
                 do {

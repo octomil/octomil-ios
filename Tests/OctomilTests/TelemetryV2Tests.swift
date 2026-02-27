@@ -281,7 +281,7 @@ final class TelemetryQueueV2Tests: XCTestCase {
             persistenceURL: persistenceURL
         )
 
-        queue.recordSuccess(latencyMs: 12.5)
+        queue.reportInferenceCompleted(latencyMs: 12.5)
         XCTAssertEqual(queue.pendingCount, 1)
     }
 
@@ -295,7 +295,7 @@ final class TelemetryQueueV2Tests: XCTestCase {
             persistenceURL: persistenceURL
         )
 
-        queue.recordFailure(latencyMs: 5.0, error: "crash")
+        queue.reportInferenceFailed(latencyMs: 5.0, error: "crash")
         XCTAssertEqual(queue.pendingCount, 1)
     }
 
@@ -329,9 +329,9 @@ final class TelemetryQueueV2Tests: XCTestCase {
             flushInterval: 0,
             persistenceURL: persistenceURL
         )
-        queue1.recordSuccess(latencyMs: 10.0)
-        queue1.recordSuccess(latencyMs: 20.0)
-        queue1.recordFailure(latencyMs: 5.0, error: "crash")
+        queue1.reportInferenceCompleted(latencyMs: 10.0)
+        queue1.reportInferenceCompleted(latencyMs: 20.0)
+        queue1.reportInferenceFailed(latencyMs: 5.0, error: "crash")
         queue1.persistEvents()
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: persistenceURL.path))
@@ -356,8 +356,8 @@ final class TelemetryQueueV2Tests: XCTestCase {
             flushInterval: 0,
             persistenceURL: persistenceURL
         )
-        queue.recordSuccess(latencyMs: 10.0)
-        queue.recordSuccess(latencyMs: 20.0)
+        queue.reportInferenceCompleted(latencyMs: 10.0)
+        queue.reportInferenceCompleted(latencyMs: 20.0)
         XCTAssertEqual(queue.pendingCount, 2)
 
         await queue.flush()
@@ -376,7 +376,7 @@ final class TelemetryQueueV2Tests: XCTestCase {
         queue.setResourceContext(deviceId: "dev-99", orgId: "org-42")
         // The resource context is stored internally and used during flush
         // We verify it doesn't crash and the queue remains functional
-        queue.recordSuccess(latencyMs: 1.0)
+        queue.reportInferenceCompleted(latencyMs: 1.0)
         XCTAssertEqual(queue.pendingCount, 1)
     }
 
@@ -631,16 +631,16 @@ final class TelemetryWiringTests: XCTestCase {
         )
     }
 
-    // MARK: - Inference Wiring: recordStarted before recordSuccess/recordFailure
+    // MARK: - Inference Wiring: reportInferenceStarted before reportInferenceCompleted/reportInferenceFailed
 
     func testInferenceStartedPrecedesCompleted() {
         let queue = makeQueue()
 
         // Simulate what OctomilWrappedModel.prediction(from:) does:
-        // 1. recordStarted before prediction
-        // 2. recordSuccess after prediction
-        queue.recordStarted(modelId: "classifier")
-        queue.recordSuccess(latencyMs: 12.5)
+        // 1. reportInferenceStarted before prediction
+        // 2. reportInferenceCompleted after prediction
+        queue.reportInferenceStarted(modelId: "classifier")
+        queue.reportInferenceCompleted(latencyMs: 12.5)
 
         XCTAssertEqual(queue.pendingCount, 2)
 
@@ -655,8 +655,8 @@ final class TelemetryWiringTests: XCTestCase {
         let queue = makeQueue()
 
         // Simulate failed prediction path
-        queue.recordStarted(modelId: "classifier")
-        queue.recordFailure(latencyMs: 5.0, error: "shape mismatch")
+        queue.reportInferenceStarted(modelId: "classifier")
+        queue.reportInferenceFailed(latencyMs: 5.0, error: "shape mismatch")
 
         XCTAssertEqual(queue.pendingCount, 2)
 
@@ -670,8 +670,8 @@ final class TelemetryWiringTests: XCTestCase {
         let queue = makeQueue()
 
         // Simulate what OctomilWrappedModel.predictions(from:) does
-        queue.recordStarted(modelId: "detector")
-        queue.recordSuccess(latencyMs: 50.0)
+        queue.reportInferenceStarted(modelId: "detector")
+        queue.reportInferenceCompleted(latencyMs: 50.0)
 
         let events = queue.bufferedEvents
         XCTAssertEqual(events.count, 2)
@@ -813,8 +813,8 @@ final class TelemetryWiringTests: XCTestCase {
         // Simulate a full deploy + inference lifecycle
         queue.reportDeployStarted(modelId: "m1", version: "1.0")
         queue.reportDeployCompleted(modelId: "m1", version: "1.0", durationMs: 2000.0)
-        queue.recordStarted(modelId: "m1")
-        queue.recordSuccess(latencyMs: 15.0)
+        queue.reportInferenceStarted(modelId: "m1")
+        queue.reportInferenceCompleted(latencyMs: 15.0)
 
         XCTAssertEqual(queue.pendingCount, 4)
 
@@ -928,7 +928,7 @@ final class TelemetryV2Phase4Tests: XCTestCase {
 
     func testRecordStartedEmitsEvent() {
         let queue = makeQueue()
-        queue.recordStarted(modelId: "fraud_detection")
+        queue.reportInferenceStarted(modelId: "fraud_detection")
 
         XCTAssertEqual(queue.pendingCount, 1)
 
@@ -1107,8 +1107,8 @@ final class TelemetryV2Phase4Tests: XCTestCase {
     func testMixedEventTypes() {
         let queue = makeQueue()
 
-        queue.recordStarted(modelId: "m1")
-        queue.recordSuccess(latencyMs: 10.0)
+        queue.reportInferenceStarted(modelId: "m1")
+        queue.reportInferenceCompleted(latencyMs: 10.0)
         queue.reportTrainingStarted(modelId: "m1", version: "1.0", roundId: "r1", numSamples: 100)
         queue.reportExperimentAssigned(modelId: "m1", experimentId: "e1", variant: "control")
         queue.reportDeployStarted(modelId: "m1", version: "1.0")
