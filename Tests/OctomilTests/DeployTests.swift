@@ -9,6 +9,7 @@ final class DeployTests: XCTestCase {
     func testEngineRawValues() {
         XCTAssertEqual(Engine.auto.rawValue, "auto")
         XCTAssertEqual(Engine.coreml.rawValue, "coreml")
+        XCTAssertEqual(Engine.mlx.rawValue, "mlx")
     }
 
     func testEngineCodableRoundTrip() throws {
@@ -36,6 +37,40 @@ final class DeployTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(Engine.self, from: json))
     }
 
+    func testEngineMlxCodableRoundTrip() throws {
+        let original = Engine.mlx
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Engine.self, from: data)
+        XCTAssertEqual(decoded, original)
+    }
+
+    func testEngineMlxDecodesFromString() throws {
+        let json = Data("\"mlx\"".utf8)
+        let decoded = try JSONDecoder().decode(Engine.self, from: json)
+        XCTAssertEqual(decoded, .mlx)
+    }
+
+    func testDeployWithMlxEngineThrows() async {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let fakePath = tmpDir.appendingPathComponent("model.mlmodelc")
+        try? FileManager.default.createDirectory(at: fakePath, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fakePath) }
+
+        do {
+            _ = try await Deploy.model(at: fakePath, engine: .mlx, benchmark: false)
+            XCTFail("Expected DeployError")
+        } catch let error as DeployError {
+            if case .unsupportedFormat(let msg) = error {
+                XCTAssertTrue(msg.contains("mlx"), "Error should mention mlx")
+                XCTAssertTrue(msg.contains("OctomilMLX"), "Error should mention OctomilMLX package")
+            } else {
+                XCTFail("Expected unsupportedFormat")
+            }
+        } catch {
+            XCTFail("Expected DeployError, got \(type(of: error))")
+        }
+    }
+
     // MARK: - DeployError Tests
 
     func testUnsupportedFormatErrorDescription() {
@@ -51,49 +86,54 @@ final class DeployTests: XCTestCase {
         XCTAssertTrue(error.errorDescription!.contains("Unsupported model format"))
     }
 
-    func testDeployWithUnsupportedFormatThrows() {
+    func testDeployWithUnsupportedFormatThrows() async {
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("model.pt")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
-        XCTAssertThrowsError(try Deploy.model(at: fakePath)) { error in
-            guard let deployError = error as? DeployError else {
-                XCTFail("Expected DeployError, got \(type(of: error))")
-                return
-            }
-            if case .unsupportedFormat(let ext) = deployError {
+        do {
+            _ = try await Deploy.model(at: fakePath)
+            XCTFail("Expected DeployError")
+        } catch let error as DeployError {
+            if case .unsupportedFormat(let ext) = error {
                 XCTAssertEqual(ext, "pt")
             } else {
                 XCTFail("Expected unsupportedFormat")
             }
+        } catch {
+            XCTFail("Expected DeployError, got \(type(of: error))")
         }
     }
 
-    func testDeployWithTxtFormatThrows() {
+    func testDeployWithTxtFormatThrows() async {
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("model.txt")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
-        XCTAssertThrowsError(try Deploy.model(at: fakePath)) { error in
-            guard let deployError = error as? DeployError else {
-                XCTFail("Expected DeployError, got \(type(of: error))")
-                return
-            }
-            if case .unsupportedFormat(let ext) = deployError {
+        do {
+            _ = try await Deploy.model(at: fakePath)
+            XCTFail("Expected DeployError")
+        } catch let error as DeployError {
+            if case .unsupportedFormat(let ext) = error {
                 XCTAssertEqual(ext, "txt")
             }
+        } catch {
+            XCTFail("Expected DeployError")
         }
     }
 
-    func testDeployWithOnnxFormatThrows() {
+    func testDeployWithOnnxFormatThrows() async {
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("model.onnx")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
-        XCTAssertThrowsError(try Deploy.model(at: fakePath, benchmark: false)) { error in
+        do {
+            _ = try await Deploy.model(at: fakePath, benchmark: false)
+            XCTFail("Expected DeployError")
+        } catch {
             guard case DeployError.unsupportedFormat("onnx") = error else {
                 XCTFail("Expected unsupportedFormat(\"onnx\"), got \(error)")
                 return
@@ -104,15 +144,11 @@ final class DeployTests: XCTestCase {
     // MARK: - DeployedModel Tests
 
     func testDeployedModelInitWithoutWarmup() throws {
-        // DeployedModel.init requires OctomilModel (wraps MLModel), which needs
-        // a compiled .mlmodelc. Test the activeDelegate fallback logic directly:
-        // when warmupResult is nil, activeDelegate returns "unknown".
         let warmup: WarmupResult? = nil
         let activeDelegate = warmup?.activeDelegate ?? "unknown"
         XCTAssertEqual(activeDelegate, "unknown",
                        "Without warmup, activeDelegate should be 'unknown'")
 
-        // Verify WarmupResult with a delegate returns that delegate
         let withWarmup = WarmupResult(
             coldInferenceMs: 50.0,
             warmInferenceMs: 5.0,
@@ -175,49 +211,60 @@ final class DeployTests: XCTestCase {
 
     // MARK: - Deploy Name Resolution Tests
 
-    func testDeployNameFromURL() {
-        // Verify that unsupported formats pass through name resolution before failing
+    func testDeployNameFromURL() async {
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("MyCustomModel.safetensors")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
-        // The error should happen after name resolution, confirming the path is parsed
-        XCTAssertThrowsError(try Deploy.model(at: fakePath, name: nil))
+        do {
+            _ = try await Deploy.model(at: fakePath, name: nil)
+            XCTFail("Expected error")
+        } catch {
+            // Expected — unsupported format
+        }
     }
 
-    func testDeployCustomNamePassedThrough() {
+    func testDeployCustomNamePassedThrough() async {
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("model.bin")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
-        // Even with a custom name, unsupported format should throw
-        XCTAssertThrowsError(try Deploy.model(at: fakePath, name: "MyModel"))
+        do {
+            _ = try await Deploy.model(at: fakePath, name: "MyModel")
+            XCTFail("Expected error")
+        } catch {
+            // Expected — unsupported format
+        }
     }
 
     // MARK: - Deploy Benchmark Flag Tests
 
-    func testDeployBenchmarkDefaultIsTrue() {
-        // Verify the default parameter value by calling without benchmark arg
+    func testDeployBenchmarkDefaultIsTrue() async {
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("test.bin")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
-        // This throws DeployError (unsupported format), not because of benchmark
-        XCTAssertThrowsError(try Deploy.model(at: fakePath)) { error in
+        do {
+            _ = try await Deploy.model(at: fakePath)
+            XCTFail("Expected error")
+        } catch {
             XCTAssertTrue(error is DeployError)
         }
     }
 
-    func testDeployBenchmarkFalseStillValidates() {
+    func testDeployBenchmarkFalseStillValidates() async {
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("test.bin")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
-        XCTAssertThrowsError(try Deploy.model(at: fakePath, benchmark: false)) { error in
+        do {
+            _ = try await Deploy.model(at: fakePath, benchmark: false)
+            XCTFail("Expected error")
+        } catch {
             XCTAssertTrue(error is DeployError)
         }
     }

@@ -197,15 +197,16 @@ public final class OctomilModel: @unchecked Sendable {
         if let engine = engine {
             resolvedEngine = engine
         } else {
-            switch modality {
-            case .text:
-                resolvedEngine = LLMEngine(modelPath: compiledModelURL)
-            case .image:
-                resolvedEngine = ImageEngine(modelPath: compiledModelURL)
-            case .audio:
-                resolvedEngine = AudioEngine(modelPath: compiledModelURL)
-            case .video:
-                resolvedEngine = VideoEngine(modelPath: compiledModelURL)
+            do {
+                let inferredEngine = EngineRegistry.engineFromURL(compiledModelURL)
+                resolvedEngine = try EngineRegistry.shared.resolve(
+                    modality: modality,
+                    engine: inferredEngine,
+                    modelURL: compiledModelURL
+                )
+            } catch {
+                let errorStream = AsyncThrowingStream<InferenceChunk, Error> { $0.finish(throwing: error) }
+                return (errorStream, { nil })
             }
         }
 

@@ -217,7 +217,7 @@ public actor PairingManager {
 
         let compiledURL: URL
         do {
-            compiledURL = try MLModel.compileModel(at: tempFile)
+            compiledURL = try await MLModel.compileModel(at: tempFile)
         } catch {
             throw PairingError.benchmarkFailed(reason: "Model compilation failed: \(error.localizedDescription)")
         }

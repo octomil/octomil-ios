@@ -848,7 +848,7 @@ public final class OctomilClient: @unchecked Sendable {
         cpuConfig.computeUnits = .cpuOnly
         if let cpuModel = try? MLModel(contentsOf: model.compiledModelURL, configuration: cpuConfig) {
             let cpuStart = Date()
-            _ = try? cpuModel.prediction(from: dummyInput)
+            _ = try? await cpuModel.prediction(from: dummyInput)
             cpuInferenceMs = Date().timeIntervalSince(cpuStart) * 1000
         }
 
