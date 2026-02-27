@@ -252,6 +252,186 @@ public final class TelemetryQueue: @unchecked Sendable {
         recordEvent(event)
     }
 
+    // MARK: - Inference Started
+
+    /// Records an `inference.started` event before inference runs.
+    ///
+    /// - Parameter modelId: The model identifier for the inference.
+    public func recordStarted(modelId: String) {
+        let event = TelemetryEvent(
+            name: "inference.started",
+            attributes: [
+                "model.id": .string(modelId),
+                "model.format": .string("coreml"),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    // MARK: - Training Events
+
+    /// Records a `training.started` event.
+    public func reportTrainingStarted(
+        modelId: String,
+        version: String,
+        roundId: String,
+        numSamples: Int
+    ) {
+        let event = TelemetryEvent(
+            name: "training.started",
+            attributes: [
+                "model.id": .string(modelId),
+                "model.version": .string(version),
+                "training.round_id": .string(roundId),
+                "training.num_samples": .int(numSamples),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    /// Records a `training.completed` event.
+    public func reportTrainingCompleted(
+        modelId: String,
+        version: String,
+        durationMs: Double,
+        loss: Double,
+        accuracy: Double
+    ) {
+        let event = TelemetryEvent(
+            name: "training.completed",
+            attributes: [
+                "model.id": .string(modelId),
+                "model.version": .string(version),
+                "training.duration_ms": .double(durationMs),
+                "training.loss": .double(loss),
+                "training.accuracy": .double(accuracy),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    /// Records a `training.failed` event.
+    public func reportTrainingFailed(
+        modelId: String,
+        version: String,
+        errorType: String,
+        errorMessage: String
+    ) {
+        let event = TelemetryEvent(
+            name: "training.failed",
+            attributes: [
+                "model.id": .string(modelId),
+                "model.version": .string(version),
+                "error.type": .string(errorType),
+                "error.message": .string(errorMessage),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    /// Records a `training.weight_upload` event.
+    public func reportWeightUpload(
+        modelId: String,
+        roundId: String,
+        sampleCount: Int
+    ) {
+        let event = TelemetryEvent(
+            name: "training.weight_upload",
+            attributes: [
+                "model.id": .string(modelId),
+                "training.round_id": .string(roundId),
+                "training.sample_count": .int(sampleCount),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    // MARK: - Experiment Events
+
+    /// Records an `experiment.assigned` event.
+    public func reportExperimentAssigned(
+        modelId: String,
+        experimentId: String,
+        variant: String
+    ) {
+        let event = TelemetryEvent(
+            name: "experiment.assigned",
+            attributes: [
+                "model.id": .string(modelId),
+                "experiment.id": .string(experimentId),
+                "experiment.variant": .string(variant),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    /// Records an `experiment.metric_recorded` event.
+    public func reportExperimentMetric(
+        experimentId: String,
+        metricName: String,
+        metricValue: Double
+    ) {
+        let event = TelemetryEvent(
+            name: "experiment.metric_recorded",
+            attributes: [
+                "experiment.id": .string(experimentId),
+                "experiment.metric_name": .string(metricName),
+                "experiment.metric_value": .double(metricValue),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    // MARK: - Deploy Events
+
+    /// Records a `deploy.started` event.
+    public func reportDeployStarted(modelId: String, version: String) {
+        let event = TelemetryEvent(
+            name: "deploy.started",
+            attributes: [
+                "model.id": .string(modelId),
+                "model.version": .string(version),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    /// Records a `deploy.completed` event.
+    public func reportDeployCompleted(
+        modelId: String,
+        version: String,
+        durationMs: Double
+    ) {
+        let event = TelemetryEvent(
+            name: "deploy.completed",
+            attributes: [
+                "model.id": .string(modelId),
+                "model.version": .string(version),
+                "deploy.duration_ms": .double(durationMs),
+            ]
+        )
+        recordEvent(event)
+    }
+
+    /// Records a `deploy.rollback` event.
+    public func reportDeployRollback(
+        modelId: String,
+        fromVersion: String,
+        toVersion: String,
+        reason: String
+    ) {
+        let event = TelemetryEvent(
+            name: "deploy.rollback",
+            attributes: [
+                "model.id": .string(modelId),
+                "deploy.from_version": .string(fromVersion),
+                "deploy.to_version": .string(toVersion),
+                "deploy.reason": .string(reason),
+            ]
+        )
+        recordEvent(event)
+    }
+
     /// Forces an immediate async flush of all buffered events.
     public func flushAsync() {
         Task.detached(priority: .utility) { [weak self] in
@@ -330,6 +510,13 @@ public final class TelemetryQueue: @unchecked Sendable {
             deviceId: devId,
             orgId: org
         )
+    }
+
+    /// Returns a snapshot of the current buffer for testing.
+    internal var bufferedEvents: [TelemetryEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return buffer
     }
 
     /// Atomically drains the buffer and returns the events.

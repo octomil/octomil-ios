@@ -46,15 +46,31 @@ public struct TelemetryEvent: Codable, Sendable {
     public let timestamp: String
     /// Flat attribute map with dot-notation keys.
     public let attributes: [String: TelemetryValue]
+    /// Optional distributed trace identifier.
+    public let traceId: String?
+    /// Optional span identifier within a trace.
+    public let spanId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case timestamp
+        case attributes
+        case traceId = "trace_id"
+        case spanId = "span_id"
+    }
 
     public init(
         name: String,
         timestamp: String = ISO8601DateFormatter().string(from: Date()),
-        attributes: [String: TelemetryValue]
+        attributes: [String: TelemetryValue],
+        traceId: String? = nil,
+        spanId: String? = nil
     ) {
         self.name = name
         self.timestamp = timestamp
         self.attributes = attributes
+        self.traceId = traceId
+        self.spanId = spanId
     }
 }
 
