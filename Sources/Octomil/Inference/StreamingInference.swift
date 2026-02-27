@@ -102,10 +102,12 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
 
     private let sessionId: String
     private let modality: Modality
+    private let modelId: String?
 
-    public init(sessionId: String = UUID().uuidString, modality: Modality) {
+    public init(sessionId: String = UUID().uuidString, modality: Modality, modelId: String? = nil) {
         self.sessionId = sessionId
         self.modality = modality
+        self.modelId = modelId
     }
 
     /// Wraps an engine's raw chunk stream, adding timing to each chunk.
@@ -135,11 +137,18 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
 
         let rawStream = engine.generate(input: input, modality: modality)
 
+        let modelId = self.modelId
+
         let timedStream = AsyncThrowingStream<InferenceChunk, Error> { continuation in
             let task = Task {
                 let start = Date()
                 state.sessionStart = start
                 state.previousChunkTime = start
+
+                // Record inference started telemetry
+                if let modelId = modelId {
+                    TelemetryQueue.shared?.recordStarted(modelId: modelId)
+                }
 
                 do {
                     for try await rawChunk in rawStream {

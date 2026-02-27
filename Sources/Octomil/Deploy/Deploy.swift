@@ -28,6 +28,10 @@ public enum Deploy {
         let resolvedName = name ?? url.deletingPathExtension().lastPathComponent
         let resolvedEngine = resolveEngine(engine: engine)
 
+        // Record deploy started telemetry
+        TelemetryQueue.shared?.reportDeployStarted(modelId: resolvedName, version: "local")
+        let deployStart = CFAbsoluteTimeGetCurrent()
+
         if resolvedEngine == .mlx {
             throw DeployError.unsupportedFormat(
                 "mlx — add the OctomilMLX package product and use Deploy.mlxModel(at:) instead"
@@ -76,6 +80,14 @@ public enum Deploy {
         if benchmark {
             deployed.warmupResult = try await runBenchmark(model: octomilModel, url: compiledURL)
         }
+
+        // Record deploy completed telemetry
+        let deployDurationMs = (CFAbsoluteTimeGetCurrent() - deployStart) * 1000
+        TelemetryQueue.shared?.reportDeployCompleted(
+            modelId: resolvedName,
+            version: "local",
+            durationMs: deployDurationMs
+        )
 
         TelemetryQueue.shared?.reportFunnelEvent(
             stage: "first_inference",

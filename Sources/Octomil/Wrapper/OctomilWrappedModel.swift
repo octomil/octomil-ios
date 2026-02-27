@@ -106,6 +106,11 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     public func prediction(from input: MLFeatureProvider) throws -> MLFeatureProvider {
         try validateIfNeeded(input)
 
+        // Record inference started telemetry
+        if config.telemetryEnabled {
+            telemetry.recordStarted(modelId: modelId)
+        }
+
         // Attempt cloud routing if configured.
         if let routingClient = routingClient {
             if let cloudResult = try? cloudPredictionSync(
@@ -142,6 +147,11 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     ) throws -> MLFeatureProvider {
         try validateIfNeeded(input)
 
+        // Record inference started telemetry
+        if config.telemetryEnabled {
+            telemetry.recordStarted(modelId: modelId)
+        }
+
         let start = CFAbsoluteTimeGetCurrent()
         do {
             let result = try underlyingModel.prediction(from: input, options: options)
@@ -160,6 +170,11 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     /// - Parameter batch: A batch of input feature providers.
     /// - Returns: A batch of predictions.
     public func predictions(from batch: MLBatchProvider) throws -> MLBatchProvider {
+        // Record inference started telemetry
+        if config.telemetryEnabled {
+            telemetry.recordStarted(modelId: modelId)
+        }
+
         let start = CFAbsoluteTimeGetCurrent()
         do {
             let result = try underlyingModel.predictions(from: batch, options: MLPredictionOptions())

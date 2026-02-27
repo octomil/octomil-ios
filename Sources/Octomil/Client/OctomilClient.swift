@@ -585,33 +585,54 @@ public final class OctomilClient: @unchecked Sendable {
             logger.info("Starting training: policy=\(uploadPolicy.rawValue), round=\(roundId ?? "none"), degraded=\(isDegraded)")
         }
 
+        // Record training started telemetry
+        TelemetryQueue.shared?.reportTrainingStarted(
+            modelId: model.id,
+            version: model.version,
+            roundId: roundId ?? "local",
+            numSamples: 0
+        )
+        let trainingStart = CFAbsoluteTimeGetCurrent()
+
         // Train locally
         let trainer = FederatedTrainer(configuration: configuration)
         let trainingResult: TrainingResult
 
-        if isDegraded {
-            // Degraded mode: run inference on training data to collect metrics
-            let data = dataProvider()
-            let startTime = Date()
-            // Run a single prediction to measure forward-pass metrics
-            if data.count > 0 {
-                let firstFeature = data.features(at: 0)
-                _ = try? model.predict(input: firstFeature)
+        do {
+            if isDegraded {
+                // Degraded mode: run inference on training data to collect metrics
+                let data = dataProvider()
+                let startTime = Date()
+                // Run a single prediction to measure forward-pass metrics
+                if data.count > 0 {
+                    let firstFeature = data.features(at: 0)
+                    _ = try? model.predict(input: firstFeature)
+                }
+                let trainingTime = Date().timeIntervalSince(startTime)
+                trainingResult = TrainingResult(
+                    sampleCount: data.count,
+                    loss: nil,
+                    accuracy: nil,
+                    trainingTime: trainingTime,
+                    metrics: ["training_method": 0.0, "degraded": 1.0]
+                )
+            } else {
+                trainingResult = try await trainer.train(
+                    model: model,
+                    dataProvider: dataProvider,
+                    config: trainingConfig
+                )
             }
-            let trainingTime = Date().timeIntervalSince(startTime)
-            trainingResult = TrainingResult(
-                sampleCount: data.count,
-                loss: nil,
-                accuracy: nil,
-                trainingTime: trainingTime,
-                metrics: ["training_method": 0.0, "degraded": 1.0]
+        } catch {
+            // Record training failed telemetry
+            let trainingDurationMs = (CFAbsoluteTimeGetCurrent() - trainingStart) * 1000
+            TelemetryQueue.shared?.reportTrainingFailed(
+                modelId: model.id,
+                version: model.version,
+                errorType: String(describing: type(of: error)),
+                errorMessage: error.localizedDescription
             )
-        } else {
-            trainingResult = try await trainer.train(
-                model: model,
-                dataProvider: dataProvider,
-                config: trainingConfig
-            )
+            throw error
         }
 
         // Handle weight extraction and upload based on policy
@@ -619,50 +640,80 @@ public final class OctomilClient: @unchecked Sendable {
         var uploaded = false
         var usedSecAgg = false
 
-        switch uploadPolicy {
-        case .auto:
-            if !isDegraded {
-                weightUpdate = try await trainer.extractWeightUpdate(
-                    model: model,
-                    trainingResult: trainingResult
-                )
-                var update = weightUpdate!
-                update = WeightUpdate(
-                    modelId: update.modelId,
-                    version: update.version,
-                    deviceId: deviceId,
-                    weightsData: update.weightsData,
-                    sampleCount: update.sampleCount,
-                    metrics: update.metrics,
-                    dpMetadata: update.dpMetadata
-                )
-                weightUpdate = update
-
-                // Use SecAgg if available and round-based
-                if let roundId = roundId, secAggClient != nil {
-                    usedSecAgg = true
-                    try await uploadWithSecAgg(
-                        weightUpdate: update,
-                        roundId: roundId,
-                        deviceId: deviceId
+        do {
+            switch uploadPolicy {
+            case .auto:
+                if !isDegraded {
+                    weightUpdate = try await trainer.extractWeightUpdate(
+                        model: model,
+                        trainingResult: trainingResult
                     )
-                    uploaded = true
-                } else {
-                    try await apiClient.uploadWeights(update)
-                    uploaded = true
+                    var update = weightUpdate!
+                    update = WeightUpdate(
+                        modelId: update.modelId,
+                        version: update.version,
+                        deviceId: deviceId,
+                        weightsData: update.weightsData,
+                        sampleCount: update.sampleCount,
+                        metrics: update.metrics,
+                        dpMetadata: update.dpMetadata
+                    )
+                    weightUpdate = update
+
+                    // Use SecAgg if available and round-based
+                    if let roundId = roundId, secAggClient != nil {
+                        usedSecAgg = true
+                        try await uploadWithSecAgg(
+                            weightUpdate: update,
+                            roundId: roundId,
+                            deviceId: deviceId
+                        )
+                        uploaded = true
+                    } else {
+                        try await apiClient.uploadWeights(update)
+                        uploaded = true
+                    }
                 }
-            }
 
-        case .manual:
-            if !isDegraded {
-                weightUpdate = try await trainer.extractWeightUpdate(
-                    model: model,
-                    trainingResult: trainingResult
-                )
-            }
+            case .manual:
+                if !isDegraded {
+                    weightUpdate = try await trainer.extractWeightUpdate(
+                        model: model,
+                        trainingResult: trainingResult
+                    )
+                }
 
-        case .disabled:
-            break
+            case .disabled:
+                break
+            }
+        } catch {
+            // Record training failed telemetry (upload phase)
+            TelemetryQueue.shared?.reportTrainingFailed(
+                modelId: model.id,
+                version: model.version,
+                errorType: String(describing: type(of: error)),
+                errorMessage: error.localizedDescription
+            )
+            throw error
+        }
+
+        // Record training completed telemetry
+        let trainingDurationMs = (CFAbsoluteTimeGetCurrent() - trainingStart) * 1000
+        TelemetryQueue.shared?.reportTrainingCompleted(
+            modelId: model.id,
+            version: model.version,
+            durationMs: trainingDurationMs,
+            loss: trainingResult.loss ?? 0.0,
+            accuracy: trainingResult.accuracy ?? 0.0
+        )
+
+        // Record weight upload telemetry if weights were uploaded
+        if uploaded, let weightUpdate = weightUpdate {
+            TelemetryQueue.shared?.reportWeightUpload(
+                modelId: model.id,
+                roundId: roundId ?? "local",
+                sampleCount: weightUpdate.sampleCount
+            )
         }
 
         let outcome = TrainingOutcome(
@@ -942,32 +993,80 @@ public final class OctomilClient: @unchecked Sendable {
             model = try await downloadModel(modelId: modelId)
         }
 
+        // Record training started telemetry
+        let participateRoundId = UUID().uuidString
+        TelemetryQueue.shared?.reportTrainingStarted(
+            modelId: model.id,
+            version: model.version,
+            roundId: participateRoundId,
+            numSamples: 0
+        )
+        let trainingStart = CFAbsoluteTimeGetCurrent()
+
         // Train locally
         let trainer = FederatedTrainer(configuration: configuration)
-        let trainingResult = try await trainer.train(
-            model: model,
-            dataProvider: dataProvider,
-            config: config
-        )
+        let trainingResult: TrainingResult
+        do {
+            trainingResult = try await trainer.train(
+                model: model,
+                dataProvider: dataProvider,
+                config: config
+            )
+        } catch {
+            TelemetryQueue.shared?.reportTrainingFailed(
+                modelId: model.id,
+                version: model.version,
+                errorType: String(describing: type(of: error)),
+                errorMessage: error.localizedDescription
+            )
+            throw error
+        }
 
         // Extract and upload weights
-        var weightUpdate = try await trainer.extractWeightUpdate(
-            model: model,
-            trainingResult: trainingResult
-        )
-        weightUpdate = WeightUpdate(
-            modelId: weightUpdate.modelId,
-            version: weightUpdate.version,
-            deviceId: deviceId,
-            weightsData: weightUpdate.weightsData,
-            sampleCount: weightUpdate.sampleCount,
-            metrics: weightUpdate.metrics
-        )
+        do {
+            var weightUpdate = try await trainer.extractWeightUpdate(
+                model: model,
+                trainingResult: trainingResult
+            )
+            weightUpdate = WeightUpdate(
+                modelId: weightUpdate.modelId,
+                version: weightUpdate.version,
+                deviceId: deviceId,
+                weightsData: weightUpdate.weightsData,
+                sampleCount: weightUpdate.sampleCount,
+                metrics: weightUpdate.metrics
+            )
 
-        try await apiClient.uploadWeights(weightUpdate)
+            try await apiClient.uploadWeights(weightUpdate)
+
+            // Record weight upload telemetry
+            TelemetryQueue.shared?.reportWeightUpload(
+                modelId: model.id,
+                roundId: participateRoundId,
+                sampleCount: weightUpdate.sampleCount
+            )
+        } catch {
+            TelemetryQueue.shared?.reportTrainingFailed(
+                modelId: model.id,
+                version: model.version,
+                errorType: String(describing: type(of: error)),
+                errorMessage: error.localizedDescription
+            )
+            throw error
+        }
+
+        // Record training completed telemetry
+        let trainingDurationMs = (CFAbsoluteTimeGetCurrent() - trainingStart) * 1000
+        TelemetryQueue.shared?.reportTrainingCompleted(
+            modelId: model.id,
+            version: model.version,
+            durationMs: trainingDurationMs,
+            loss: trainingResult.loss ?? 0.0,
+            accuracy: trainingResult.accuracy ?? 0.0
+        )
 
         let roundResult = RoundResult(
-            roundId: UUID().uuidString,
+            roundId: participateRoundId,
             trainingResult: trainingResult,
             uploadSucceeded: true,
             completedAt: Date()
@@ -1048,17 +1147,48 @@ public final class OctomilClient: @unchecked Sendable {
             model = try await downloadModel(modelId: modelId)
         }
 
-        let trainer = FederatedTrainer(configuration: configuration)
-        let trainingResult = try await trainer.train(
-            model: model,
-            dataProvider: dataProvider,
-            config: config
+        // Record training started telemetry
+        TelemetryQueue.shared?.reportTrainingStarted(
+            modelId: modelId,
+            version: model.version,
+            roundId: roundId,
+            numSamples: 0
         )
+        let trainingStart = CFAbsoluteTimeGetCurrent()
 
-        let weightUpdate = try await trainer.extractWeightUpdate(
-            model: model,
-            trainingResult: trainingResult
-        )
+        let trainer = FederatedTrainer(configuration: configuration)
+        let trainingResult: TrainingResult
+        do {
+            trainingResult = try await trainer.train(
+                model: model,
+                dataProvider: dataProvider,
+                config: config
+            )
+        } catch {
+            TelemetryQueue.shared?.reportTrainingFailed(
+                modelId: modelId,
+                version: model.version,
+                errorType: String(describing: type(of: error)),
+                errorMessage: error.localizedDescription
+            )
+            throw error
+        }
+
+        let weightUpdate: WeightUpdate
+        do {
+            weightUpdate = try await trainer.extractWeightUpdate(
+                model: model,
+                trainingResult: trainingResult
+            )
+        } catch {
+            TelemetryQueue.shared?.reportTrainingFailed(
+                modelId: modelId,
+                version: model.version,
+                errorType: String(describing: type(of: error)),
+                errorMessage: error.localizedDescription
+            )
+            throw error
+        }
 
         // Phase 2: Mask and submit the model update
         let maskedWeights = try await secAgg.maskModelUpdate(weightUpdate.weightsData)
@@ -1071,6 +1201,13 @@ public final class OctomilClient: @unchecked Sendable {
             metrics: weightUpdate.metrics
         )
         try await apiClient.submitSecAggMaskedInput(maskedInputRequest)
+
+        // Record weight upload telemetry
+        TelemetryQueue.shared?.reportWeightUpload(
+            modelId: modelId,
+            roundId: roundId,
+            sampleCount: weightUpdate.sampleCount
+        )
 
         // Phase 3: Unmasking
         let unmaskInfo = try await apiClient.getSecAggUnmaskInfo(
@@ -1091,6 +1228,16 @@ public final class OctomilClient: @unchecked Sendable {
         }
 
         await secAgg.reset()
+
+        // Record training completed telemetry
+        let trainingDurationMs = (CFAbsoluteTimeGetCurrent() - trainingStart) * 1000
+        TelemetryQueue.shared?.reportTrainingCompleted(
+            modelId: modelId,
+            version: model.version,
+            durationMs: trainingDurationMs,
+            loss: trainingResult.loss ?? 0.0,
+            accuracy: trainingResult.accuracy ?? 0.0
+        )
 
         let roundResult = RoundResult(
             roundId: roundId,
@@ -1209,6 +1356,17 @@ public final class OctomilClient: @unchecked Sendable {
             type: eventName,
             metadata: properties
         )
+
+        // Report experiment metric if properties contain metric_name and metric_value
+        if let metricName = properties["metric_name"],
+           let metricValueStr = properties["metric_value"],
+           let metricValue = Double(metricValueStr) {
+            TelemetryQueue.shared?.reportExperimentMetric(
+                experimentId: experimentId,
+                metricName: metricName,
+                metricValue: metricValue
+            )
+        }
 
         try await apiClient.trackEvent(experimentId: experimentId, event: event)
     }

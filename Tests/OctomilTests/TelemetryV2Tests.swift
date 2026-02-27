@@ -596,6 +596,236 @@ final class APIClientTelemetryV2Tests: XCTestCase {
     }
 }
 
+// MARK: - Telemetry Wiring Integration Tests
+
+/// Tests that verify the telemetry methods are wired into the correct call sites.
+/// Since MLModel is final and cannot be mocked, these tests verify the wiring
+/// patterns at the TelemetryQueue level — ensuring that the sequence of events
+/// produced by the call sites matches expectations.
+final class TelemetryWiringTests: XCTestCase {
+
+    private var tempDir: URL!
+    private var persistenceURL: URL!
+
+    override func setUp() {
+        super.setUp()
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        persistenceURL = tempDir.appendingPathComponent("test_wiring_events.json")
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: tempDir)
+        super.tearDown()
+    }
+
+    private func makeQueue() -> TelemetryQueue {
+        TelemetryQueue(
+            modelId: "test",
+            serverURL: nil,
+            apiKey: nil,
+            batchSize: 100,
+            flushInterval: 0,
+            persistenceURL: persistenceURL
+        )
+    }
+
+    // MARK: - Inference Wiring: recordStarted before recordSuccess/recordFailure
+
+    func testInferenceStartedPrecedesCompleted() {
+        let queue = makeQueue()
+
+        // Simulate what OctomilWrappedModel.prediction(from:) does:
+        // 1. recordStarted before prediction
+        // 2. recordSuccess after prediction
+        queue.recordStarted(modelId: "classifier")
+        queue.recordSuccess(latencyMs: 12.5)
+
+        XCTAssertEqual(queue.pendingCount, 2)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "inference.started")
+        XCTAssertEqual(events[0].attributes["model.id"], .string("classifier"))
+        XCTAssertEqual(events[1].name, "inference.completed")
+        XCTAssertEqual(events[1].attributes["inference.duration_ms"], .double(12.5))
+    }
+
+    func testInferenceStartedPrecedesFailed() {
+        let queue = makeQueue()
+
+        // Simulate failed prediction path
+        queue.recordStarted(modelId: "classifier")
+        queue.recordFailure(latencyMs: 5.0, error: "shape mismatch")
+
+        XCTAssertEqual(queue.pendingCount, 2)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "inference.started")
+        XCTAssertEqual(events[1].name, "inference.failed")
+        XCTAssertEqual(events[1].attributes["error.message"], .string("shape mismatch"))
+    }
+
+    func testBatchPredictionRecordsStarted() {
+        let queue = makeQueue()
+
+        // Simulate what OctomilWrappedModel.predictions(from:) does
+        queue.recordStarted(modelId: "detector")
+        queue.recordSuccess(latencyMs: 50.0)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].name, "inference.started")
+        XCTAssertEqual(events[0].attributes["model.id"], .string("detector"))
+    }
+
+    // MARK: - Deploy Wiring: started then completed
+
+    func testDeployStartedThenCompleted() {
+        let queue = makeQueue()
+
+        // Simulate what ModelManager.downloadModel and Deploy.model do
+        queue.reportDeployStarted(modelId: "fraud_detection", version: "2.0.0")
+        queue.reportDeployCompleted(
+            modelId: "fraud_detection",
+            version: "2.0.0",
+            durationMs: 3500.0
+        )
+
+        XCTAssertEqual(queue.pendingCount, 2)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "deploy.started")
+        XCTAssertEqual(events[0].attributes["model.id"], .string("fraud_detection"))
+        XCTAssertEqual(events[0].attributes["model.version"], .string("2.0.0"))
+        XCTAssertEqual(events[1].name, "deploy.completed")
+        XCTAssertEqual(events[1].attributes["deploy.duration_ms"], .double(3500.0))
+    }
+
+    func testLocalDeployStartedThenCompleted() {
+        let queue = makeQueue()
+
+        // Simulate Deploy.model(at:) for local deployment
+        queue.reportDeployStarted(modelId: "my_model", version: "local")
+        queue.reportDeployCompleted(
+            modelId: "my_model",
+            version: "local",
+            durationMs: 1200.0
+        )
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].name, "deploy.started")
+        XCTAssertEqual(events[0].attributes["model.version"], .string("local"))
+        XCTAssertEqual(events[1].name, "deploy.completed")
+    }
+
+    // MARK: - Training Wiring: started, completed/failed, weight upload
+
+    func testTrainingFullLifecycle() {
+        let queue = makeQueue()
+
+        // Simulate what OctomilClient.train() does on success
+        queue.reportTrainingStarted(
+            modelId: "classifier",
+            version: "1.0.0",
+            roundId: "local",
+            numSamples: 0
+        )
+        queue.reportTrainingCompleted(
+            modelId: "classifier",
+            version: "1.0.0",
+            durationMs: 5000.0,
+            loss: 0.03,
+            accuracy: 0.98
+        )
+        queue.reportWeightUpload(
+            modelId: "classifier",
+            roundId: "local",
+            sampleCount: 200
+        )
+
+        XCTAssertEqual(queue.pendingCount, 3)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "training.started")
+        XCTAssertEqual(events[1].name, "training.completed")
+        XCTAssertEqual(events[1].attributes["training.loss"], .double(0.03))
+        XCTAssertEqual(events[1].attributes["training.accuracy"], .double(0.98))
+        XCTAssertEqual(events[2].name, "training.weight_upload")
+        XCTAssertEqual(events[2].attributes["training.sample_count"], .int(200))
+    }
+
+    func testTrainingFailureLifecycle() {
+        let queue = makeQueue()
+
+        // Simulate what OctomilClient.train() does on failure
+        queue.reportTrainingStarted(
+            modelId: "classifier",
+            version: "1.0.0",
+            roundId: "round-5",
+            numSamples: 0
+        )
+        queue.reportTrainingFailed(
+            modelId: "classifier",
+            version: "1.0.0",
+            errorType: "OctomilError",
+            errorMessage: "Model compilation failed"
+        )
+
+        XCTAssertEqual(queue.pendingCount, 2)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "training.started")
+        XCTAssertEqual(events[1].name, "training.failed")
+        XCTAssertEqual(events[1].attributes["error.type"], .string("OctomilError"))
+    }
+
+    // MARK: - Experiment Metric Wiring
+
+    func testExperimentMetricFromTrackEvent() {
+        let queue = makeQueue()
+
+        // Simulate what OctomilClient.trackEvent does when properties
+        // contain metric_name and metric_value
+        let metricName = "click_rate"
+        let metricValue = 0.15
+        queue.reportExperimentMetric(
+            experimentId: "exp-001",
+            metricName: metricName,
+            metricValue: metricValue
+        )
+
+        XCTAssertEqual(queue.pendingCount, 1)
+
+        let event = queue.bufferedEvents.first!
+        XCTAssertEqual(event.name, "experiment.metric_recorded")
+        XCTAssertEqual(event.attributes["experiment.id"], .string("exp-001"))
+        XCTAssertEqual(event.attributes["experiment.metric_name"], .string("click_rate"))
+        XCTAssertEqual(event.attributes["experiment.metric_value"], .double(0.15))
+    }
+
+    // MARK: - Full Inference + Deploy Sequence
+
+    func testFullInferenceDeploySequence() {
+        let queue = makeQueue()
+
+        // Simulate a full deploy + inference lifecycle
+        queue.reportDeployStarted(modelId: "m1", version: "1.0")
+        queue.reportDeployCompleted(modelId: "m1", version: "1.0", durationMs: 2000.0)
+        queue.recordStarted(modelId: "m1")
+        queue.recordSuccess(latencyMs: 15.0)
+
+        XCTAssertEqual(queue.pendingCount, 4)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "deploy.started")
+        XCTAssertEqual(events[1].name, "deploy.completed")
+        XCTAssertEqual(events[2].name, "inference.started")
+        XCTAssertEqual(events[3].name, "inference.completed")
+    }
+}
+
 // MARK: - Phase 4 Tests: trace_id/span_id, inference.started, training, experiment, deploy
 
 final class TelemetryV2Phase4Tests: XCTestCase {

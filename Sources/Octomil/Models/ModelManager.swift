@@ -77,6 +77,10 @@ public actor ModelManager {
                 }
             }
 
+            // Record deploy started telemetry
+            TelemetryQueue.shared?.reportDeployStarted(modelId: modelId, version: version)
+            let deployStart = CFAbsoluteTimeGetCurrent()
+
             // Get metadata
             let metadata = try await apiClient.getModelMetadata(modelId: modelId, version: version)
 
@@ -159,6 +163,14 @@ public actor ModelManager {
                     self.logger.debug("No MNN config for \(modelId) on \(deviceProfile)")
                 }
             }
+
+            // Record deploy completed telemetry
+            let deployDurationMs = (CFAbsoluteTimeGetCurrent() - deployStart) * 1000
+            TelemetryQueue.shared?.reportDeployCompleted(
+                modelId: modelId,
+                version: version,
+                durationMs: deployDurationMs
+            )
 
             if self.configuration.enableLogging {
                 self.logger.info("Model downloaded: \(modelId)@\(version)")
