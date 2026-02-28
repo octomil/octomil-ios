@@ -222,7 +222,7 @@ public final class TryItOutViewModel: ObservableObject {
 
         do {
             // Simulate inference -- in production this would call the model's
-            // generateStream or predict method via the deployed model reference.
+            // predictStream or predict method via the deployed model reference.
             try await Task.sleep(nanoseconds: 500_000_000)
 
             if Task.isCancelled { return }

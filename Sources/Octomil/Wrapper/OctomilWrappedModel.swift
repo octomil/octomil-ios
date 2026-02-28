@@ -16,7 +16,7 @@ import os.log
 ///
 /// // After
 /// let model = try Octomil.wrap(MLModel(contentsOf: url), modelId: "classifier")
-/// let result = try model.prediction(from: input)
+/// let result = try model.predict(input: input)
 /// ```
 ///
 /// Each prediction call:
@@ -95,7 +95,7 @@ public final class OctomilWrappedModel: @unchecked Sendable {
         )
     }
 
-    // MARK: - Prediction (MLModel-compatible API)
+    // MARK: - Prediction
 
     /// Makes a prediction using the wrapped CoreML model.
     ///
@@ -103,7 +103,7 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     /// - Returns: The model's prediction output.
     /// - Throws: ``FeatureValidationError`` if validation is enabled and
     ///   the input doesn't match the contract, or any error from CoreML.
-    public func prediction(from input: MLFeatureProvider) throws -> MLFeatureProvider {
+    public func predict(input: MLFeatureProvider) throws -> MLFeatureProvider {
         try validateIfNeeded(input)
 
         // Record inference started telemetry
@@ -141,8 +141,8 @@ public final class OctomilWrappedModel: @unchecked Sendable {
     ///   - input: An ``MLFeatureProvider`` with the input features.
     ///   - options: Prediction options (e.g. compute units).
     /// - Returns: The model's prediction output.
-    public func prediction(
-        from input: MLFeatureProvider,
+    public func predict(
+        input: MLFeatureProvider,
         options: MLPredictionOptions
     ) throws -> MLFeatureProvider {
         try validateIfNeeded(input)
@@ -192,7 +192,7 @@ public final class OctomilWrappedModel: @unchecked Sendable {
 
     /// Enables cloud routing for this model.
     ///
-    /// When configured, each ``prediction(from:)`` call first consults the
+    /// When configured, each ``predict(input:)`` call first consults the
     /// routing API. If the server recommends cloud execution, inference is
     /// sent to `POST /api/v1/inference`. On any routing or cloud failure,
     /// the SDK falls back to local CoreML inference silently.

@@ -188,7 +188,7 @@ public final class OctomilModel: @unchecked Sendable {
     ///   - modality: The generation modality.
     ///   - engine: A ``StreamingInferenceEngine`` (defaults to ``LLMEngine`` for text).
     /// - Returns: An ``AsyncThrowingStream`` of ``InferenceChunk``.
-    public func generateStream(
+    public func predictStream(
         input: Any,
         modality: Modality,
         engine: StreamingInferenceEngine? = nil

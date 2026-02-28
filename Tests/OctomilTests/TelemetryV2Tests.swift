@@ -636,7 +636,7 @@ final class TelemetryWiringTests: XCTestCase {
     func testInferenceStartedPrecedesCompleted() {
         let queue = makeQueue()
 
-        // Simulate what OctomilWrappedModel.prediction(from:) does:
+        // Simulate what OctomilWrappedModel.predict(input:) does:
         // 1. reportInferenceStarted before prediction
         // 2. reportInferenceCompleted after prediction
         queue.reportInferenceStarted(modelId: "classifier")

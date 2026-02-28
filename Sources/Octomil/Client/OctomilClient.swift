@@ -81,6 +81,9 @@ public final class OctomilClient: @unchecked Sendable {
     private var heartbeatTask: Task<Void, Never>?
     private let heartbeatInterval: TimeInterval
 
+    /// Whether the client has been closed via ``close()``.
+    public private(set) var isClosed: Bool = false
+
     // MARK: - Client State
 
     /// The current client state.
@@ -182,6 +185,42 @@ public final class OctomilClient: @unchecked Sendable {
 
     deinit {
         heartbeatTask?.cancel()
+    }
+
+    // MARK: - Teardown
+
+    /// Tears down the client, releasing all background resources.
+    ///
+    /// This method:
+    /// 1. Stops the heartbeat timer
+    /// 2. Flushes any pending telemetry events
+    /// 3. Cancels background tasks
+    /// 4. Sets ``isClosed`` to `true` and transitions to ``ClientState/closed``
+    ///
+    /// After calling `close()`, the client should not be reused.
+    /// This is the iOS equivalent of `close()` on Android/Python and
+    /// `dispose()` on Node.
+    public func close() async {
+        guard !isClosed else { return }
+        isClosed = true
+
+        // Stop heartbeat
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+
+        // Flush pending telemetry
+        await TelemetryQueue.shared?.flush()
+
+        // Transition to closed state
+        emitState(.closed)
+
+        // Finish state stream
+        stateContinuation?.finish()
+        downloadStateContinuation?.finish()
+
+        if configuration.enableLogging {
+            logger.info("OctomilClient closed")
+        }
     }
 
     // MARK: - Device Registration
@@ -454,13 +493,13 @@ public final class OctomilClient: @unchecked Sendable {
     ///   - modality: The output modality.
     ///   - engine: Optional custom engine. Defaults to a modality-appropriate engine.
     /// - Returns: An ``AsyncThrowingStream`` of ``InferenceChunk``.
-    public func generateStream(
+    public func predictStream(
         model: OctomilModel,
         input: Any,
         modality: Modality,
         engine: StreamingInferenceEngine? = nil
     ) -> AsyncThrowingStream<InferenceChunk, Error> {
-        let (stream, getResult) = model.generateStream(input: input, modality: modality, engine: engine)
+        let (stream, getResult) = model.predictStream(input: input, modality: modality, engine: engine)
         let apiClient = self.apiClient
         let deviceId = self.deviceId
         let orgId = self.orgId

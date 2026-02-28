@@ -14,8 +14,8 @@ import os.log
 /// // After
 /// let model = try Octomil.wrap(MLModel(contentsOf: modelURL), modelId: "classifier")
 ///
-/// // Call sites stay identical
-/// let result = try model.prediction(from: input)
+/// // Call sites use the cross-SDK predict() API
+/// let result = try model.predict(input: input)
 /// ```
 public enum Octomil {
 

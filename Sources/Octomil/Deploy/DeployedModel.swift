@@ -41,7 +41,7 @@ public final class DeployedModel: @unchecked Sendable {
     }
 
     /// Run streaming generative inference.
-    public func generateStream(
+    public func predictStream(
         input: Any,
         modality: Modality,
         engine streamingEngine: StreamingInferenceEngine? = nil
@@ -49,6 +49,6 @@ public final class DeployedModel: @unchecked Sendable {
         stream: AsyncThrowingStream<InferenceChunk, Error>,
         result: @Sendable () -> StreamingInferenceResult?
     ) {
-        return model.generateStream(input: input, modality: modality, engine: streamingEngine)
+        return model.predictStream(input: input, modality: modality, engine: streamingEngine)
     }
 }

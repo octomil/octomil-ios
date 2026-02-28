@@ -38,7 +38,7 @@ public final class MLXDeployedModel: @unchecked Sendable {
     /// Generate text with instrumented timing metrics.
     /// - Parameter prompt: The text prompt.
     /// - Returns: Tuple of (instrumented stream, result closure).
-    public func generateStream(
+    public func predictStream(
         prompt: String
     ) -> (
         stream: AsyncThrowingStream<InferenceChunk, Error>,
@@ -54,7 +54,7 @@ public final class MLXDeployedModel: @unchecked Sendable {
     }
 
     /// Generate text with a specific modality (for protocol flexibility).
-    public func generateStream(
+    public func predictStream(
         input: Any,
         modality: Modality
     ) -> (
