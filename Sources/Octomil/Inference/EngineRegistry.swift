@@ -152,6 +152,41 @@ public final class EngineRegistry: @unchecked Sendable {
         factories.removeAll()
     }
 
+    // MARK: - Detection & Benchmarking
+
+    /// Detect which engines are available for the given modality on this device.
+    /// - Parameter modality: The target modality.
+    /// - Returns: Detection results for each known engine.
+    public func detectAll(modality: Modality) -> [DetectionResult] {
+        // TODO: Implement
+
+        let engines: [Engine] = [.coreml, .mlx]
+        return engines.map { engine in
+            DetectionResult(engine: engine, available: false, info: nil)
+        }
+    }
+
+    /// Benchmark all available engines for the given modality and model.
+    /// - Parameters:
+    ///   - modality: The target modality.
+    ///   - modelURL: URL of the model to benchmark.
+    ///   - nTokens: Number of tokens to generate during benchmark (default: 32).
+    /// - Returns: Ranked engines sorted by tokens-per-second descending.
+    public func benchmarkAll(modality: Modality, modelURL: URL, nTokens: Int = 32) async -> [RankedEngine] {
+        // TODO: Implement
+
+
+        return []
+    }
+
+    /// Select the best engine from a set of ranked benchmark results.
+    /// - Parameter ranked: Results from ``benchmarkAll(modality:modelURL:nTokens:)``.
+    /// - Returns: The highest-ranked engine that completed without error, or `nil`.
+    public func selectBest(_ ranked: [RankedEngine]) -> RankedEngine? {
+        // TODO: Implement
+        return ranked.first(where: { $0.result.ok })
+    }
+
     // MARK: - Private
 
     private func registerDefaults() {

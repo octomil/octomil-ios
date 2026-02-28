@@ -17,12 +17,12 @@ public actor MLXModelLoader {
         return caches.appendingPathComponent("ai.octomil.mlx-models", isDirectory: true)
     }()
 
-    /// GPU memory cache limit in bytes. Default: 512 MB for iOS.
+    /// GPU memory cache limit in bytes. Default: 2 GB.
     public var gpuCacheLimit: Int
 
     private var loadedContainers: [String: ModelContainer] = [:]
 
-    public init(gpuCacheLimit: Int = 512 * 1024 * 1024) {
+    public init(gpuCacheLimit: Int = 2 * 1024 * 1024 * 1024) {
         self.gpuCacheLimit = gpuCacheLimit
     }
 
