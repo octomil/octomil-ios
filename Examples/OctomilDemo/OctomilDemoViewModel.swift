@@ -192,7 +192,7 @@ class OctomilDemoViewModel: ObservableObject {
                 return
             }
 
-            let roundResult = try await client.participateInRound(
+            let roundResult = try await client.joinRound(
                 modelId: defaultModelId,
                 dataProvider: { batch },
                 config: config

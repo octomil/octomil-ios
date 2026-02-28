@@ -410,11 +410,11 @@ public actor APIClient {
         let _: EmptyResponse = try await performRequest(urlRequest)
     }
 
-    /// Tracks an event on the server.
+    /// Tracks a metric on the server.
     /// - Parameters:
     ///   - experimentId: Experiment identifier.
     ///   - event: Event to track.
-    public func trackEvent(experimentId: String, event: TrackingEvent) async throws {
+    public func trackMetric(experimentId: String, event: TrackingEvent) async throws {
         let url = serverURL.appendingPathComponent("api/v1/experiments/\(experimentId)/events")
 
         var urlRequest = URLRequest(url: url)
@@ -424,6 +424,30 @@ public actor APIClient {
         urlRequest.httpBody = try jsonEncoder.encode(event)
 
         let _: EmptyResponse = try await performRequest(urlRequest)
+    }
+
+    // MARK: - Experiments
+
+    /// Fetches all active experiments.
+    public func getActiveExperiments() async throws -> [Experiment] {
+        let url = serverURL.appendingPathComponent("api/v1/experiments")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        return try await performRequest(urlRequest)
+    }
+
+    /// Fetches config for a specific experiment.
+    public func getExperimentConfig(experimentId: String) async throws -> Experiment {
+        let url = serverURL.appendingPathComponent("api/v1/experiments/\(experimentId)")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        return try await performRequest(urlRequest)
     }
 
     // MARK: - Inference Events

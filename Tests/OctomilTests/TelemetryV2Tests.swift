@@ -783,10 +783,10 @@ final class TelemetryWiringTests: XCTestCase {
 
     // MARK: - Experiment Metric Wiring
 
-    func testExperimentMetricFromTrackEvent() {
+    func testExperimentMetricFromTrackMetric() {
         let queue = makeQueue()
 
-        // Simulate what OctomilClient.trackEvent does when properties
+        // Simulate what OctomilClient.trackMetric does when properties
         // contain metric_name and metric_value
         let metricName = "click_rate"
         let metricValue = 0.15
