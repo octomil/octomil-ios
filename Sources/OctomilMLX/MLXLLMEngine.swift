@@ -18,9 +18,8 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
     public var temperature: Float
     public let cacheEnabled: Bool
 
-    // KV cache state — guarded by modelContainer.perform serialization
-    private var lastPromptTokens: [Int]?
-    private var lastKVCache: [KVCache]?
+    // KV cache pool — guarded internally by NSLock
+    private let cachePool = KVCachePool(maxEntries: 4)
     private var _cacheHits: Int = 0
     private var _cacheMisses: Int = 0
 
@@ -115,10 +114,12 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
                         }
                     }
 
-                    // Store cache for reuse on next generation
-                    if cacheEnabled {
-                        self?.lastPromptTokens = promptTokenIds
-                        self?.lastKVCache = cache
+                    // Store cache in pool for reuse on next generation
+                    if cacheEnabled, let kvCaches = cache {
+                        self?.cachePool.storeCache(
+                            promptTokenIds: promptTokenIds,
+                            kvCaches: kvCaches
+                        )
                     }
 
                     continuation.finish()
@@ -135,22 +136,16 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - KV Cache Management
 
-    /// Find the longest common prefix between current prompt tokens and last cached tokens.
+    /// Look up the best matching cached prefix from the pool.
     /// If commonLen >= 4, reuse the cache with trimming. Otherwise, return nil.
     private func fetchOrCreateCache(promptTokenIds: [Int]) -> [KVCache]? {
-        guard let lastTokens = lastPromptTokens, let cachedKV = lastKVCache else {
+        guard let match = cachePool.fetchCachedPrefix(promptTokenIds: promptTokenIds) else {
             _cacheMisses += 1
             return nil
         }
 
-        let commonLen = zip(promptTokenIds, lastTokens).prefix(while: { $0 == $1 }).count
-
-        guard commonLen >= 4 else {
-            _cacheMisses += 1
-            lastKVCache = nil
-            lastPromptTokens = nil
-            return nil
-        }
+        let cachedKV = match.kvCaches
+        let commonLen = match.commonLength
 
         // Trim cache: remove tokens beyond commonLen - 1 (re-process last common token).
         // KVCache.offset gives current cache length; trim(_ n:) removes n tokens from the end.
