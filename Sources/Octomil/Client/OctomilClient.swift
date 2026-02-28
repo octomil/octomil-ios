@@ -59,6 +59,12 @@ public final class OctomilClient: @unchecked Sendable {
     /// Secure aggregation client, lazily created when SecAgg is used.
     private var secAggClient: SecureAggregationClient?
 
+    /// Experiments client for A/B testing.
+    public private(set) lazy var experiments = ExperimentsClient(
+        apiClient: apiClient,
+        telemetryQueue: TelemetryQueue.shared
+    )
+
     /// Offline event queue for offline-first event persistence.
     private let eventQueue: EventQueue
 
@@ -531,7 +537,7 @@ public final class OctomilClient: @unchecked Sendable {
     /// Train the model on local data with a single, unified API.
     ///
     /// This is the **recommended** way to do all training. It replaces the
-    /// previous split between ``participateInRound`` and ``trainLocal``.
+    /// previous split between ``joinRound`` and ``trainLocal``.
     ///
     /// ## Upload behavior
     ///
@@ -925,7 +931,7 @@ public final class OctomilClient: @unchecked Sendable {
         // Report warmup event
         if let deviceId = self.deviceId {
             Task {
-                try? await apiClient.trackEvent(
+                try? await apiClient.trackMetric(
                     experimentId: model.id,
                     event: TrackingEvent(
                         name: "MODEL_WARMUP_COMPLETED",
@@ -967,7 +973,7 @@ public final class OctomilClient: @unchecked Sendable {
     ///   - config: Training configuration.
     /// - Returns: Result of the training round.
     /// - Throws: `OctomilError` if training fails.
-    public func participateInRound(
+    public func joinRound(
         modelId: String,
         dataProvider: @escaping () -> MLBatchProvider,
         config: TrainingConfig = .standard
@@ -977,7 +983,7 @@ public final class OctomilClient: @unchecked Sendable {
         }
 
         if configuration.enableLogging {
-            logger.info("Participating in training round for model: \(modelId)")
+            logger.info("Joining training round for model: \(modelId)")
         }
 
         // Get or download model
@@ -1094,7 +1100,7 @@ public final class OctomilClient: @unchecked Sendable {
     ///   - config: Training configuration.
     /// - Returns: Result of the training round.
     /// - Throws: `OctomilError` if training or SecAgg protocol fails.
-    public func participateInSecureRound(
+    public func joinSecureRound(
         modelId: String,
         roundId: String,
         dataProvider: @escaping () -> MLBatchProvider,
@@ -1329,18 +1335,18 @@ public final class OctomilClient: @unchecked Sendable {
         return FederatedAnalyticsClient(apiClient: apiClient, federationId: federationId)
     }
 
-    // MARK: - Event Tracking
+    // MARK: - Metric Tracking
 
-    /// Tracks an event for an experiment.
+    /// Tracks a metric for an experiment.
     ///
-    /// Events are persisted to the local event queue first (offline-first),
+    /// Metrics are persisted to the local event queue first (offline-first),
     /// then forwarded to the server.
     ///
     /// - Parameters:
     ///   - experimentId: Experiment identifier.
     ///   - eventName: Name of the event.
     ///   - properties: Event properties.
-    public func trackEvent(
+    public func trackMetric(
         experimentId: String,
         eventName: String,
         properties: [String: String] = [:]
@@ -1368,7 +1374,7 @@ public final class OctomilClient: @unchecked Sendable {
             )
         }
 
-        try await apiClient.trackEvent(experimentId: experimentId, event: event)
+        try await apiClient.trackMetric(experimentId: experimentId, event: event)
     }
 
     // MARK: - Round Management

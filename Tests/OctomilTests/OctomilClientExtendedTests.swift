@@ -170,13 +170,13 @@ final class OctomilClientExtendedTests: XCTestCase {
         }
     }
 
-    // MARK: - participateInRound guard
+    // MARK: - joinRound guard
 
-    func testParticipateInRoundThrowsDeviceNotRegistered() async {
+    func testJoinRoundThrowsDeviceNotRegistered() async {
         let client = makeClient()
 
         do {
-            _ = try await client.participateInRound(
+            _ = try await client.joinRound(
                 modelId: "test-model",
                 dataProvider: { MockBatchProviderExtended() }
             )

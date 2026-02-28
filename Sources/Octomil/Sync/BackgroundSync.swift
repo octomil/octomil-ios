@@ -151,7 +151,7 @@ public final class BackgroundSync: @unchecked Sendable {
         // Create training task
         let trainingTask = Task {
             do {
-                let result = try await client.participateInRound(
+                let result = try await client.joinRound(
                     modelId: modelId,
                     dataProvider: dataProvider
                 )
