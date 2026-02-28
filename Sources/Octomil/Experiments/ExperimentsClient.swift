@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // MARK: - Models
@@ -71,8 +72,8 @@ public final class ExperimentsClient: @unchecked Sendable {
         guard !experiment.variants.isEmpty else { return nil }
 
         let key = "\(experiment.id):\(deviceId)"
-        let hash = UInt(bitPattern: key.hashValue)
-        let bucket = Int(hash % 100)
+        let digest = SHA256.hash(data: Data(key.utf8))
+        let bucket = Int(digest.prefix(4).reduce(0 as UInt32) { $0 << 8 | UInt32($1) } % 100)
 
         var cumulative = 0
         for variant in experiment.variants {

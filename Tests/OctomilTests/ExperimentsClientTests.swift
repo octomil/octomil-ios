@@ -113,6 +113,17 @@ final class ExperimentsClientTests: XCTestCase {
 
     // MARK: - Codable
 
+    func testGetVariantCrossSdkHashConsistency() {
+        // SHA-256("exp-1:device-123") starts with c903f120 → uint32 3372478752 → bucket 52
+        // With two 50/50 variants, bucket 52 >= 50 → second variant (treatment)
+        let client = makeClient()
+        let experiment = makeExperiment()
+
+        let variant = client.getVariant(experiment: experiment, deviceId: "device-123")
+        XCTAssertEqual(variant?.id, "v2", "SHA-256 bucket 52 should land in second variant (50-99 range)")
+        XCTAssertEqual(variant?.name, "treatment")
+    }
+
     func testExperimentDecodesFromJSON() throws {
         let json = """
         {
