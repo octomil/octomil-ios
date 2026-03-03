@@ -16,10 +16,49 @@ public struct RoutingPolicy: Codable, Sendable {
     public struct Thresholds: Codable, Sendable {
         public let fastMaxWords: Int
         public let qualityMinWords: Int
+        public let lengthWeight: Double
+        public let indicatorWeight: Double
+        public let fastThreshold: Double
+        public let qualityThreshold: Double
+        public let indicatorNormalizor: Double
 
         enum CodingKeys: String, CodingKey {
             case fastMaxWords = "fast_max_words"
             case qualityMinWords = "quality_min_words"
+            case lengthWeight = "length_weight"
+            case indicatorWeight = "indicator_weight"
+            case fastThreshold = "fast_threshold"
+            case qualityThreshold = "quality_threshold"
+            case indicatorNormalizor = "indicator_normalizor"
+        }
+
+        public init(
+            fastMaxWords: Int,
+            qualityMinWords: Int,
+            lengthWeight: Double = 0.5,
+            indicatorWeight: Double = 0.5,
+            fastThreshold: Double = 0.3,
+            qualityThreshold: Double = 0.7,
+            indicatorNormalizor: Double = 3.0
+        ) {
+            self.fastMaxWords = fastMaxWords
+            self.qualityMinWords = qualityMinWords
+            self.lengthWeight = lengthWeight
+            self.indicatorWeight = indicatorWeight
+            self.fastThreshold = fastThreshold
+            self.qualityThreshold = qualityThreshold
+            self.indicatorNormalizor = indicatorNormalizor
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            fastMaxWords = try container.decode(Int.self, forKey: .fastMaxWords)
+            qualityMinWords = try container.decode(Int.self, forKey: .qualityMinWords)
+            lengthWeight = try container.decodeIfPresent(Double.self, forKey: .lengthWeight) ?? 0.5
+            indicatorWeight = try container.decodeIfPresent(Double.self, forKey: .indicatorWeight) ?? 0.5
+            fastThreshold = try container.decodeIfPresent(Double.self, forKey: .fastThreshold) ?? 0.3
+            qualityThreshold = try container.decodeIfPresent(Double.self, forKey: .qualityThreshold) ?? 0.7
+            indicatorNormalizor = try container.decodeIfPresent(Double.self, forKey: .indicatorNormalizor) ?? 3.0
         }
     }
 
@@ -385,16 +424,18 @@ public actor QueryRouter {
         // Indicator component: fraction of complex indicators found.
         let lowerText = text.lowercased()
         let matchCount = policy.complexIndicators.filter { lowerText.contains($0) }.count
-        let indicatorScore = min(Double(matchCount) / 3.0, 1.0)
+        let indicatorScore = min(Double(matchCount) / policy.thresholds.indicatorNormalizor, 1.0)
 
-        return min(wordScore * policy.scoringWeights.wordWeight + indicatorScore * policy.scoringWeights.indicatorWeight, 1.0)
+        let lw = policy.thresholds.lengthWeight
+        let iw = policy.thresholds.indicatorWeight
+        return min(wordScore * lw + indicatorScore * iw, 1.0)
     }
 
     /// Map a complexity score to a tier name.
     private func assignTier(score: Double, policy: RoutingPolicy) -> String {
-        if score < 0.3 {
+        if score < policy.thresholds.fastThreshold {
             return "fast"
-        } else if score >= 0.7 {
+        } else if score >= policy.thresholds.qualityThreshold {
             return "quality"
         } else {
             return "balanced"

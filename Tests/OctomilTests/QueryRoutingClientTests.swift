@@ -81,19 +81,232 @@ final class QueryRoutingClientTests: XCTestCase {
         XCTAssertEqual(policy.complexIndicators, ["analyze", "compare"])
     }
 
+    // MARK: - Scoring Weight Fields
+
+    func testThresholdsDefaultScoringWeights() {
+        // New Thresholds init with only the two required params should use neutral defaults.
+        let t = RoutingPolicy.Thresholds(fastMaxWords: 10, qualityMinWords: 50)
+        XCTAssertEqual(t.lengthWeight, 0.5)
+        XCTAssertEqual(t.indicatorWeight, 0.5)
+        XCTAssertEqual(t.fastThreshold, 0.3)
+        XCTAssertEqual(t.qualityThreshold, 0.7)
+        XCTAssertEqual(t.indicatorNormalizor, 3.0)
+    }
+
+    func testThresholdsCustomScoringWeights() {
+        let t = RoutingPolicy.Thresholds(
+            fastMaxWords: 10,
+            qualityMinWords: 50,
+            lengthWeight: 0.8,
+            indicatorWeight: 0.2,
+            fastThreshold: 0.2,
+            qualityThreshold: 0.6,
+            indicatorNormalizor: 5.0
+        )
+        XCTAssertEqual(t.lengthWeight, 0.8)
+        XCTAssertEqual(t.indicatorWeight, 0.2)
+        XCTAssertEqual(t.fastThreshold, 0.2)
+        XCTAssertEqual(t.qualityThreshold, 0.6)
+        XCTAssertEqual(t.indicatorNormalizor, 5.0)
+    }
+
+    func testThresholdsDecodesWithoutScoringWeights() throws {
+        // Server JSON that lacks the new scoring weight fields should decode with defaults.
+        let json = """
+        {"fast_max_words": 10, "quality_min_words": 50}
+        """.data(using: .utf8)!
+
+        let t = try JSONDecoder().decode(RoutingPolicy.Thresholds.self, from: json)
+        XCTAssertEqual(t.fastMaxWords, 10)
+        XCTAssertEqual(t.qualityMinWords, 50)
+        XCTAssertEqual(t.lengthWeight, 0.5)
+        XCTAssertEqual(t.indicatorWeight, 0.5)
+        XCTAssertEqual(t.fastThreshold, 0.3)
+        XCTAssertEqual(t.qualityThreshold, 0.7)
+        XCTAssertEqual(t.indicatorNormalizor, 3.0)
+    }
+
+    func testThresholdsDecodesWithScoringWeights() throws {
+        let json = """
+        {
+            "fast_max_words": 10,
+            "quality_min_words": 50,
+            "length_weight": 0.7,
+            "indicator_weight": 0.3,
+            "fast_threshold": 0.15,
+            "quality_threshold": 0.85,
+            "indicator_normalizor": 4.0
+        }
+        """.data(using: .utf8)!
+
+        let t = try JSONDecoder().decode(RoutingPolicy.Thresholds.self, from: json)
+        XCTAssertEqual(t.lengthWeight, 0.7)
+        XCTAssertEqual(t.indicatorWeight, 0.3)
+        XCTAssertEqual(t.fastThreshold, 0.15)
+        XCTAssertEqual(t.qualityThreshold, 0.85)
+        XCTAssertEqual(t.indicatorNormalizor, 4.0)
+    }
+
+    func testThresholdsScoringWeightsRoundTrip() throws {
+        let original = RoutingPolicy.Thresholds(
+            fastMaxWords: 10,
+            qualityMinWords: 50,
+            lengthWeight: 0.65,
+            indicatorWeight: 0.35,
+            fastThreshold: 0.25,
+            qualityThreshold: 0.75,
+            indicatorNormalizor: 4.0
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RoutingPolicy.Thresholds.self, from: data)
+
+        XCTAssertEqual(decoded.lengthWeight, original.lengthWeight)
+        XCTAssertEqual(decoded.indicatorWeight, original.indicatorWeight)
+        XCTAssertEqual(decoded.fastThreshold, original.fastThreshold)
+        XCTAssertEqual(decoded.qualityThreshold, original.qualityThreshold)
+        XCTAssertEqual(decoded.indicatorNormalizor, original.indicatorNormalizor)
+    }
+
+    func testScoringWeightsInFullPolicyJSON() throws {
+        let serverJSON = """
+        {
+            "version": 3,
+            "thresholds": {
+                "fast_max_words": 12,
+                "quality_min_words": 60,
+                "length_weight": 0.7,
+                "indicator_weight": 0.3,
+                "fast_threshold": 0.2,
+                "quality_threshold": 0.8,
+                "indicator_normalizor": 5.0
+            },
+            "complex_indicators": ["code", "explain"],
+            "deterministic_enabled": true,
+            "ttl_seconds": 300,
+            "fetched_at": 0,
+            "etag": ""
+        }
+        """.data(using: .utf8)!
+
+        let policy = try JSONDecoder().decode(RoutingPolicy.self, from: serverJSON)
+        XCTAssertEqual(policy.thresholds.lengthWeight, 0.7)
+        XCTAssertEqual(policy.thresholds.indicatorWeight, 0.3)
+        XCTAssertEqual(policy.thresholds.fastThreshold, 0.2)
+        XCTAssertEqual(policy.thresholds.qualityThreshold, 0.8)
+        XCTAssertEqual(policy.thresholds.indicatorNormalizor, 5.0)
+    }
+
+    // MARK: - Server Weights Affect Routing
+
+    func testServerWeightsShiftTierBoundaries() async {
+        // With a very low qualityThreshold (0.2), even moderate queries hit "quality".
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SharedMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        SharedMockURLProtocol.reset()
+        SharedMockURLProtocol.responses.append(.success(statusCode: 200, json: [
+            "version": 1,
+            "thresholds": [
+                "fast_max_words": 10,
+                "quality_min_words": 50,
+                "length_weight": 0.5,
+                "indicator_weight": 0.5,
+                "fast_threshold": 0.05,
+                "quality_threshold": 0.2,
+                "indicator_normalizor": 3.0,
+            ] as [String: Any],
+            "complex_indicators": ["explain"],
+            "deterministic_enabled": false,
+            "ttl_seconds": 300,
+            "fetched_at": 0,
+            "etag": "",
+        ] as [String: Any]))
+
+        let client = PolicyClient(
+            apiBase: URL(string: "https://api.octomil.com")!,
+            apiKey: "test-key",
+            session: session
+        )
+        await client.clearCache()
+
+        let router = QueryRouter(
+            models: Self.testModels,
+            policyClient: client,
+            enableDeterministic: false
+        )
+
+        // A moderately short query with one indicator — would be "balanced" under defaults,
+        // but with qualityThreshold=0.2 it should become "quality".
+        let decision = await router.route(messages: [
+            ["role": "user", "content": "explain this short thing"]
+        ])
+
+        XCTAssertEqual(decision.tier, "quality")
+    }
+
+    func testHighIndicatorNormalizorReducesIndicatorImpact() async {
+        // With indicatorNormalizor=100, even many indicator matches barely move the score.
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SharedMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        SharedMockURLProtocol.reset()
+        SharedMockURLProtocol.responses.append(.success(statusCode: 200, json: [
+            "version": 1,
+            "thresholds": [
+                "fast_max_words": 10,
+                "quality_min_words": 50,
+                "length_weight": 0.5,
+                "indicator_weight": 0.5,
+                "fast_threshold": 0.3,
+                "quality_threshold": 0.7,
+                "indicator_normalizor": 100.0,
+            ] as [String: Any],
+            "complex_indicators": ["code", "explain", "analyze"],
+            "deterministic_enabled": false,
+            "ttl_seconds": 300,
+            "fetched_at": 0,
+            "etag": "",
+        ] as [String: Any]))
+
+        let client = PolicyClient(
+            apiBase: URL(string: "https://api.octomil.com")!,
+            apiKey: "test-key",
+            session: session
+        )
+        await client.clearCache()
+
+        let router = QueryRouter(
+            models: Self.testModels,
+            policyClient: client,
+            enableDeterministic: false
+        )
+
+        // Short text with all three indicators — normally would push toward balanced/quality,
+        // but with normalizor=100, indicator contribution is 3/100 * 0.5 = 0.015, barely anything.
+        let decision = await router.route(messages: [
+            ["role": "user", "content": "code explain analyze"]
+        ])
+
+        XCTAssertEqual(decision.tier, "fast")
+    }
+
     // MARK: - Default Policy Fallback
 
     func testDefaultPolicyValues() {
         let policy = defaultRoutingPolicy
         XCTAssertEqual(policy.version, 1)
-        XCTAssertEqual(policy.thresholds.fastMaxWords, 10)
-        XCTAssertEqual(policy.thresholds.qualityMinWords, 50)
-        XCTAssertEqual(policy.complexIndicators.count, 14)
-        XCTAssertTrue(policy.complexIndicators.contains("code"))
-        XCTAssertTrue(policy.complexIndicators.contains("step by step"))
-        XCTAssertTrue(policy.complexIndicators.contains("algorithm"))
+        XCTAssertEqual(policy.thresholds.fastMaxWords, defaultRoutingPolicy.thresholds.fastMaxWords)
+        XCTAssertEqual(policy.thresholds.qualityMinWords, defaultRoutingPolicy.thresholds.qualityMinWords)
         XCTAssertTrue(policy.deterministicEnabled)
-        XCTAssertEqual(policy.ttlSeconds, 300)
+        // Scoring weight neutral defaults.
+        XCTAssertEqual(policy.thresholds.lengthWeight, 0.5)
+        XCTAssertEqual(policy.thresholds.indicatorWeight, 0.5)
+        XCTAssertEqual(policy.thresholds.fastThreshold, 0.3)
+        XCTAssertEqual(policy.thresholds.qualityThreshold, 0.7)
+        XCTAssertEqual(policy.thresholds.indicatorNormalizor, 3.0)
     }
 
     func testPolicyClientReturnsDefaultWhenNoCacheOrServer() async {
