@@ -516,7 +516,7 @@ public final class OctomilClient: @unchecked Sendable {
                         "model.version": .string(model.version),
                         "inference.modality": .string(modality.rawValue),
                         "inference.session_id": .string(sessionId),
-                        "model.format": .string("coreml"),
+                        "model.format": .string(model.metadata.format),
                     ]
                 )
                 let envelope = TelemetryEnvelope(resource: resource, events: [event])
@@ -553,7 +553,7 @@ public final class OctomilClient: @unchecked Sendable {
                         "inference.duration_ms": .double(result.totalDurationMs),
                         "inference.total_chunks": .int(result.totalChunks),
                         "inference.throughput": .double(result.throughput),
-                        "model.format": .string("coreml"),
+                        "model.format": .string(model.metadata.format),
                     ]
                     if failed {
                         attrs["inference.success"] = .bool(false)

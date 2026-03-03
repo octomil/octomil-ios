@@ -45,7 +45,7 @@ public struct InferenceTelemetryEvent: Codable, Sendable {
         var attrs: [String: TelemetryValue] = [
             "model.id": .string(modelId),
             "inference.duration_ms": .double(latencyMs),
-            "model.format": .string("coreml"),
+            "model.format": .string("auto"),
         ]
         if !success {
             attrs["inference.success"] = .bool(false)
@@ -225,20 +225,29 @@ public final class TelemetryQueue: @unchecked Sendable {
     }
 
     /// Convenience to report a completed inference.
-    public func reportInferenceCompleted(latencyMs: Double) {
+    ///
+    /// - Parameters:
+    ///   - latencyMs: Inference latency in milliseconds.
+    ///   - format: The model format used for inference (resolved at runtime, not hardcoded).
+    public func reportInferenceCompleted(latencyMs: Double, format: String = "auto") {
         let event = TelemetryEvent(
             name: "inference.completed",
             attributes: [
                 "model.id": .string(modelId),
                 "inference.duration_ms": .double(latencyMs),
-                "model.format": .string("coreml"),
+                "model.format": .string(format),
             ]
         )
         recordEvent(event)
     }
 
     /// Convenience to report a failed inference.
-    public func reportInferenceFailed(latencyMs: Double, error: String) {
+    ///
+    /// - Parameters:
+    ///   - latencyMs: Inference latency in milliseconds.
+    ///   - error: Error description.
+    ///   - format: The model format used for inference (resolved at runtime, not hardcoded).
+    public func reportInferenceFailed(latencyMs: Double, error: String, format: String = "auto") {
         let event = TelemetryEvent(
             name: "inference.failed",
             attributes: [
@@ -246,7 +255,7 @@ public final class TelemetryQueue: @unchecked Sendable {
                 "inference.duration_ms": .double(latencyMs),
                 "inference.success": .bool(false),
                 "error.message": .string(error),
-                "model.format": .string("coreml"),
+                "model.format": .string(format),
             ]
         )
         recordEvent(event)
@@ -256,13 +265,15 @@ public final class TelemetryQueue: @unchecked Sendable {
 
     /// Reports an `inference.started` event before inference runs.
     ///
-    /// - Parameter modelId: The model identifier for the inference.
-    public func reportInferenceStarted(modelId: String) {
+    /// - Parameters:
+    ///   - modelId: The model identifier for the inference.
+    ///   - format: The model format used for inference (resolved at runtime, not hardcoded).
+    public func reportInferenceStarted(modelId: String, format: String = "auto") {
         let event = TelemetryEvent(
             name: "inference.started",
             attributes: [
                 "model.id": .string(modelId),
-                "model.format": .string("coreml"),
+                "model.format": .string(format),
             ]
         )
         recordEvent(event)

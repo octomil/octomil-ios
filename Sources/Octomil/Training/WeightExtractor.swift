@@ -127,7 +127,7 @@ actor WeightExtractor {
             throw OctomilError.weightExtractionFailed(reason: error.localizedDescription)
         }
 
-    
+        return weights
     }
 
     /// Extracts updatable parameter keys from the model description.

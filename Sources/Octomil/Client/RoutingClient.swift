@@ -333,11 +333,13 @@ public actor RoutingClient {
         }
 
         // No cache at all — return synthetic device decision.
+        // Use "auto" to let the runtime resolve the best format rather than
+        // revealing a hardcoded format preference.
         logger.info("No cached decision for \(modelId), returning offline device default")
         return RoutingDecision(
             id: "offline-\(modelId)",
             target: "device",
-            format: "coreml",
+            format: "auto",
             engine: "auto",
             fallbackTarget: nil,
             cached: false,

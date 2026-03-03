@@ -11,6 +11,7 @@ public actor ModelManager {
     private let apiClient: APIClient
     private let modelCache: any ModelCaching
     private let configuration: OctomilConfiguration
+    private let formatClient: ModelFormatClient?
     private let logger: Logger
     private let fileManager = FileManager.default
     private let deviceMetadata = DeviceMetadata()
@@ -23,10 +24,12 @@ public actor ModelManager {
     /// - Parameters:
     ///   - apiClient: API client for server communication.
     ///   - configuration: SDK configuration.
-    internal init(apiClient: APIClient, configuration: OctomilConfiguration) {
+    ///   - formatClient: Client for fetching server-recommended model format. Pass `nil` to use "auto".
+    internal init(apiClient: APIClient, configuration: OctomilConfiguration, formatClient: ModelFormatClient? = nil) {
         self.apiClient = apiClient
         self.configuration = configuration
         self.modelCache = ModelCache(maxSize: configuration.maxCacheSize)
+        self.formatClient = formatClient
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "ModelManager")
     }
 
@@ -35,10 +38,12 @@ public actor ModelManager {
     ///   - apiClient: API client for server communication.
     ///   - configuration: SDK configuration.
     ///   - modelCache: Cache implementation.
-    internal init(apiClient: APIClient, configuration: OctomilConfiguration, modelCache: any ModelCaching) {
+    ///   - formatClient: Client for fetching server-recommended model format. Pass `nil` to use "auto".
+    internal init(apiClient: APIClient, configuration: OctomilConfiguration, modelCache: any ModelCaching, formatClient: ModelFormatClient? = nil) {
         self.apiClient = apiClient
         self.configuration = configuration
         self.modelCache = modelCache
+        self.formatClient = formatClient
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "ModelManager")
     }
 
@@ -87,11 +92,19 @@ public actor ModelManager {
             // Auto-detect device profile for optimal format selection
             let deviceProfile = self.deviceMetadata.deviceProfile
 
-            // Get download URL — always CoreML on iOS
+            // Get server-recommended format (falls back to "auto" if unreachable)
+            let format: String
+            if let formatClient = self.formatClient {
+                format = await formatClient.getFormat(modelId: modelId)
+            } else {
+                format = "auto"
+            }
+
+            // Get download URL using server-recommended format
             let downloadInfo = try await apiClient.getDownloadURL(
                 modelId: modelId,
                 version: version,
-                format: "coreml"
+                format: format
             )
 
             guard let downloadURL = URL(string: downloadInfo.url) else {

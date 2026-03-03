@@ -213,9 +213,9 @@ public actor APIClient {
     /// - Parameters:
     ///   - modelId: Model identifier.
     ///   - version: Model version.
-    ///   - format: Model format (default: coreml).
+    ///   - format: Model format. Defaults to "auto" (server resolves best format).
     /// - Returns: Download URL response.
-    public func getDownloadURL(modelId: String, version: String, format: String = "coreml") async throws -> DownloadURLResponse {
+    public func getDownloadURL(modelId: String, version: String, format: String = "auto") async throws -> DownloadURLResponse {
         var components = URLComponents(url: serverURL.appendingPathComponent("api/v1/models/\(modelId)/versions/\(version)/download-url"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "format", value: format)

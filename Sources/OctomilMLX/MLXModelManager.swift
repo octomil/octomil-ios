@@ -6,12 +6,14 @@ import Octomil
 
 /// Manages server-driven MLX model downloads.
 ///
-/// Wraps ``APIClient`` to request `format: "mlx"` models from the server,
-/// downloads and extracts model archives, then loads into ``ModelContainer``.
+/// Wraps ``APIClient`` to request models from the server using a server-fetched
+/// format preference, downloads and extracts model archives, then loads into
+/// ``ModelContainer``.
 @available(iOS 17.0, macOS 14.0, *)
 public actor MLXModelManager {
 
     private let apiClient: APIClient
+    private let formatClient: ModelFormatClient?
     private let loader: MLXModelLoader
     private let fileManager = FileManager.default
     private var downloadTasks: [String: Task<MLXDeployedModel, Error>] = [:]
@@ -19,9 +21,12 @@ public actor MLXModelManager {
     /// Creates an MLX model manager.
     /// - Parameters:
     ///   - apiClient: API client for server communication.
+    ///   - formatClient: Client for fetching server-recommended model format.
+    ///     Pass `nil` to use "auto" (let the server resolve).
     ///   - gpuCacheLimit: GPU memory cache limit in bytes (default: 512 MB).
-    public init(apiClient: APIClient, gpuCacheLimit: Int = 512 * 1024 * 1024) {
+    public init(apiClient: APIClient, formatClient: ModelFormatClient? = nil, gpuCacheLimit: Int = 512 * 1024 * 1024) {
         self.apiClient = apiClient
+        self.formatClient = formatClient
         self.loader = MLXModelLoader(gpuCacheLimit: gpuCacheLimit)
     }
 
@@ -51,10 +56,18 @@ public actor MLXModelManager {
                 Task { await self.removeDownloadTask(cacheKey) }
             }
 
+            // Get server-recommended format (falls back to "auto" if unreachable)
+            let format: String
+            if let formatClient = self.formatClient {
+                format = await formatClient.getFormat(modelId: modelId)
+            } else {
+                format = "auto"
+            }
+
             let downloadInfo = try await apiClient.getDownloadURL(
                 modelId: modelId,
                 version: version,
-                format: "mlx"
+                format: format
             )
 
             guard let downloadURL = URL(string: downloadInfo.url) else {

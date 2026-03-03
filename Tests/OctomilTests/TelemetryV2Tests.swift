@@ -213,7 +213,7 @@ final class TelemetryV2ModelTests: XCTestCase {
         XCTAssertEqual(v2.name, "inference.completed")
         XCTAssertEqual(v2.attributes["model.id"], .string("test_model"))
         XCTAssertEqual(v2.attributes["inference.duration_ms"], .double(42.5))
-        XCTAssertEqual(v2.attributes["model.format"], .string("coreml"))
+        XCTAssertEqual(v2.attributes["model.format"], .string("auto"))
         XCTAssertNil(v2.attributes["inference.success"]) // Only set on failure
     }
 
@@ -935,7 +935,7 @@ final class TelemetryV2Phase4Tests: XCTestCase {
         let event = queue.bufferedEvents.first!
         XCTAssertEqual(event.name, "inference.started")
         XCTAssertEqual(event.attributes["model.id"], .string("fraud_detection"))
-        XCTAssertEqual(event.attributes["model.format"], .string("coreml"))
+        XCTAssertEqual(event.attributes["model.format"], .string("auto"))
     }
 
     // MARK: - Training Events
