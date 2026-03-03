@@ -40,15 +40,7 @@ public struct RuntimeAdapter: Sendable {
 
     // MARK: - Public API
 
-    /// Returns a compute recommendation based on the current device state.
-    ///
-    /// Decision priority (first match wins):
-    /// 1. **Critical thermal** -> CPU only, throttle, max 1 concurrent
-    /// 2. **Serious thermal** -> CPU + GPU (skip ANE heat), max 2 concurrent
-    /// 3. **Battery < 10%** -> CPU only, reduce batch, max 1 concurrent
-    /// 4. **Battery < 20% and unplugged** -> CPU + GPU, max 2 concurrent
-    /// 5. **Low Power Mode** -> CPU + GPU, max 1 concurrent
-    /// 6. **Nominal** -> All compute units, max 4 concurrent
+    /// Returns a compute recommendation based on current device conditions.
     public static func recommend(for state: DeviceStateMonitor.DeviceState) -> ComputeRecommendation {
         // 1. Critical thermal — shed as much heat as possible
         if state.thermalState == .critical {

@@ -143,8 +143,7 @@ final class QueryRoutingClientTests: XCTestCase {
             enableDeterministic: false
         )
 
-        // Build a long message with complex indicators to push past quality threshold.
-        // Word count alone gives 0.6 * wordScore. Adding indicators boosts past 0.7.
+        // Should route to quality tier.
         let words = (0..<60).map { "word\($0)" }.joined(separator: " ")
         let longText = "explain and analyze: \(words)"
         let decision = await router.route(messages: [
@@ -163,9 +162,7 @@ final class QueryRoutingClientTests: XCTestCase {
             enableDeterministic: false
         )
 
-        // Build a message with ~35 words (between thresholds).
-        // wordScore = (35-10)/(50-10) = 0.625, indicatorScore = 0 (no indicators).
-        // total = 0.625 * 0.6 = 0.375 -> balanced (0.3 <= score < 0.7).
+        // Should route to balanced tier.
         let mediumText = (0..<35).map { "word\($0)" }.joined(separator: " ")
         let decision = await router.route(messages: [
             ["role": "user", "content": mediumText]
@@ -187,9 +184,7 @@ final class QueryRoutingClientTests: XCTestCase {
             ["role": "user", "content": "explain the code and analyze the algorithm"]
         ])
 
-        // "explain", "code", "analyze", "algorithm" = 4 indicators -> indicator score capped at 1.0
-        // Word count is 7, which is below fastMaxWords=10, so word score is 0.0
-        // Final score = 0.0*0.6 + 1.0*0.4 = 0.4 -> balanced
+        // Should route to balanced tier.
         XCTAssertEqual(decision.tier, "balanced")
         XCTAssertTrue(decision.complexityScore > 0.0)
     }
@@ -201,10 +196,7 @@ final class QueryRoutingClientTests: XCTestCase {
             enableDeterministic: false
         )
 
-        // Longer text with complex indicators to push past quality threshold.
-        // ~47 words + "explain and analyze:" prefix = ~50 words.
-        // wordScore = 1.0, indicatorScore = min(2/3, 1.0) = 0.667.
-        // total = 1.0*0.6 + 0.667*0.4 = 0.867 -> quality.
+        // Should route to quality tier.
         let words = (0..<47).map { "word\($0)" }.joined(separator: " ")
         let decision = await router.route(messages: [
             ["role": "user", "content": "explain and analyze: \(words)"]

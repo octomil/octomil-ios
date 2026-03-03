@@ -77,76 +77,6 @@ class CustomWeightExtractor: WeightExtractor {
 }
 ```
 
-## Serialization Format
-
-The SDK serializes weights to a PyTorch-compatible format:
-
-```
-Header:
-  - Magic number: 0x50545448 ("PTTH")
-  - Version: 1
-  - Parameter count: uint32
-
-For each parameter:
-  - Name length: uint32
-  - Name: UTF-8 string
-  - Shape count: uint32
-  - Shape dimensions: uint32[]
-  - Data type: uint32 (0=float32, 1=float64, 2=int32)
-  - Data length: uint32
-  - Data: raw bytes
-```
-
-Server-side deserialization:
-
-```python
-import struct
-import torch
-
-def deserialize_ios_weights(data: bytes) -> dict:
-    """Deserialize weights from iOS SDK format."""
-    offset = 0
-
-    # Read header
-    magic, version, param_count = struct.unpack('>III', data[offset:offset+12])
-    offset += 12
-
-    if magic != 0x50545448:
-        raise ValueError("Invalid magic number")
-
-    weights = {}
-    for _ in range(param_count):
-        # Read parameter name
-        name_len, = struct.unpack('>I', data[offset:offset+4])
-        offset += 4
-        name = data[offset:offset+name_len].decode('utf-8')
-        offset += name_len
-
-        # Read shape
-        shape_count, = struct.unpack('>I', data[offset:offset+4])
-        offset += 4
-        shape = struct.unpack(f'>{shape_count}I', data[offset:offset+shape_count*4])
-        offset += shape_count * 4
-
-        # Read data type
-        dtype, = struct.unpack('>I', data[offset:offset+4])
-        offset += 4
-
-        # Read data
-        data_len, = struct.unpack('>I', data[offset:offset+4])
-        offset += 4
-        tensor_data = data[offset:offset+data_len]
-        offset += data_len
-
-        # Convert to torch tensor
-        import numpy as np
-        array = np.frombuffer(tensor_data, dtype=np.float32)
-        tensor = torch.from_numpy(array).reshape(shape)
-        weights[name] = tensor
-
-    return weights
-```
-
 ## Best Practices
 
 ### 1. Model Preparation
@@ -163,9 +93,9 @@ def deserialize_ios_weights(data: bytes) -> dict:
 
 ### 3. Bandwidth Optimization
 
-- Deltas are ~10-50% the size of full weights
-- Apply quantization (float32 → float16) for 50% size reduction
-- Use compression (zlib) for additional 30-40% reduction
+- Deltas are significantly smaller than full weights
+- Apply quantization (float32 → float16) for substantial size reduction
+- Use compression (zlib) for additional size savings
 
 ```swift
 // Enable compression in OctomilConfiguration

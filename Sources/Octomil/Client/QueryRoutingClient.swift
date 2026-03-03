@@ -391,7 +391,6 @@ public actor QueryRouter {
         let matchCount = policy.complexIndicators.filter { lowerText.contains($0) }.count
         let indicatorScore = min(Double(matchCount) / 3.0, 1.0)
 
-        // Weighted blend: 60% words, 40% indicators.
         return min(wordScore * 0.6 + indicatorScore * 0.4, 1.0)
     }
 

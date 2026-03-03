@@ -470,7 +470,7 @@ struct InferenceMetrics {
 /// Live metrics displayed during benchmarking.
 struct LiveMetrics {
     var currentInference: Int = 0
-    var totalInferences: Int = 53  // 1 cold + 1 warm-pass + 1 cpu-pass + 50 warm
+    var totalInferences: Int = 53
     var lastLatencyMs: Double?
 }
 

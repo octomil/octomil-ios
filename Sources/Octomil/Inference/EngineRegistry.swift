@@ -158,8 +158,7 @@ public final class EngineRegistry: @unchecked Sendable {
     /// - Parameter modality: The target modality.
     /// - Returns: Detection results for each known engine.
     public func detectAll(modality: Modality) -> [DetectionResult] {
-        // TODO: Probe Metal capabilities, CoreML availability, ANE presence
-        // TODO: Return actual availability per engine
+        // TODO: Implement
         let engines: [Engine] = [.coreml, .mlx]
         return engines.map { engine in
             DetectionResult(engine: engine, available: false, info: nil)
@@ -173,9 +172,7 @@ public final class EngineRegistry: @unchecked Sendable {
     ///   - nTokens: Number of tokens to generate during benchmark (default: 32).
     /// - Returns: Ranked engines sorted by tokens-per-second descending.
     public func benchmarkAll(modality: Modality, modelURL: URL, nTokens: Int = 32) async -> [RankedEngine] {
-        // TODO: Run short generation on each detected engine
-        // TODO: Measure tok/s, TTFT, peak memory
-        // TODO: Return sorted results
+        // TODO: Implement
         return []
     }
 
@@ -183,7 +180,7 @@ public final class EngineRegistry: @unchecked Sendable {
     /// - Parameter ranked: Results from ``benchmarkAll(modality:modelURL:nTokens:)``.
     /// - Returns: The highest-ranked engine that completed without error, or `nil`.
     public func selectBest(_ ranked: [RankedEngine]) -> RankedEngine? {
-        // TODO: Filter by ok, sort by tokensPerSecond descending, pick first
+        // TODO: Implement
         return ranked.first(where: { $0.result.ok })
     }
 
