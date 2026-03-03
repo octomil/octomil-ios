@@ -855,68 +855,6 @@ public struct APIErrorResponse: Codable, Sendable {
     public let detail: String
 }
 
-// MARK: - Inference Events
-
-/// Metrics payload for an inference event.
-public struct InferenceEventMetrics: Codable, Sendable {
-    public var ttfcMs: Double?
-    public var chunkIndex: Int?
-    public var chunkLatencyMs: Double?
-    public var totalChunks: Int?
-    public var totalDurationMs: Double?
-    public var throughput: Double?
-
-    enum CodingKeys: String, CodingKey {
-        case ttfcMs = "ttfc_ms"
-        case chunkIndex = "chunk_index"
-        case chunkLatencyMs = "chunk_latency_ms"
-        case totalChunks = "total_chunks"
-        case totalDurationMs = "total_duration_ms"
-        case throughput
-    }
-
-    public init(
-        ttfcMs: Double? = nil,
-        chunkIndex: Int? = nil,
-        chunkLatencyMs: Double? = nil,
-        totalChunks: Int? = nil,
-        totalDurationMs: Double? = nil,
-        throughput: Double? = nil
-    ) {
-        self.ttfcMs = ttfcMs
-        self.chunkIndex = chunkIndex
-        self.chunkLatencyMs = chunkLatencyMs
-        self.totalChunks = totalChunks
-        self.totalDurationMs = totalDurationMs
-        self.throughput = throughput
-    }
-}
-
-/// Identifies the device, model, and session for an inference event.
-public struct InferenceEventContext: Codable, Sendable {
-    public let deviceId: String
-    public let modelId: String
-    public let version: String
-    public let modality: String
-    public let sessionId: String
-
-    enum CodingKeys: String, CodingKey {
-        case deviceId = "device_id"
-        case modelId = "model_id"
-        case version
-        case modality
-        case sessionId = "session_id"
-    }
-
-    public init(deviceId: String, modelId: String, version: String, modality: String, sessionId: String) {
-        self.deviceId = deviceId
-        self.modelId = modelId
-        self.version = version
-        self.modality = modality
-        self.sessionId = sessionId
-    }
-}
-
 // MARK: - Round Management
 
 /// A federated learning round returned from the server.
@@ -1129,54 +1067,6 @@ public struct GradientUpdateResponse: Codable, Sendable {
         case accepted
         case roundId = "round_id"
         case message
-    }
-}
-
-/// Request body for ``POST /api/v1/inference/events``.
-public struct InferenceEventRequest: Codable, Sendable {
-    public let context: InferenceEventContext
-    public let eventType: String
-    public let timestampMs: Int64
-    public var metrics: InferenceEventMetrics?
-    public var orgId: String?
-
-    enum CodingKeys: String, CodingKey {
-        case eventType = "event_type"
-        case timestampMs = "timestamp_ms"
-        case metrics
-        case orgId = "org_id"
-    }
-
-    public init(
-        context: InferenceEventContext,
-        eventType: String,
-        timestampMs: Int64,
-        metrics: InferenceEventMetrics? = nil,
-        orgId: String? = nil
-    ) {
-        self.context = context
-        self.eventType = eventType
-        self.timestampMs = timestampMs
-        self.metrics = metrics
-        self.orgId = orgId
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try context.encode(to: encoder)
-        try container.encode(eventType, forKey: .eventType)
-        try container.encode(timestampMs, forKey: .timestampMs)
-        try container.encodeIfPresent(metrics, forKey: .metrics)
-        try container.encodeIfPresent(orgId, forKey: .orgId)
-    }
-
-    public init(from decoder: Decoder) throws {
-        self.context = try InferenceEventContext(from: decoder)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.eventType = try container.decode(String.self, forKey: .eventType)
-        self.timestampMs = try container.decode(Int64.self, forKey: .timestampMs)
-        self.metrics = try container.decodeIfPresent(InferenceEventMetrics.self, forKey: .metrics)
-        self.orgId = try container.decodeIfPresent(String.self, forKey: .orgId)
     }
 }
 
