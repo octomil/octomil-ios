@@ -5,8 +5,9 @@
 
 <p align="center">
   <a href="https://github.com/octomil/octomil-ios/actions/workflows/ci.yml"><img src="https://github.com/octomil/octomil-ios/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/octomil/octomil-ios"><img src="https://img.shields.io/badge/iOS-15.0%2B-lightgrey.svg" alt="iOS 15.0+"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT"></a>
+  <a href="https://github.com/octomil/octomil-ios/actions/workflows/codeql.yml"><img src="https://github.com/octomil/octomil-ios/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+  <a href="https://github.com/octomil/octomil-ios/blob/main/LICENSE"><img src="https://img.shields.io/github/license/octomil/octomil-ios" alt="License"></a>
+  <a href="https://swiftpackageindex.com/octomil/octomil-ios"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Foctomil%2Foctomil-ios%2Fbadge%3Ftype%3Dplatforms" alt="Platforms"></a>
 </p>
 
 ---
