@@ -159,7 +159,6 @@ public final class EngineRegistry: @unchecked Sendable {
     /// - Returns: Detection results for each known engine.
     public func detectAll(modality: Modality) -> [DetectionResult] {
         // TODO: Implement
-
         let engines: [Engine] = [.coreml, .mlx]
         return engines.map { engine in
             DetectionResult(engine: engine, available: false, info: nil)
@@ -174,8 +173,6 @@ public final class EngineRegistry: @unchecked Sendable {
     /// - Returns: Ranked engines sorted by tokens-per-second descending.
     public func benchmarkAll(modality: Modality, modelURL: URL, nTokens: Int = 32) async -> [RankedEngine] {
         // TODO: Implement
-
-
         return []
     }
 

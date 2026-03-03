@@ -29,7 +29,7 @@ public actor PairingManager {
     private let logger: Logger
 
     /// Default number of warm inferences during benchmarking.
-    /// 50 gives meaningful p95/p99 percentiles .
+    /// 50 gives meaningful p95/p99 percentiles.
     private static let defaultWarmInferenceCount = 50
 
     /// Default polling interval in seconds when waiting for deployment.

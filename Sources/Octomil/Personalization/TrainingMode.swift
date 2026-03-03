@@ -32,7 +32,6 @@ public enum TrainingMode: String, Codable {
     /// - Only encrypted weight deltas sent to server
     /// - Cannot reconstruct original data from deltas
     /// - Benefits from global model improvements
-
     ///
     /// **Use cases:**
     /// - Keyboard predictions

@@ -391,7 +391,6 @@ public actor QueryRouter {
         let matchCount = policy.complexIndicators.filter { lowerText.contains($0) }.count
         let indicatorScore = min(Double(matchCount) / 3.0, 1.0)
 
-
         return min(wordScore * policy.scoringWeights.wordWeight + indicatorScore * policy.scoringWeights.indicatorWeight, 1.0)
     }
 

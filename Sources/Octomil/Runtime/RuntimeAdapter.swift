@@ -41,14 +41,6 @@ public struct RuntimeAdapter: Sendable {
     // MARK: - Public API
 
     /// Returns a compute recommendation based on current device conditions.
-    ///
-
-
-
-
-
-
-
     public static func recommend(for state: DeviceStateMonitor.DeviceState) -> ComputeRecommendation {
         // 1. Critical thermal — shed as much heat as possible
         if state.thermalState == .critical {

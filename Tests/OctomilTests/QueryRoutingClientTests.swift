@@ -144,7 +144,6 @@ final class QueryRoutingClientTests: XCTestCase {
         )
 
         // Should route to quality tier.
-
         let words = (0..<60).map { "word\($0)" }.joined(separator: " ")
         let longText = "explain and analyze: \(words)"
         let decision = await router.route(messages: [
@@ -164,8 +163,6 @@ final class QueryRoutingClientTests: XCTestCase {
         )
 
         // Should route to balanced tier.
-
-
         let mediumText = (0..<35).map { "word\($0)" }.joined(separator: " ")
         let decision = await router.route(messages: [
             ["role": "user", "content": mediumText]
@@ -188,8 +185,6 @@ final class QueryRoutingClientTests: XCTestCase {
         ])
 
         // Should route to balanced tier.
-
-
         XCTAssertEqual(decision.tier, "balanced")
         XCTAssertTrue(decision.complexityScore > 0.0)
     }
@@ -202,9 +197,6 @@ final class QueryRoutingClientTests: XCTestCase {
         )
 
         // Should route to quality tier.
-
-
-
         let words = (0..<47).map { "word\($0)" }.joined(separator: " ")
         let decision = await router.route(messages: [
             ["role": "user", "content": "explain and analyze: \(words)"]
