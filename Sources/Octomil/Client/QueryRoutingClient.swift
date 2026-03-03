@@ -68,18 +68,14 @@ public struct DeterministicResult: Sendable {
 
 // MARK: - Default Policy
 
-/// Embedded default policy matching the server-side defaults.
-/// Used on first launch before any server fetch succeeds.
+/// Minimal fallback policy used when the server is unreachable.
+/// Routes everything to "balanced" — real routing logic is server-side.
 let defaultRoutingPolicy = RoutingPolicy(
     version: 1,
-    thresholds: RoutingPolicy.Thresholds(fastMaxWords: 10, qualityMinWords: 50),
-    complexIndicators: [
-        "code", "explain", "compare", "analyze", "implement",
-        "algorithm", "step by step", "debug", "optimize", "refactor",
-        "architecture", "design pattern", "trade-off", "proof"
-    ],
+    thresholds: RoutingPolicy.Thresholds(fastMaxWords: 0, qualityMinWords: 999999),
+    complexIndicators: [],
     deterministicEnabled: true,
-    ttlSeconds: 300,
+    ttlSeconds: 0,
     fetchedAt: 0,
     etag: ""
 )
