@@ -836,4 +836,249 @@ final class RuntimeAdaptationTests: XCTestCase {
 
         await monitor.stopMonitoring()
     }
+
+    // MARK: - Server-Backed Adaptation Tests
+
+    func testServerAdaptationUsesServerResponse() async {
+        let client = makeAPIClient()
+        await client.setDeviceToken("valid-token")
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 200, json: [
+                "recommended_executor": "cpuOnly",
+                "recommended_compute_units": "cpuOnly",
+                "throttle_inference": true,
+                "reduce_batch_size": true,
+            ]),
+        ]
+
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.80,
+            batteryState: .charging,
+            thermalState: .nominal,
+            availableMemoryMB: 4096,
+            isLowPowerMode: false
+        )
+
+        let rec = await RuntimeAdapter.recommend(
+            for: state,
+            using: client,
+            deviceId: "device-1",
+            modelId: "model-1"
+        )
+
+        // Server said cpuOnly with throttle -- should override local "nominal" recommendation
+        XCTAssertEqual(rec.computeUnits, .cpuOnly)
+        XCTAssertTrue(rec.shouldThrottle)
+        XCTAssertTrue(rec.reduceBatchSize)
+        XCTAssertEqual(rec.maxConcurrentInferences, 1, "Throttled cpuOnly should limit to 1")
+        XCTAssertTrue(rec.reason.contains("Server"))
+    }
+
+    func testServerAdaptationFallsBackToLocalOnServerError() async {
+        let client = makeAPIClient()
+        await client.setDeviceToken("valid-token")
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 500, json: ["detail": "Internal server error"]),
+        ]
+
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.80,
+            batteryState: .charging,
+            thermalState: .nominal,
+            availableMemoryMB: 4096,
+            isLowPowerMode: false
+        )
+
+        let rec = await RuntimeAdapter.recommend(
+            for: state,
+            using: client,
+            deviceId: "device-1",
+            modelId: "model-1"
+        )
+
+        // Server error -- should fall back to local "nominal" recommendation
+        XCTAssertEqual(rec.computeUnits, .all)
+        XCTAssertFalse(rec.shouldThrottle)
+        XCTAssertEqual(rec.maxConcurrentInferences, 4)
+        XCTAssertTrue(rec.reason.contains("Nominal"))
+    }
+
+    func testServerAdaptationFallsBackWhenNoAPIClient() async {
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.05,
+            batteryState: .unplugged,
+            thermalState: .nominal,
+            availableMemoryMB: 2048,
+            isLowPowerMode: false
+        )
+
+        let rec = await RuntimeAdapter.recommend(
+            for: state,
+            using: nil,
+            deviceId: nil,
+            modelId: nil
+        )
+
+        // No API client -- should use local heuristics (battery critical)
+        XCTAssertEqual(rec.computeUnits, .cpuOnly)
+        XCTAssertTrue(rec.reduceBatchSize)
+        XCTAssertEqual(rec.maxConcurrentInferences, 1)
+    }
+
+    func testServerAdaptationFallsBackWhenMissingDeviceId() async {
+        let client = makeAPIClient()
+        await client.setDeviceToken("valid-token")
+
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.80,
+            batteryState: .charging,
+            thermalState: .nominal,
+            availableMemoryMB: 4096,
+            isLowPowerMode: false
+        )
+
+        // deviceId is nil -- should use local heuristics
+        let rec = await RuntimeAdapter.recommend(
+            for: state,
+            using: client,
+            deviceId: nil,
+            modelId: "model-1"
+        )
+
+        XCTAssertEqual(rec.computeUnits, .all)
+        XCTAssertTrue(rec.reason.contains("Nominal"))
+    }
+
+    func testServerAdaptationSendsCorrectRequestBody() async {
+        let client = makeAPIClient()
+        await client.setDeviceToken("valid-token")
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 200, json: [
+                "recommended_executor": "all",
+                "recommended_compute_units": "all",
+                "throttle_inference": false,
+                "reduce_batch_size": false,
+            ]),
+        ]
+
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.75,
+            batteryState: .unplugged,
+            thermalState: .fair,
+            availableMemoryMB: 3000,
+            isLowPowerMode: false
+        )
+
+        _ = await RuntimeAdapter.recommend(
+            for: state,
+            using: client,
+            deviceId: "device-42",
+            modelId: "my-model",
+            currentFormat: "mlx"
+        )
+
+        let request = try? XCTUnwrap(SharedMockURLProtocol.requests.first)
+        XCTAssertTrue(request?.url?.path.contains("api/v1/devices/device-42/models/my-model/adapt") == true)
+
+        if let bodyData = request?.httpBody,
+           let body = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
+            XCTAssertEqual(body["thermal_state"] as? String, "fair")
+            XCTAssertEqual(body["current_format"] as? String, "mlx")
+            // Battery level is Float, compare loosely
+            XCTAssertNotNil(body["battery_level"])
+        }
+    }
+
+    func testServerAdaptationCpuAndGPUResponse() async {
+        let client = makeAPIClient()
+        await client.setDeviceToken("valid-token")
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 200, json: [
+                "recommended_executor": "cpuAndGPU",
+                "recommended_compute_units": "cpuAndGPU",
+                "throttle_inference": false,
+                "reduce_batch_size": false,
+            ]),
+        ]
+
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.80,
+            batteryState: .charging,
+            thermalState: .nominal,
+            availableMemoryMB: 4096,
+            isLowPowerMode: false
+        )
+
+        let rec = await RuntimeAdapter.recommend(
+            for: state,
+            using: client,
+            deviceId: "device-1",
+            modelId: "model-1"
+        )
+
+        XCTAssertEqual(rec.computeUnits, .cpuAndGPU)
+        XCTAssertFalse(rec.shouldThrottle)
+        XCTAssertEqual(rec.maxConcurrentInferences, 2, "Non-throttled cpuAndGPU should allow 2 concurrent")
+    }
+
+    func testServerAdaptationFallsBackOnNetworkError() async {
+        let client = makeAPIClient()
+        await client.setDeviceToken("valid-token")
+
+        // No responses queued -- triggers network error
+        SharedMockURLProtocol.responses = [
+            .failure(URLError(.notConnectedToInternet)),
+        ]
+
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.50,
+            batteryState: .unplugged,
+            thermalState: .serious,
+            availableMemoryMB: 2048,
+            isLowPowerMode: false
+        )
+
+        let rec = await RuntimeAdapter.recommend(
+            for: state,
+            using: client,
+            deviceId: "device-1",
+            modelId: "model-1"
+        )
+
+        // Network error -> local fallback for "serious" thermal
+        XCTAssertEqual(rec.computeUnits, .cpuAndGPU)
+        XCTAssertTrue(rec.reason.contains("hot") || rec.reason.contains("Neural Engine"))
+    }
+
+    // MARK: - Compute Units Parsing Tests
+
+    func testParseComputeUnitsAll() {
+        XCTAssertEqual(RuntimeAdapter.parseComputeUnits("all"), .all)
+    }
+
+    func testParseComputeUnitsCpuOnly() {
+        XCTAssertEqual(RuntimeAdapter.parseComputeUnits("cpuOnly"), .cpuOnly)
+        XCTAssertEqual(RuntimeAdapter.parseComputeUnits("cpu_only"), .cpuOnly)
+    }
+
+    func testParseComputeUnitsCpuAndGPU() {
+        XCTAssertEqual(RuntimeAdapter.parseComputeUnits("cpuAndGPU"), .cpuAndGPU)
+        XCTAssertEqual(RuntimeAdapter.parseComputeUnits("cpu_and_gpu"), .cpuAndGPU)
+    }
+
+    func testParseComputeUnitsUnknownDefaultsToAll() {
+        XCTAssertEqual(RuntimeAdapter.parseComputeUnits("something_weird"), .all)
+        XCTAssertEqual(RuntimeAdapter.parseComputeUnits(""), .all)
+    }
+
+    func testComputeUnitsToString() {
+        XCTAssertEqual(RuntimeAdapter.computeUnitsToString(.all), "all")
+        XCTAssertEqual(RuntimeAdapter.computeUnitsToString(.cpuOnly), "cpuOnly")
+        XCTAssertEqual(RuntimeAdapter.computeUnitsToString(.cpuAndGPU), "cpuAndGPU")
+        XCTAssertEqual(RuntimeAdapter.computeUnitsToString(.cpuAndNeuralEngine), "cpuAndNeuralEngine")
+    }
 }
