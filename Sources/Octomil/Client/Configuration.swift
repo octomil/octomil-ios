@@ -168,49 +168,6 @@ public struct OctomilConfiguration: Sendable {
         self.pinnedCertificateHashes = pinnedCertificateHashes
     }
 
-    // MARK: - Convenience Initializer (flat parameters)
-
-    /// Creates a new configuration with flat parameters for convenience.
-    @available(*, deprecated, message: "Use the structured initializer with NetworkPolicy, LoggingPolicy, and TrainingPolicy instead")
-    public init(
-        maxRetryAttempts: Int = 3,
-        requestTimeout: TimeInterval = 30,
-        downloadTimeout: TimeInterval = 300,
-        enableLogging: Bool = false,
-        logLevel: LogLevel = .info,
-        maxCacheSize: UInt64 = 500 * 1024 * 1024,
-        autoCheckUpdates: Bool = true,
-        updateCheckInterval: TimeInterval = 3600,
-        requireWiFiForDownload: Bool = false,
-        requireChargingForTraining: Bool = true,
-        minimumBatteryLevel: Float = 0.2,
-        privacyConfiguration: PrivacyConfiguration = .standard,
-        allowDegradedTraining: Bool = false
-    ) {
-        self.init(
-            network: NetworkPolicy(
-                maxRetryAttempts: maxRetryAttempts,
-                requestTimeout: requestTimeout,
-                downloadTimeout: downloadTimeout,
-                requireWiFiForDownload: requireWiFiForDownload
-            ),
-            logging: LoggingPolicy(
-                enableLogging: enableLogging,
-                logLevel: logLevel
-            ),
-            maxCacheSize: maxCacheSize,
-            autoCheckUpdates: autoCheckUpdates,
-            updateCheckInterval: updateCheckInterval,
-            training: TrainingPolicy(
-                requireChargingForTraining: requireChargingForTraining,
-                minimumBatteryLevel: minimumBatteryLevel
-            ),
-            privacyConfiguration: privacyConfiguration,
-            allowDegradedTraining: allowDegradedTraining,
-            pinnedCertificateHashes: []
-        )
-    }
-
     // MARK: - Presets
 
     /// Default configuration suitable for most use cases.
