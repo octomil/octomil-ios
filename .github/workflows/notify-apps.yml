@@ -1,0 +1,35 @@
+name: Notify Apps
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.VERSION_BOT_APP_ID }}
+          private-key: ${{ secrets.VERSION_BOT_PRIVATE_KEY }}
+          owner: octomil
+          repositories: octomil-app-ios
+
+      - name: Get version
+        id: version
+        run: echo "version=$(grep 'current = ' Sources/Octomil/Version.swift | sed 's/.*"\(.*\)".*/\1/')" >> $GITHUB_OUTPUT
+
+      - name: Dispatch to iOS app
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: octomil/octomil-app-ios
+          event-type: sdk-updated
+          client-payload: '{"sdk": "ios", "version": "${{ steps.version.outputs.version }}"}'
