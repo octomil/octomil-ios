@@ -142,13 +142,13 @@ final class InferenceStateTests: XCTestCase {
     }
 }
 
-// MARK: - ChatMessage Tests
+// MARK: - TryItOutMessage Tests
 
 @available(iOS 15.0, macOS 12.0, *)
-final class ChatMessageTests: XCTestCase {
+final class TryItOutMessageTests: XCTestCase {
 
     func testUserMessage() {
-        let msg = ChatMessage(isUser: true, text: "Hello")
+        let msg = TryItOutMessage(isUser: true, text: "Hello")
         XCTAssertTrue(msg.isUser)
         XCTAssertEqual(msg.text, "Hello")
         XCTAssertNil(msg.latencyMs)
@@ -156,21 +156,21 @@ final class ChatMessageTests: XCTestCase {
     }
 
     func testModelMessage() {
-        let msg = ChatMessage(isUser: false, text: "Response", latencyMs: 123.4)
+        let msg = TryItOutMessage(isUser: false, text: "Response", latencyMs: 123.4)
         XCTAssertFalse(msg.isUser)
         XCTAssertEqual(msg.text, "Response")
         XCTAssertEqual(msg.latencyMs ?? -1, 123.4, accuracy: 0.01)
     }
 
     func testUniqueIds() {
-        let a = ChatMessage(isUser: true, text: "A")
-        let b = ChatMessage(isUser: true, text: "B")
+        let a = TryItOutMessage(isUser: true, text: "A")
+        let b = TryItOutMessage(isUser: true, text: "B")
         XCTAssertNotEqual(a.id, b.id)
     }
 
     func testTimestampIsPopulated() {
         let before = Date()
-        let msg = ChatMessage(isUser: true, text: "test")
+        let msg = TryItOutMessage(isUser: true, text: "test")
         let after = Date()
         XCTAssertTrue(msg.timestamp >= before)
         XCTAssertTrue(msg.timestamp <= after)

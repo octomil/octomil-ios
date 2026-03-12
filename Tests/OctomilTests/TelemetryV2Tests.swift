@@ -679,6 +679,44 @@ final class TelemetryWiringTests: XCTestCase {
         XCTAssertEqual(events[0].attributes["model.id"], .string("detector"))
     }
 
+    // MARK: - Inference Chunk Wiring: reportInferenceChunkProduced
+
+    func testInferenceChunkProducedEmitsCorrectEvent() {
+        let queue = makeQueue()
+
+        queue.reportInferenceChunkProduced(modelId: "phi-4-mini", chunkIndex: 0)
+        queue.reportInferenceChunkProduced(modelId: "phi-4-mini", chunkIndex: 1)
+        queue.reportInferenceChunkProduced(modelId: "phi-4-mini", chunkIndex: 2)
+
+        XCTAssertEqual(queue.pendingCount, 3)
+
+        let events = queue.bufferedEvents
+        for (i, event) in events.enumerated() {
+            XCTAssertEqual(event.name, "inference.chunk_produced")
+            XCTAssertEqual(event.attributes["model.id"], .string("phi-4-mini"))
+            XCTAssertEqual(event.attributes["inference.chunk_index"], .int(i))
+        }
+    }
+
+    func testInferenceChunkProducedInterleavedWithStartedCompleted() {
+        let queue = makeQueue()
+
+        queue.reportInferenceStarted(modelId: "phi-4-mini")
+        queue.reportInferenceChunkProduced(modelId: "phi-4-mini", chunkIndex: 0)
+        queue.reportInferenceChunkProduced(modelId: "phi-4-mini", chunkIndex: 1)
+        queue.reportInferenceCompleted(latencyMs: 100.0)
+
+        XCTAssertEqual(queue.pendingCount, 4)
+
+        let events = queue.bufferedEvents
+        XCTAssertEqual(events[0].name, "inference.started")
+        XCTAssertEqual(events[1].name, "inference.chunk_produced")
+        XCTAssertEqual(events[1].attributes["inference.chunk_index"], .int(0))
+        XCTAssertEqual(events[2].name, "inference.chunk_produced")
+        XCTAssertEqual(events[2].attributes["inference.chunk_index"], .int(1))
+        XCTAssertEqual(events[3].name, "inference.completed")
+    }
+
     // MARK: - Deploy Wiring: started then completed
 
     func testDeployStartedThenCompleted() {

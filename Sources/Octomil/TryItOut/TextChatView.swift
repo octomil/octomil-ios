@@ -151,7 +151,7 @@ struct TextChatView: View {
 /// A single chat bubble displaying a user or model message.
 @available(iOS 15.0, macOS 12.0, *)
 struct ChatBubble: View {
-    let message: ChatMessage
+    let message: TryItOutMessage
 
     var body: some View {
         HStack {
