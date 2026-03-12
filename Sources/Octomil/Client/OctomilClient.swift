@@ -65,6 +65,9 @@ public final class OctomilClient: @unchecked Sendable {
         telemetryQueue: TelemetryQueue.shared
     )
 
+    /// Response API for on-device LLM inference.
+    public private(set) lazy var responses = OctomilResponses()
+
     /// Offline event queue for offline-first event persistence.
     private let eventQueue: EventQueue
 
