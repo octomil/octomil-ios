@@ -78,6 +78,32 @@ public enum OctomilError: LocalizedError, Sendable {
     /// Keychain operation failed.
     case keychainError(status: OSStatus)
 
+    // MARK: - Contract Error Codes (added for full parity)
+
+    /// 403 — insufficient permissions.
+    case forbidden(reason: String)
+
+    /// Kill switch active for this model.
+    case modelDisabled(modelId: String)
+
+    /// No compatible runtime for this model format.
+    case runtimeUnavailable(reason: String)
+
+    /// Runtime initialization error (model failed to load).
+    case modelLoadFailed(reason: String)
+
+    /// Prediction error during inference.
+    case inferenceFailed(reason: String)
+
+    /// OOM during inference or model loading.
+    case insufficientMemory(reason: String)
+
+    /// 429 — too many requests.
+    case rateLimited(retryAfter: String?)
+
+    /// Bad input data (malformed, wrong type, out of range).
+    case invalidInput(reason: String)
+
     // MARK: - General Errors
 
     /// An unexpected error occurred.
@@ -132,6 +158,25 @@ public enum OctomilError: LocalizedError, Sendable {
             return "Failed to upload weights: \(reason)"
         case .keychainError(let status):
             return "Keychain error (status: \(status))"
+        case .forbidden(let reason):
+            return "Forbidden: \(reason)"
+        case .modelDisabled(let modelId):
+            return "Model '\(modelId)' is disabled."
+        case .runtimeUnavailable(let reason):
+            return "No compatible runtime: \(reason)"
+        case .modelLoadFailed(let reason):
+            return "Model load failed: \(reason)"
+        case .inferenceFailed(let reason):
+            return "Inference failed: \(reason)"
+        case .insufficientMemory(let reason):
+            return "Insufficient memory: \(reason)"
+        case .rateLimited(let retryAfter):
+            if let retryAfter = retryAfter {
+                return "Rate limited. Retry after \(retryAfter)."
+            }
+            return "Rate limited. Try again later."
+        case .invalidInput(let reason):
+            return "Invalid input: \(reason)"
         case .unknown(let underlying):
             if let error = underlying {
                 return "An unexpected error occurred: \(error.localizedDescription)"
