@@ -76,6 +76,11 @@ public final class OctomilClient: @unchecked Sendable {
     /// Device capabilities and hardware profile.
     public private(set) lazy var capabilities = CapabilitiesClient()
 
+    /// Public telemetry facade for custom event tracking.
+    public private(set) lazy var telemetry = TelemetryClient(
+        queueProvider: { TelemetryQueue.shared }
+    )
+
     /// Response API for on-device LLM inference.
     public private(set) lazy var responses = OctomilResponses()
 
