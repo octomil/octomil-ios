@@ -40,15 +40,25 @@ public final class OctomilChat: @unchecked Sendable {
     /// Create a chat completion (non-streaming).
     ///
     /// Equivalent to OpenAI's `client.chat.completions.create(stream: false)`.
-    public func create(_ request: ChatRequest) async throws -> ChatCompletion {
-        let responseRequest = Self.toResponseRequest(model: modelName, chat: request)
+    ///
+    /// - Parameters:
+    ///   - request: The chat request parameters.
+    ///   - model: Optional model override. When provided, takes precedence over the
+    ///     constructor default and any model set on the request itself.
+    public func create(_ request: ChatRequest, model: String? = nil) async throws -> ChatCompletion {
+        let effectiveModel = model ?? request.model ?? modelName
+        let responseRequest = Self.toResponseRequest(model: effectiveModel, chat: request)
         let response = try await responses.create(responseRequest)
-        return Self.toChatCompletion(response: response, model: modelName)
+        return Self.toChatCompletion(response: response, model: effectiveModel)
     }
 
     /// Convenience: create a completion from a single user message.
-    public func create(_ message: String) async throws -> ChatCompletion {
-        try await create(ChatRequest(messages: [.user(message)]))
+    ///
+    /// - Parameters:
+    ///   - message: The user message string.
+    ///   - model: Optional model override.
+    public func create(_ message: String, model: String? = nil) async throws -> ChatCompletion {
+        try await create(ChatRequest(messages: [.user(message)]), model: model)
     }
 
     // MARK: - Streaming
@@ -56,11 +66,17 @@ public final class OctomilChat: @unchecked Sendable {
     /// Stream a chat completion, yielding chunks as they are generated.
     ///
     /// Equivalent to OpenAI's `client.chat.completions.create(stream: true)`.
-    public func stream(_ request: ChatRequest) -> AsyncThrowingStream<ChatCompletionChunk, Error> {
-        let responseRequest = Self.toResponseRequest(model: modelName, chat: request, stream: true)
+    ///
+    /// - Parameters:
+    ///   - request: The chat request parameters.
+    ///   - model: Optional model override. When provided, takes precedence over the
+    ///     constructor default and any model set on the request itself.
+    public func stream(_ request: ChatRequest, model: String? = nil) -> AsyncThrowingStream<ChatCompletionChunk, Error> {
+        let effectiveModel = model ?? request.model ?? modelName
+        let responseRequest = Self.toResponseRequest(model: effectiveModel, chat: request, stream: true)
         let completionId = "chatcmpl-\(UUID().uuidString.prefix(12))"
         let created = Int(Date().timeIntervalSince1970)
-        let modelName = self.modelName
+        let modelName = effectiveModel
         let responseStream = responses.stream(responseRequest)
 
         return AsyncThrowingStream { continuation in
@@ -135,8 +151,12 @@ public final class OctomilChat: @unchecked Sendable {
     }
 
     /// Convenience: stream a completion from a single user message.
-    public func stream(_ message: String) -> AsyncThrowingStream<ChatCompletionChunk, Error> {
-        stream(ChatRequest(messages: [.user(message)]))
+    ///
+    /// - Parameters:
+    ///   - message: The user message string.
+    ///   - model: Optional model override.
+    public func stream(_ message: String, model: String? = nil) -> AsyncThrowingStream<ChatCompletionChunk, Error> {
+        stream(ChatRequest(messages: [.user(message)]), model: model)
     }
 
     // MARK: - Conversion: ChatRequest → ResponseRequest

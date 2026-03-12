@@ -22,6 +22,9 @@ public struct ChatRequest: Sendable {
     public let tools: [Tool]?
     /// Stop sequences that halt generation.
     public let stop: [String]?
+    /// Optional per-request model override. When set, this takes precedence
+    /// over the model name provided to the ``OctomilChat`` constructor.
+    public let model: String?
 
     public init(
         messages: [ChatMessage],
@@ -29,7 +32,8 @@ public struct ChatRequest: Sendable {
         maxTokens: Int = 512,
         topP: Double = 1.0,
         tools: [Tool]? = nil,
-        stop: [String]? = nil
+        stop: [String]? = nil,
+        model: String? = nil
     ) {
         self.messages = messages
         self.temperature = temperature
@@ -37,5 +41,6 @@ public struct ChatRequest: Sendable {
         self.topP = topP
         self.tools = tools
         self.stop = stop
+        self.model = model
     }
 }
