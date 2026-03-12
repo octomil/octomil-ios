@@ -22,7 +22,7 @@ public final class OctomilResponses: @unchecked Sendable {
 
     public func create(_ request: ResponseRequest) async throws -> Response {
         let runtime = try resolveRuntime(request.model)
-        let runtimeRequest = buildRuntimeRequest(request)
+        let runtimeRequest = Self.buildRuntimeRequest(request)
         let runtimeResponse = try await runtime.run(request: runtimeRequest)
         return buildResponse(model: request.model, runtimeResponse: runtimeResponse)
     }
@@ -44,7 +44,7 @@ public final class OctomilResponses: @unchecked Sendable {
                         throw OctomilResponsesError.noRuntime(request.model)
                     }
 
-                    let runtimeRequest = Self.buildRuntimeRequestStatic(request)
+                    let runtimeRequest = Self.buildRuntimeRequest(request)
                     let responseId = Self.generateId()
                     var textParts: [String] = []
                     var toolCallBuffers: [Int: ToolCallBuffer] = [:]
@@ -123,11 +123,7 @@ public final class OctomilResponses: @unchecked Sendable {
         throw OctomilResponsesError.noRuntime(model)
     }
 
-    private func buildRuntimeRequest(_ request: ResponseRequest) -> RuntimeRequest {
-        Self.buildRuntimeRequestStatic(request)
-    }
-
-    private static func buildRuntimeRequestStatic(_ request: ResponseRequest) -> RuntimeRequest {
+    private static func buildRuntimeRequest(_ request: ResponseRequest) -> RuntimeRequest {
         let prompt = PromptFormatter.format(input: request.input, tools: request.tools, toolChoice: request.toolChoice)
         let toolDefs: [RuntimeToolDef]? = request.tools.isEmpty ? nil : request.tools.map { tool in
             RuntimeToolDef(
