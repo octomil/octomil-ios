@@ -120,14 +120,13 @@ actor WeightExtractor {
 
             logger.debug("Extracted \(weights.count) parameter arrays from \(parameterKeys.count) keys")
 
+            return weights
         } catch let error as OctomilError {
             throw error
         } catch {
             logger.error("Failed to extract weights: \(error.localizedDescription)")
             throw OctomilError.weightExtractionFailed(reason: error.localizedDescription)
         }
-
-        return weights
     }
 
     /// Extracts updatable parameter keys from the model description.
