@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import PhotosUI
 
 /// Classification UI that displays top-K label results with horizontal
 /// confidence bars.
@@ -7,12 +8,12 @@ import SwiftUI
 /// Similar to ``VisionInputView`` for image selection, but the output
 /// is a ranked list of labels with animated confidence bars instead of
 /// free-form text.
-@available(iOS 15.0, macOS 12.0, *)
+@available(iOS 16.0, macOS 13.0, *)
 struct ClassificationView: View {
 
     @ObservedObject var viewModel: TryItOutViewModel
     @State private var selectedImageData: Data?
-    @State private var showImagePicker = false
+    @State private var photoSelection: PhotosPickerItem?
 
     var body: some View {
         ScrollView {
@@ -72,9 +73,10 @@ struct ClassificationView: View {
     }
 
     private var imagePickerButton: some View {
-        Button {
-            showImagePicker = true
-        } label: {
+        PhotosPicker(
+            selection: $photoSelection,
+            matching: .images
+        ) {
             VStack(spacing: 12) {
                 Image(systemName: "camera.viewfinder")
                     .font(.system(size: 36))
@@ -97,6 +99,13 @@ struct ClassificationView: View {
                     )
                     .foregroundColor(.white.opacity(0.15))
             )
+        }
+        .onChange(of: photoSelection) { newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                    selectedImageData = data
+                }
+            }
         }
     }
 
