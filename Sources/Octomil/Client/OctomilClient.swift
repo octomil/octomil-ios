@@ -10,28 +10,35 @@ import UIKit
 ///
 /// `OctomilClient` provides a high-level API for:
 /// - Device registration
-/// - Model download and caching
+/// - Model download and caching (``models``)
 /// - On-device inference
 /// - Federated training participation
+/// - Device capabilities (``capabilities``)
+/// - Custom telemetry (``telemetry``)
 /// - Background task scheduling
 ///
 /// # Example Usage
 ///
 /// ```swift
 /// let client = OctomilClient(
-///     deviceAccessToken: "<short-lived-device-token>",
-///     orgId: "org_123",
-///     serverURL: URL(string: "https://api.octomil.com")!
+///     apiKey: "<your-api-key>",
+///     orgId: "org_123"
 /// )
 ///
 /// // Register device
 /// let registration = try await client.register()
 ///
-/// // Download model
-/// let model = try await client.downloadModel(modelId: "fraud_detection")
+/// // Load model via models namespace
+/// let model = try await client.models.load("fraud_detection")
 ///
 /// // Run inference
 /// let prediction = try model.predict(input: inputFeatures)
+///
+/// // Check device capabilities
+/// let profile = client.capabilities.current()
+///
+/// // Track custom event
+/// client.telemetry.track(name: "prediction.used", attributes: ["model": "fraud_detection"])
 /// ```
 public final class OctomilClient: @unchecked Sendable {
 
