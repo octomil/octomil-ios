@@ -173,6 +173,11 @@ public struct BenchmarkReport: Codable, Sendable {
     /// Thermal state at benchmark time (e.g. "nominal", "fair", "serious", "critical").
     public let thermalState: String?
 
+    // -- Model Persistence (not encoded) --
+    /// URL of the compiled model persisted to the cache directory after benchmarking.
+    /// Set by ``PairingManager`` after a successful deployment.
+    public var persistedModelURL: URL? = nil
+
     enum CodingKeys: String, CodingKey {
         case modelName = "model_name"
         case deviceName = "device_name"

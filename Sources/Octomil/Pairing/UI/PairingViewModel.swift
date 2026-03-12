@@ -62,6 +62,8 @@ public struct PairedModelInfo: Sendable {
     /// The model's modality (e.g. "text", "vision", "audio", "classification").
     /// Used by ``TryItOutScreen`` to present the appropriate input UI.
     public let modality: String?
+    /// URL of the compiled CoreML model on disk, for on-device inference.
+    public let compiledModelURL: URL?
 
     public init(
         name: String,
@@ -69,7 +71,8 @@ public struct PairedModelInfo: Sendable {
         sizeString: String,
         runtime: String,
         tokensPerSecond: Double?,
-        modality: String? = nil
+        modality: String? = nil,
+        compiledModelURL: URL? = nil
     ) {
         self.name = name
         self.version = version
@@ -77,6 +80,7 @@ public struct PairedModelInfo: Sendable {
         self.runtime = runtime
         self.tokensPerSecond = tokensPerSecond
         self.modality = modality
+        self.compiledModelURL = compiledModelURL
     }
 }
 
@@ -205,7 +209,8 @@ public final class PairingViewModel: ObservableObject {
                 version: deployment.modelVersion,
                 sizeString: sizeString,
                 runtime: runtime,
-                tokensPerSecond: report.tokensPerSecond
+                tokensPerSecond: report.tokensPerSecond,
+                compiledModelURL: report.persistedModelURL
             ))
 
         } catch is CancellationError {

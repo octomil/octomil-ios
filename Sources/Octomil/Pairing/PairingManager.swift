@@ -221,24 +221,32 @@ public actor PairingManager {
         } catch {
             throw PairingError.benchmarkFailed(reason: "Model compilation failed: \(error.localizedDescription)")
         }
-        defer { try? FileManager.default.removeItem(at: compiledURL) }
 
         let mlModel: MLModel
         do {
             mlModel = try MLModel(contentsOf: compiledURL)
         } catch {
+            defer { try? FileManager.default.removeItem(at: compiledURL) }
             throw PairingError.benchmarkFailed(reason: "Model loading failed: \(error.localizedDescription)")
         }
 
         let modelLoadTimeMs = Date().timeIntervalSince(modelLoadStart) * 1000
 
         // Run benchmarks (pass compiledURL for CPU-only delegate comparison)
-        let report = try runBenchmarks(
+        var report = try runBenchmarks(
             model: mlModel,
             compiledURL: compiledURL,
             modelName: deployment.modelName,
             modelLoadTimeMs: modelLoadTimeMs
         )
+
+        // Persist compiled model for on-device inference (TryItOut)
+        let persistedURL = try Self.persistCompiledModel(
+            compiledURL: compiledURL,
+            modelName: deployment.modelName,
+            version: deployment.modelVersion
+        )
+        report.persistedModelURL = persistedURL
 
         if configuration.enableLogging {
             let tps = String(format: "%.1f", report.tokensPerSecond)
@@ -416,6 +424,37 @@ public actor PairingManager {
             batteryLevel: batteryLevel,
             thermalState: thermalState
         )
+    }
+
+    // MARK: - Model Persistence
+
+    /// Copies the compiled model to a stable cache directory for on-device inference.
+    ///
+    /// Path: `~/Library/Caches/ai.octomil.models/{name}/{version}/model.mlmodelc`
+    private static func persistCompiledModel(
+        compiledURL: URL,
+        modelName: String,
+        version: String
+    ) throws -> URL {
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let modelsDir = cacheDir
+            .appendingPathComponent("ai.octomil.models", isDirectory: true)
+            .appendingPathComponent(modelName, isDirectory: true)
+            .appendingPathComponent(version, isDirectory: true)
+
+        try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+
+        let targetURL = modelsDir.appendingPathComponent("model.mlmodelc")
+
+        // Remove existing model if present
+        if FileManager.default.fileExists(atPath: targetURL.path) {
+            try FileManager.default.removeItem(at: targetURL)
+        }
+
+        // Move compiled model to persistent location (more efficient than copy)
+        try FileManager.default.moveItem(at: compiledURL, to: targetURL)
+
+        return targetURL
     }
 
     // MARK: - Helpers

@@ -1,18 +1,19 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import PhotosUI
 
 /// Vision input UI for image + optional prompt models.
 ///
 /// Provides a photo picker button, an optional text prompt field,
 /// an "Analyze" button, and a response area displaying the model's
 /// output with latency.
-@available(iOS 15.0, macOS 12.0, *)
+@available(iOS 16.0, macOS 13.0, *)
 struct VisionInputView: View {
 
     @ObservedObject var viewModel: TryItOutViewModel
     @State private var promptText: String = ""
     @State private var selectedImageData: Data?
-    @State private var showImagePicker = false
+    @State private var photoSelection: PhotosPickerItem?
 
     var body: some View {
         ScrollView {
@@ -74,9 +75,10 @@ struct VisionInputView: View {
     }
 
     private var imagePickerButton: some View {
-        Button {
-            showImagePicker = true
-        } label: {
+        PhotosPicker(
+            selection: $photoSelection,
+            matching: .images
+        ) {
             VStack(spacing: 12) {
                 Image(systemName: "photo.on.rectangle.angled")
                     .font(.system(size: 36))
@@ -99,6 +101,13 @@ struct VisionInputView: View {
                     )
                     .foregroundColor(.white.opacity(0.15))
             )
+        }
+        .onChange(of: photoSelection) { newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                    selectedImageData = data
+                }
+            }
         }
     }
 

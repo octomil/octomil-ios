@@ -46,6 +46,9 @@ public struct TryItOutScreen: View {
                 modalityContent
             }
         }
+        .task {
+            await viewModel.loadModelIfNeeded()
+        }
     }
 
     // MARK: - Background
