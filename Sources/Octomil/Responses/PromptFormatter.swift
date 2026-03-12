@@ -13,24 +13,28 @@ public enum PromptFormatter {
         var sb = ""
 
         // Add tool definitions as a system prompt if present
-        if !tools.isEmpty, case .none = toolChoice {} else if !tools.isEmpty {
-            sb += "<|system|>\nYou have access to the following tools:\n\n"
-            for tool in tools {
-                sb += "Function: \(tool.function.name)\n"
-                sb += "Description: \(tool.function.description)\n"
+        if !tools.isEmpty {
+            if case .none = toolChoice {
+                // Skip tools when choice is .none
+            } else {
+                sb += "<|system|>\nYou have access to the following tools:\n\n"
+                for tool in tools {
+                    sb += "Function: \(tool.function.name)\n"
+                    sb += "Description: \(tool.function.description)\n"
+                    sb += "\n"
+                }
+                sb += "To use a tool, respond with JSON: {\"tool_call\": {\"name\": \"function_name\", \"arguments\": {...}}}\n"
+
+                switch toolChoice {
+                case .required:
+                    sb += "You MUST use one of the available tools.\n"
+                case .specific(let name):
+                    sb += "You MUST use the tool: \(name)\n"
+                default:
+                    break
+                }
                 sb += "\n"
             }
-            sb += "To use a tool, respond with JSON: {\"tool_call\": {\"name\": \"function_name\", \"arguments\": {...}}}\n"
-
-            switch toolChoice {
-            case .required:
-                sb += "You MUST use one of the available tools.\n"
-            case .specific(let name):
-                sb += "You MUST use the tool: \(name)\n"
-            default:
-                break
-            }
-            sb += "\n"
         }
 
         // Format each input item
