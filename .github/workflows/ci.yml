@@ -10,7 +10,7 @@ permissions: {}
 
 jobs:
   test:
-    name: Test
+    name: Test & Analysis
     runs-on: macos-14
     permissions:
       contents: read
@@ -39,27 +39,6 @@ jobs:
           file: ./coverage.json
           flags: swift
           token: ${{ secrets.CODECOV_TOKEN }}
-
-  sonarcloud:
-    name: SonarCloud Analysis
-    runs-on: macos-14
-    needs: test
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - name: Run tests with coverage
-        run: |
-          xcodebuild -scheme Octomil -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults test
-
-      - name: Generate coverage report for SonarCloud
-        run: |
-          xcrun xccov view --report --json TestResults.xcresult > coverage.json
-          xcrun xccov view --report TestResults.xcresult
 
       - name: Convert coverage to SonarCloud generic format
         run: |
@@ -106,9 +85,9 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
 
-  security:
-    name: Security Scan
-    runs-on: macos-14
+  lint:
+    name: SwiftLint
+    runs-on: ubuntu-latest
     permissions:
       contents: read
 
@@ -116,12 +95,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run SwiftLint
-        run: |
-          brew install swiftlint
-          swiftlint lint --reporter json > swiftlint-report.json || true
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: norio-nomura/action-swiftlint@9f166f29aa2a2bac7409ed2e36fa85e21a0c7f6b # 3.2.1
         with:
-          name: security-reports
+          args: --reporter json > swiftlint-report.json || true
+
+      - name: Upload lint report
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: swiftlint-report
           path: swiftlint-report.json
