@@ -294,13 +294,13 @@ public final class OctomilClient: @unchecked Sendable {
     /// participation in federated learning rounds.
     ///
     /// - Parameters:
-    ///   - deviceIdentifier: Client-generated device ID (e.g., IDFV). If nil, auto-generated.
+    ///   - deviceId: Client-generated device ID (e.g., IDFV). If nil, auto-generated.
     ///   - appVersion: Host application version.
     ///   - metadata: Optional additional metadata.
     /// - Returns: Registration information including server-assigned ID.
     /// - Throws: `OctomilError` if registration fails.
     public func register(
-        deviceIdentifier: String? = nil,
+        deviceId: String? = nil,
         appVersion: String? = nil,
         metadata: [String: String]? = nil
     ) async throws -> DeviceRegistrationResponse {
@@ -311,7 +311,7 @@ public final class OctomilClient: @unchecked Sendable {
         }
 
         // Generate or use provided device identifier
-        let identifier = deviceIdentifier ?? generateDeviceIdentifier()
+        let identifier = deviceId ?? generateDeviceIdentifier()
         self.clientDeviceIdentifier = identifier
 
         let deviceInfo = await buildDeviceInfo()
@@ -367,6 +367,18 @@ public final class OctomilClient: @unchecked Sendable {
         }
 
         return registration
+    }
+
+    /// Registers this device with the Octomil server.
+    ///
+    /// - Note: Deprecated. Use ``register(deviceId:appVersion:metadata:)`` instead.
+    @available(*, deprecated, renamed: "register(deviceId:appVersion:metadata:)")
+    public func register(
+        deviceIdentifier: String? = nil,
+        appVersion: String? = nil,
+        metadata: [String: String]? = nil
+    ) async throws -> DeviceRegistrationResponse {
+        try await register(deviceId: deviceIdentifier, appVersion: appVersion, metadata: metadata)
     }
 
     // MARK: - Heartbeat
