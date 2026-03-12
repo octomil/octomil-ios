@@ -65,6 +65,14 @@ public final class OctomilClient: @unchecked Sendable {
         telemetryQueue: TelemetryQueue.shared
     )
 
+    /// Model lifecycle operations (load, status, unload, list, clearCache).
+    public private(set) lazy var models = OctomilModels(
+        modelManager: modelManager,
+        apiClient: apiClient,
+        configuration: configuration,
+        deviceIdProvider: { [weak self] in self?.deviceId }
+    )
+
     /// Response API for on-device LLM inference.
     public private(set) lazy var responses = OctomilResponses()
 
