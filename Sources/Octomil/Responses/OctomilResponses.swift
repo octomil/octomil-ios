@@ -14,6 +14,11 @@ import Foundation
 public final class OctomilResponses: @unchecked Sendable {
     private let runtimeResolver: ((String) -> ModelRuntime?)?
 
+    /// Cache of recent responses for conversation chaining via `previousResponseId`.
+    private var responseCache: [String: Response] = [:]
+    private let cacheLock = NSLock()
+    private let maxCacheSize = 100
+
     public init(runtimeResolver: ((String) -> ModelRuntime?)? = nil) {
         self.runtimeResolver = runtimeResolver
     }
@@ -22,29 +27,33 @@ public final class OctomilResponses: @unchecked Sendable {
 
     public func create(_ request: ResponseRequest) async throws -> Response {
         let runtime = try resolveRuntime(request.model)
-        let runtimeRequest = Self.buildRuntimeRequest(request)
+        let effectiveRequest = buildEffectiveRequest(request)
+        let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
         let runtimeResponse = try await runtime.run(request: runtimeRequest)
-        return buildResponse(model: request.model, runtimeResponse: runtimeResponse)
+        let response = buildResponse(model: request.model, runtimeResponse: runtimeResponse)
+        cacheResponse(response)
+        return response
     }
 
     // MARK: - Streaming
 
     public func stream(_ request: ResponseRequest) -> AsyncThrowingStream<ResponseStreamEvent, Error> {
         let runtimeResolver = self.runtimeResolver
+        let effectiveRequest = buildEffectiveRequest(request)
 
-        return AsyncThrowingStream { continuation in
+        return AsyncThrowingStream { [weak self] continuation in
             let task = Task {
                 do {
                     let runtime: ModelRuntime
-                    if let resolver = runtimeResolver, let resolved = resolver(request.model) {
+                    if let resolver = runtimeResolver, let resolved = resolver(effectiveRequest.model) {
                         runtime = resolved
-                    } else if let resolved = ModelRuntimeRegistry.shared.resolve(modelId: request.model) {
+                    } else if let resolved = ModelRuntimeRegistry.shared.resolve(modelId: effectiveRequest.model) {
                         runtime = resolved
                     } else {
-                        throw OctomilResponsesError.noRuntime(request.model)
+                        throw OctomilResponsesError.noRuntime(effectiveRequest.model)
                     }
 
-                    let runtimeRequest = Self.buildRuntimeRequest(request)
+                    let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
                     let responseId = Self.generateId()
                     var textParts: [String] = []
                     var toolCallBuffers: [Int: ToolCallBuffer] = [:]
@@ -95,11 +104,12 @@ public final class OctomilResponses: @unchecked Sendable {
 
                     let response = Response(
                         id: responseId,
-                        model: request.model,
+                        model: effectiveRequest.model,
                         output: output,
                         finishReason: finishReason,
                         usage: usage
                     )
+                    self?.cacheResponse(response)
                     continuation.yield(.done(response))
                     continuation.finish()
                 } catch {
@@ -121,6 +131,71 @@ public final class OctomilResponses: @unchecked Sendable {
             return runtime
         }
         throw OctomilResponsesError.noRuntime(model)
+    }
+
+    /// Build effective request by prepending instructions and previous response context.
+    private func buildEffectiveRequest(_ request: ResponseRequest) -> ResponseRequest {
+        var effectiveInput = request.input
+
+        // Prepend previous response context for conversation chaining
+        if let previousId = request.previousResponseId {
+            cacheLock.lock()
+            let previous = responseCache[previousId]
+            cacheLock.unlock()
+
+            if let previous = previous {
+                let textContent = previous.output.compactMap { item -> ContentPart? in
+                    if case .text(let text) = item { return .text(text) }
+                    return nil
+                }
+                let toolCalls = previous.output.compactMap { item -> ResponseToolCall? in
+                    if case .toolCall(let call) = item { return call }
+                    return nil
+                }
+                effectiveInput.insert(
+                    .assistant(
+                        content: textContent.isEmpty ? nil : textContent,
+                        toolCalls: toolCalls.isEmpty ? nil : toolCalls
+                    ),
+                    at: 0
+                )
+            }
+        }
+
+        // Prepend instructions as a system message
+        if let instructions = request.instructions {
+            effectiveInput.insert(.system(instructions), at: 0)
+        }
+
+        return ResponseRequest(
+            model: request.model,
+            input: effectiveInput,
+            tools: request.tools,
+            toolChoice: request.toolChoice,
+            responseFormat: request.responseFormat,
+            stream: request.stream,
+            maxOutputTokens: request.maxOutputTokens,
+            temperature: request.temperature,
+            topP: request.topP,
+            stop: request.stop,
+            metadata: request.metadata,
+            instructions: nil,
+            previousResponseId: nil
+        )
+    }
+
+    /// Cache a response for later conversation chaining.
+    private func cacheResponse(_ response: Response) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if responseCache.count >= maxCacheSize {
+            // Evict the first entry (oldest insertion order is not guaranteed,
+            // but this keeps it bounded).
+            if let firstKey = responseCache.keys.first {
+                responseCache.removeValue(forKey: firstKey)
+            }
+        }
+        responseCache[response.id] = response
     }
 
     private static func buildRuntimeRequest(_ request: ResponseRequest) -> RuntimeRequest {
@@ -198,11 +273,14 @@ public final class OctomilResponses: @unchecked Sendable {
 /// Errors from the Response API.
 public enum OctomilResponsesError: Error, LocalizedError {
     case noRuntime(String)
+    case runtimeNotFound(String)
 
     public var errorDescription: String? {
         switch self {
         case .noRuntime(let model):
             return "No ModelRuntime registered for model: \(model)"
+        case .runtimeNotFound(let message):
+            return message
         }
     }
 }

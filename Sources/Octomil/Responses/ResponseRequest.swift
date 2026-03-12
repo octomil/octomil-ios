@@ -14,6 +14,12 @@ public struct ResponseRequest: Sendable {
     public let stop: [String]?
     public let metadata: [String: String]?
 
+    /// System prompt shorthand — prepended as a system message before input.
+    public let instructions: String?
+
+    /// Chain a conversation by referencing a prior response ID.
+    public let previousResponseId: String?
+
     public init(
         model: String,
         input: [InputItem],
@@ -25,7 +31,9 @@ public struct ResponseRequest: Sendable {
         temperature: Double? = nil,
         topP: Double? = nil,
         stop: [String]? = nil,
-        metadata: [String: String]? = nil
+        metadata: [String: String]? = nil,
+        instructions: String? = nil,
+        previousResponseId: String? = nil
     ) {
         self.model = model
         self.input = input
@@ -38,5 +46,40 @@ public struct ResponseRequest: Sendable {
         self.topP = topP
         self.stop = stop
         self.metadata = metadata
+        self.instructions = instructions
+        self.previousResponseId = previousResponseId
+    }
+
+    /// Convenience: create a request with a plain string input.
+    public init(
+        model: String,
+        input: String,
+        tools: [Tool] = [],
+        toolChoice: ToolChoice = .auto,
+        responseFormat: ResponseFormat = .text,
+        stream: Bool = false,
+        maxOutputTokens: Int? = nil,
+        temperature: Double? = nil,
+        topP: Double? = nil,
+        stop: [String]? = nil,
+        metadata: [String: String]? = nil,
+        instructions: String? = nil,
+        previousResponseId: String? = nil
+    ) {
+        self.init(
+            model: model,
+            input: [.text(input)],
+            tools: tools,
+            toolChoice: toolChoice,
+            responseFormat: responseFormat,
+            stream: stream,
+            maxOutputTokens: maxOutputTokens,
+            temperature: temperature,
+            topP: topP,
+            stop: stop,
+            metadata: metadata,
+            instructions: instructions,
+            previousResponseId: previousResponseId
+        )
     }
 }
