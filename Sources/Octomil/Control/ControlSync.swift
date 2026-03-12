@@ -35,4 +35,45 @@ public actor ControlSync {
         logger.debug("Control sync completed: version=\(result.configVersion) updated=\(result.updated)")
         return result
     }
+
+    // MARK: - Heartbeat (contract: control.heartbeat)
+
+    /// Sends a liveness signal to the server.
+    ///
+    /// Fire-and-forget: this method launches the request in a detached
+    /// task and never throws. Callers are not blocked on the response.
+    ///
+    /// Per the contract:
+    /// - Blocking: false
+    /// - Idempotent: true
+    /// - Failure is non-fatal; errors are silently logged
+    /// - Side-effects: updates server-side last-seen timestamp, may extend session TTL
+    ///
+    /// ```swift
+    /// client.control.heartbeat()
+    /// ```
+    nonisolated public func heartbeat() {
+        Task.detached { [apiClient, logger] in
+            do {
+                let _: HeartbeatAck = try await apiClient.postJSON(
+                    path: "api/v1/control/heartbeat",
+                    body: EmptyBody()
+                )
+                logger.debug("Control heartbeat ack received")
+            } catch {
+                // Contract: SDK MUST NOT surface heartbeat errors to the caller.
+                logger.debug("Control heartbeat failed (non-fatal): \(error.localizedDescription)")
+            }
+        }
+    }
 }
+
+// MARK: - Heartbeat internal types
+
+/// Response from ``control.heartbeat``.
+struct HeartbeatAck: Decodable, Sendable {
+    let ack: Bool
+}
+
+/// Empty request body for ``control.heartbeat``.
+private struct EmptyBody: Encodable, Sendable {}

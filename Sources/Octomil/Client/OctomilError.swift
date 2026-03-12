@@ -78,6 +78,32 @@ public enum OctomilError: LocalizedError, Sendable {
     /// Keychain operation failed.
     case keychainError(status: OSStatus)
 
+    // MARK: - Contract Error Codes (added for full parity)
+
+    /// 403 — insufficient permissions.
+    case forbidden(reason: String)
+
+    /// Kill switch active for this model.
+    case modelDisabled(modelId: String)
+
+    /// No compatible runtime for this model format.
+    case runtimeUnavailable(reason: String)
+
+    /// Runtime initialization error (model failed to load).
+    case modelLoadFailed(reason: String)
+
+    /// Prediction error during inference.
+    case inferenceFailed(reason: String)
+
+    /// OOM during inference or model loading.
+    case insufficientMemory(reason: String)
+
+    /// 429 — too many requests.
+    case rateLimited(retryAfter: String?)
+
+    /// Bad input data (malformed, wrong type, out of range).
+    case invalidInput(reason: String)
+
     // MARK: - General Errors
 
     /// An unexpected error occurred.
@@ -132,6 +158,25 @@ public enum OctomilError: LocalizedError, Sendable {
             return "Failed to upload weights: \(reason)"
         case .keychainError(let status):
             return "Keychain error (status: \(status))"
+        case .forbidden(let reason):
+            return "Forbidden: \(reason)"
+        case .modelDisabled(let modelId):
+            return "Model '\(modelId)' is disabled."
+        case .runtimeUnavailable(let reason):
+            return "No compatible runtime: \(reason)"
+        case .modelLoadFailed(let reason):
+            return "Model load failed: \(reason)"
+        case .inferenceFailed(let reason):
+            return "Inference failed: \(reason)"
+        case .insufficientMemory(let reason):
+            return "Insufficient memory: \(reason)"
+        case .rateLimited(let retryAfter):
+            if let retryAfter = retryAfter {
+                return "Rate limited. Retry after \(retryAfter)."
+            }
+            return "Rate limited. Try again later."
+        case .invalidInput(let reason):
+            return "Invalid input: \(reason)"
         case .unknown(let underlying):
             if let error = underlying {
                 return "An unexpected error occurred: \(error.localizedDescription)"
@@ -164,8 +209,132 @@ public enum OctomilError: LocalizedError, Sendable {
             return "Free up storage space on the device."
         case .trainingNotSupported:
             return "Use a model that supports on-device training."
+        case .forbidden:
+            return "Check that your account has the required permissions."
+        case .rateLimited:
+            return "Wait and retry with exponential backoff."
+        case .insufficientMemory:
+            return "Close other apps to free memory, or use a smaller model."
+        case .modelLoadFailed:
+            return "Try re-downloading the model or use a different format."
         default:
             return nil
+        }
+    }
+
+    // MARK: - Contract Error Code Mapping
+
+    /// Maps this error to the canonical ``ErrorCode`` from the contract.
+    ///
+    /// Every ``OctomilError`` case maps to exactly one ``ErrorCode``.
+    /// SDK-specific cases that have no direct contract counterpart
+    /// (e.g. ``decodingError``, ``keychainError``) map to ``ErrorCode/unknown``.
+    public var errorCode: ErrorCode {
+        switch self {
+        case .networkUnavailable:
+            return .networkUnavailable
+        case .requestTimeout:
+            return .requestTimeout
+        case .serverError:
+            return .serverError
+        case .invalidAPIKey:
+            return .invalidApiKey
+        case .authenticationFailed, .deviceNotRegistered:
+            return .authenticationFailed
+        case .forbidden:
+            return .forbidden
+        case .modelNotFound, .versionNotFound:
+            return .modelNotFound
+        case .modelDisabled:
+            return .modelDisabled
+        case .downloadFailed:
+            return .downloadFailed
+        case .checksumMismatch:
+            return .checksumMismatch
+        case .insufficientStorage:
+            return .insufficientStorage
+        case .runtimeUnavailable, .unsupportedModelFormat:
+            return .runtimeUnavailable
+        case .modelLoadFailed, .modelCompilationFailed:
+            return .modelLoadFailed
+        case .inferenceFailed:
+            return .inferenceFailed
+        case .insufficientMemory:
+            return .insufficientMemory
+        case .rateLimited:
+            return .rateLimited
+        case .invalidInput, .invalidRequest:
+            return .invalidInput
+        case .cancelled:
+            return .cancelled
+        case .unknown, .decodingError, .cacheError, .keychainError,
+             .trainingFailed, .trainingNotSupported,
+             .weightExtractionFailed, .uploadFailed:
+            return .unknown
+        }
+    }
+
+    /// Whether this error is retryable, per the contract spec.
+    ///
+    /// Matches the `retryable` field from `enums/error_code.yaml`.
+    public var isRetryable: Bool {
+        switch errorCode {
+        case .networkUnavailable, .requestTimeout, .serverError,
+             .downloadFailed, .checksumMismatch, .modelLoadFailed,
+             .inferenceFailed, .rateLimited:
+            return true
+        case .invalidApiKey, .authenticationFailed, .forbidden,
+             .modelNotFound, .modelDisabled, .insufficientStorage,
+             .runtimeUnavailable, .insufficientMemory, .invalidInput,
+             .cancelled, .unknown:
+            return false
+        }
+    }
+
+    /// Creates an ``OctomilError`` from an ``ErrorCode`` and a message string.
+    ///
+    /// Useful when deserializing server error responses that include a
+    /// contract-defined error code.
+    public static func from(errorCode: ErrorCode, message: String) -> OctomilError {
+        switch errorCode {
+        case .networkUnavailable:
+            return .networkUnavailable
+        case .requestTimeout:
+            return .requestTimeout
+        case .serverError:
+            return .serverError(statusCode: 500, message: message)
+        case .invalidApiKey:
+            return .invalidAPIKey
+        case .authenticationFailed:
+            return .authenticationFailed(reason: message)
+        case .forbidden:
+            return .forbidden(reason: message)
+        case .modelNotFound:
+            return .modelNotFound(modelId: message)
+        case .modelDisabled:
+            return .modelDisabled(modelId: message)
+        case .downloadFailed:
+            return .downloadFailed(reason: message)
+        case .checksumMismatch:
+            return .checksumMismatch
+        case .insufficientStorage:
+            return .insufficientStorage
+        case .runtimeUnavailable:
+            return .runtimeUnavailable(reason: message)
+        case .modelLoadFailed:
+            return .modelLoadFailed(reason: message)
+        case .inferenceFailed:
+            return .inferenceFailed(reason: message)
+        case .insufficientMemory:
+            return .insufficientMemory(reason: message)
+        case .rateLimited:
+            return .rateLimited(retryAfter: nil)
+        case .invalidInput:
+            return .invalidInput(reason: message)
+        case .cancelled:
+            return .cancelled
+        case .unknown:
+            return .unknown(underlying: nil)
         }
     }
 }

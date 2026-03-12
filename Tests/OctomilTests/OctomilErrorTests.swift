@@ -88,6 +88,45 @@ final class OctomilErrorTests: XCTestCase {
         XCTAssertTrue(OctomilError.cancelled.errorDescription!.contains("cancelled"))
     }
 
+    // MARK: - Contract Error Code Tests
+
+    func testContractErrorCodeDescriptions() {
+        let forbidden = OctomilError.forbidden(reason: "insufficient permissions")
+        XCTAssertNotNil(forbidden.errorDescription)
+        XCTAssertTrue(forbidden.errorDescription!.contains("Forbidden"))
+
+        let modelDisabled = OctomilError.modelDisabled(modelId: "test-model")
+        XCTAssertNotNil(modelDisabled.errorDescription)
+        XCTAssertTrue(modelDisabled.errorDescription!.contains("disabled"))
+
+        let runtimeUnavailable = OctomilError.runtimeUnavailable(reason: "no CoreML support")
+        XCTAssertNotNil(runtimeUnavailable.errorDescription)
+        XCTAssertTrue(runtimeUnavailable.errorDescription!.contains("runtime"))
+
+        let modelLoadFailed = OctomilError.modelLoadFailed(reason: "corrupt weights")
+        XCTAssertNotNil(modelLoadFailed.errorDescription)
+        XCTAssertTrue(modelLoadFailed.errorDescription!.contains("load failed"))
+
+        let inferenceFailed = OctomilError.inferenceFailed(reason: "shape mismatch")
+        XCTAssertNotNil(inferenceFailed.errorDescription)
+        XCTAssertTrue(inferenceFailed.errorDescription!.contains("Inference"))
+
+        let insufficientMemory = OctomilError.insufficientMemory(reason: "OOM")
+        XCTAssertNotNil(insufficientMemory.errorDescription)
+        XCTAssertTrue(insufficientMemory.errorDescription!.contains("memory"))
+
+        let rateLimited = OctomilError.rateLimited(retryAfter: "30s")
+        XCTAssertNotNil(rateLimited.errorDescription)
+        XCTAssertTrue(rateLimited.errorDescription!.contains("Rate limited"))
+
+        let rateLimitedNoRetry = OctomilError.rateLimited(retryAfter: nil)
+        XCTAssertTrue(rateLimitedNoRetry.errorDescription!.contains("later"))
+
+        let invalidInput = OctomilError.invalidInput(reason: "empty prompt")
+        XCTAssertNotNil(invalidInput.errorDescription)
+        XCTAssertTrue(invalidInput.errorDescription!.contains("Invalid input"))
+    }
+
     // MARK: - Recovery Suggestion Tests
 
     func testRecoverySuggestions() {
@@ -98,5 +137,9 @@ final class OctomilErrorTests: XCTestCase {
         XCTAssertNotNil(OctomilError.checksumMismatch.recoverySuggestion)
         XCTAssertNotNil(OctomilError.insufficientStorage.recoverySuggestion)
         XCTAssertNotNil(OctomilError.trainingNotSupported.recoverySuggestion)
+        XCTAssertNotNil(OctomilError.forbidden(reason: "test").recoverySuggestion)
+        XCTAssertNotNil(OctomilError.rateLimited(retryAfter: nil).recoverySuggestion)
+        XCTAssertNotNil(OctomilError.insufficientMemory(reason: "test").recoverySuggestion)
+        XCTAssertNotNil(OctomilError.modelLoadFailed(reason: "test").recoverySuggestion)
     }
 }
