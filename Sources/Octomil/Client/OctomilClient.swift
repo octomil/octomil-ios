@@ -10,28 +10,35 @@ import UIKit
 ///
 /// `OctomilClient` provides a high-level API for:
 /// - Device registration
-/// - Model download and caching
+/// - Model download and caching (``models``)
 /// - On-device inference
 /// - Federated training participation
+/// - Device capabilities (``capabilities``)
+/// - Custom telemetry (``telemetry``)
 /// - Background task scheduling
 ///
 /// # Example Usage
 ///
 /// ```swift
 /// let client = OctomilClient(
-///     deviceAccessToken: "<short-lived-device-token>",
-///     orgId: "org_123",
-///     serverURL: URL(string: "https://api.octomil.com")!
+///     apiKey: "<your-api-key>",
+///     orgId: "org_123"
 /// )
 ///
 /// // Register device
 /// let registration = try await client.register()
 ///
-/// // Download model
-/// let model = try await client.downloadModel(modelId: "fraud_detection")
+/// // Load model via models namespace
+/// let model = try await client.models.load("fraud_detection")
 ///
 /// // Run inference
 /// let prediction = try model.predict(input: inputFeatures)
+///
+/// // Check device capabilities
+/// let profile = client.capabilities.current()
+///
+/// // Track custom event
+/// client.telemetry.track(name: "prediction.used", attributes: ["model": "fraud_detection"])
 /// ```
 public final class OctomilClient: @unchecked Sendable {
 
@@ -63,6 +70,22 @@ public final class OctomilClient: @unchecked Sendable {
     public private(set) lazy var experiments = ExperimentsClient(
         apiClient: apiClient,
         telemetryQueue: TelemetryQueue.shared
+    )
+
+    /// Model lifecycle operations (load, status, unload, list, clearCache).
+    public private(set) lazy var models = OctomilModels(
+        modelManager: modelManager,
+        apiClient: apiClient,
+        configuration: configuration,
+        deviceIdProvider: { [weak self] in self?.deviceId }
+    )
+
+    /// Device capabilities and hardware profile.
+    public private(set) lazy var capabilities = CapabilitiesClient()
+
+    /// Public telemetry facade for custom event tracking.
+    public private(set) lazy var telemetry = TelemetryClient(
+        queueProvider: { TelemetryQueue.shared }
     )
 
     /// Response API for on-device LLM inference.
@@ -136,7 +159,41 @@ public final class OctomilClient: @unchecked Sendable {
 
     // MARK: - Initialization
 
-    /// Creates a new Octomil client.
+    /// Creates a new Octomil client using an API key.
+    ///
+    /// This is the recommended initializer. The `apiKey` is used for all
+    /// server communication. If you are migrating from the older
+    /// ``init(deviceAccessToken:orgId:serverURL:configuration:heartbeatInterval:)``
+    /// initializer, pass the same token here.
+    ///
+    /// - Parameters:
+    ///   - apiKey: API key for authenticating with the Octomil server.
+    ///   - orgId: Organization identifier.
+    ///   - serverURL: Base URL of the Octomil server.
+    ///   - configuration: SDK configuration options.
+    ///   - heartbeatInterval: Interval for automatic heartbeats (default: 5 minutes).
+    public convenience init(
+        apiKey: String,
+        orgId: String,
+        serverURL: URL = OctomilClient.defaultServerURL,
+        configuration: OctomilConfiguration = .standard,
+        heartbeatInterval: TimeInterval = 300
+    ) {
+        self.init(
+            deviceAccessToken: apiKey,
+            orgId: orgId,
+            serverURL: serverURL,
+            configuration: configuration,
+            heartbeatInterval: heartbeatInterval
+        )
+    }
+
+    /// Creates a new Octomil client using a device access token.
+    ///
+    /// This initializer is retained for backward compatibility.
+    /// Prefer ``init(apiKey:orgId:serverURL:configuration:heartbeatInterval:)``
+    /// for new integrations.
+    ///
     /// - Parameters:
     ///   - deviceAccessToken: Short-lived device access token from backend bootstrap flow.
     ///   - orgId: Organization identifier.
@@ -919,59 +976,15 @@ public final class OctomilClient: @unchecked Sendable {
 
     /// Runs warmup inference to absorb cold-start costs before real inference.
     ///
-    /// Performs a cold inference pass followed by a warm pass, then compares
-    /// Neural Engine vs CPU to determine the best compute path.
+    /// Delegates to ``OctomilModel/warmup()`` for the actual warmup passes,
+    /// then reports timing telemetry to the server.
     ///
     /// - Parameter model: The model to warm up.
     /// - Returns: A ``WarmupResult`` with timing information, or nil if warmup fails.
     public func warmup(model: OctomilModel) async -> WarmupResult? {
-        guard let firstInput = model.mlModel.modelDescription.inputDescriptionsByName.values.first else {
+        guard let result = await model.warmup() else {
             return nil
         }
-
-        // Create a dummy input matching the model's expected shape
-        guard let dummyInput = createDummyInput(for: model) else {
-            return nil
-        }
-
-        // Cold inference
-        let coldStart = Date()
-        _ = try? model.predict(input: dummyInput)
-        let coldInferenceMs = Date().timeIntervalSince(coldStart) * 1000
-
-        // Warm inference
-        let warmStart = Date()
-        _ = try? model.predict(input: dummyInput)
-        let warmInferenceMs = Date().timeIntervalSince(warmStart) * 1000
-
-        // CPU-only inference for comparison (use CPU-only compute units)
-        var cpuInferenceMs: Double? = nil
-        let cpuConfig = MLModelConfiguration()
-        cpuConfig.computeUnits = .cpuOnly
-        if let cpuModel = try? MLModel(contentsOf: model.compiledModelURL, configuration: cpuConfig) {
-            let cpuStart = Date()
-            _ = try? await cpuModel.prediction(from: dummyInput)
-            cpuInferenceMs = Date().timeIntervalSince(cpuStart) * 1000
-        }
-
-        let usingNE = hasNeuralEngine()
-        var activeDelegate = usingNE ? "neural_engine" : "cpu"
-        var disabledDelegates: [String] = []
-
-        // If CPU is faster than Neural Engine, disable NE
-        if let cpuMs = cpuInferenceMs, cpuMs < warmInferenceMs, usingNE {
-            activeDelegate = "cpu"
-            disabledDelegates.append("neural_engine")
-        }
-
-        let result = WarmupResult(
-            coldInferenceMs: coldInferenceMs,
-            warmInferenceMs: warmInferenceMs,
-            cpuInferenceMs: cpuInferenceMs,
-            usingNeuralEngine: activeDelegate == "neural_engine",
-            activeDelegate: activeDelegate,
-            disabledDelegates: disabledDelegates
-        )
 
         // Report warmup event
         if let deviceId = self.deviceId {
@@ -981,8 +994,8 @@ public final class OctomilClient: @unchecked Sendable {
                     event: TrackingEvent(
                         name: "MODEL_WARMUP_COMPLETED",
                         properties: [
-                            "cold_inference_ms": String(format: "%.2f", coldInferenceMs),
-                            "warm_inference_ms": String(format: "%.2f", warmInferenceMs),
+                            "cold_inference_ms": String(format: "%.2f", result.coldInferenceMs),
+                            "warm_inference_ms": String(format: "%.2f", result.warmInferenceMs),
                             "using_neural_engine": String(result.usingNeuralEngine),
                             "active_delegate": result.activeDelegate,
                             "delegate_disabled": String(result.delegateDisabled),
@@ -994,9 +1007,9 @@ public final class OctomilClient: @unchecked Sendable {
         }
 
         if configuration.enableLogging {
-            let coldStr = String(format: "%.1f", coldInferenceMs)
-            let warmStr = String(format: "%.1f", warmInferenceMs)
-            logger.info("Warmup complete: cold=\(coldStr)ms, warm=\(warmStr)ms, delegate=\(activeDelegate)")
+            let coldStr = String(format: "%.1f", result.coldInferenceMs)
+            let warmStr = String(format: "%.1f", result.warmInferenceMs)
+            logger.info("Warmup complete: cold=\(coldStr)ms, warm=\(warmStr)ms, delegate=\(result.activeDelegate)")
         }
 
         return result
