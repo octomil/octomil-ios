@@ -95,6 +95,54 @@ final class OctomilResponsesTests: XCTestCase {
             XCTAssertTrue(error is OctomilResponsesError)
         }
     }
+
+    func testStreamEmitsChunkTelemetryEvents() async throws {
+        // Create a TelemetryQueue with a serverURL so it becomes TelemetryQueue.shared.
+        // Using the internal init with a temp persistence URL to avoid disk side-effects.
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let queue = TelemetryQueue(
+            modelId: "test",
+            serverURL: URL(string: "https://test.local")!,
+            apiKey: nil,
+            batchSize: 100,
+            flushInterval: 0,
+            persistenceURL: tempDir.appendingPathComponent("events.json")
+        )
+
+        let runtime = StreamingMockRuntime(chunks: [
+            RuntimeChunk(text: "Hello"),
+            RuntimeChunk(text: " world"),
+            RuntimeChunk(text: "!"),
+        ])
+        let responses = OctomilResponses(runtimeResolver: { _ in runtime })
+
+        var events: [ResponseStreamEvent] = []
+        for try await event in responses.stream(
+            ResponseRequest(model: "phi-4-mini", input: [.text("Hi")])
+        ) {
+            events.append(event)
+        }
+
+        // Verify the stream produced the expected text deltas
+        let textDeltas = events.compactMap { event -> String? in
+            if case .textDelta(let delta) = event { return delta }
+            return nil
+        }
+        XCTAssertEqual(textDeltas, ["Hello", " world", "!"])
+
+        // Verify chunk telemetry events were recorded
+        let telemetryEvents = queue.bufferedEvents.filter { $0.name == "inference.chunk_produced" }
+        XCTAssertEqual(telemetryEvents.count, 3)
+
+        for (i, event) in telemetryEvents.enumerated() {
+            XCTAssertEqual(event.attributes["model.id"], .string("phi-4-mini"))
+            XCTAssertEqual(event.attributes["inference.chunk_index"], .int(i))
+        }
+    }
 }
 
 // MARK: - Test helpers

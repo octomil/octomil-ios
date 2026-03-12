@@ -55,7 +55,7 @@ public enum InferenceState: Sendable {
 
 /// A single message in the chat-style text modality view.
 @available(iOS 15.0, macOS 12.0, *)
-public struct ChatMessage: Identifiable, Sendable {
+public struct TryItOutMessage: Identifiable, Sendable {
     public let id: String
     /// Whether this message is from the user (true) or the model (false).
     public let isUser: Bool
@@ -109,7 +109,7 @@ public final class TryItOutViewModel: ObservableObject {
     @Published public private(set) var inferenceState: InferenceState = .idle
 
     /// Chat messages for the text modality.
-    @Published public private(set) var messages: [ChatMessage] = []
+    @Published public private(set) var messages: [TryItOutMessage] = []
 
     /// Classification results for the classification modality.
     @Published public private(set) var classificationResults: [ClassificationResult] = []
@@ -166,7 +166,7 @@ public final class TryItOutViewModel: ObservableObject {
     public func sendTextPrompt(_ prompt: String) {
         guard !prompt.trimmingCharacters(in: .whitespaces).isEmpty else { return }
 
-        let userMessage = ChatMessage(isUser: true, text: prompt)
+        let userMessage = TryItOutMessage(isUser: true, text: prompt)
         messages.append(userMessage)
         inferenceState = .loading
 
@@ -243,7 +243,7 @@ public final class TryItOutViewModel: ObservableObject {
             }
             if Task.isCancelled { return }
             let latencyMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
-            messages.append(ChatMessage(isUser: false, text: response, latencyMs: latencyMs))
+            messages.append(TryItOutMessage(isUser: false, text: response, latencyMs: latencyMs))
             lastLatencyMs = latencyMs
             inferenceState = .result(output: response, latencyMs: latencyMs)
         } catch is CancellationError {
@@ -363,7 +363,8 @@ public final class TryItOutViewModel: ObservableObject {
             guard let value = output.featureValue(for: name) else { continue }
             switch value.type {
             case .string:
-                if let s = value.stringValue, !s.isEmpty { parts.append(s) }
+                let s = value.stringValue
+                if !s.isEmpty { parts.append(s) }
             case .double:
                 parts.append(String(format: "%.4f", value.doubleValue))
             case .int64:
@@ -375,10 +376,9 @@ public final class TryItOutViewModel: ObservableObject {
                     parts.append("[\(vals.joined(separator: ", "))\(arr.count > 20 ? ", ..." : "")]")
                 }
             case .dictionary:
-                if let dict = value.dictionaryValue {
-                    let entries = dict.sorted { "\($0.key)" < "\($1.key)" }.prefix(10).map { "\($0.key): \($0.value)" }
-                    parts.append("{\(entries.joined(separator: ", "))}")
-                }
+                let dict = value.dictionaryValue
+                let entries = dict.sorted { "\($0.key)" < "\($1.key)" }.prefix(10).map { "\($0.key): \($0.value)" }
+                parts.append("{\(entries.joined(separator: ", "))}")
             default:
                 parts.append("\(name): <\(value.type)>")
             }

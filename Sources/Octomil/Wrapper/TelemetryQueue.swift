@@ -279,6 +279,26 @@ public final class TelemetryQueue: @unchecked Sendable {
         recordEvent(event)
     }
 
+    // MARK: - Inference Chunk Events
+
+    /// Reports an `inference.chunk_produced` event during streaming inference.
+    ///
+    /// Called once per chunk yielded by a ``ModelRuntime/stream(request:)`` loop.
+    ///
+    /// - Parameters:
+    ///   - modelId: The model identifier producing chunks.
+    ///   - chunkIndex: Zero-based index of this chunk in the stream.
+    public func reportInferenceChunkProduced(modelId: String, chunkIndex: Int) {
+        let event = TelemetryEvent(
+            name: "inference.chunk_produced",
+            attributes: [
+                "model.id": .string(modelId),
+                "inference.chunk_index": .int(chunkIndex),
+            ]
+        )
+        recordEvent(event)
+    }
+
     // MARK: - Training Events
 
     /// Records a `training.started` event.

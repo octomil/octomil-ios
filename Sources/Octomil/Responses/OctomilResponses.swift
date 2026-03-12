@@ -58,6 +58,7 @@ public final class OctomilResponses: @unchecked Sendable {
                     var textParts: [String] = []
                     var toolCallBuffers: [Int: ToolCallBuffer] = [:]
                     var lastUsage: RuntimeUsage?
+                    var chunkIndex = 0
 
                     for try await chunk in runtime.stream(request: runtimeRequest) {
                         if let text = chunk.text {
@@ -81,6 +82,13 @@ public final class OctomilResponses: @unchecked Sendable {
                         }
 
                         if let usage = chunk.usage { lastUsage = usage }
+
+                        // Report chunk telemetry
+                        TelemetryQueue.shared?.reportInferenceChunkProduced(
+                            modelId: effectiveRequest.model,
+                            chunkIndex: chunkIndex
+                        )
+                        chunkIndex += 1
                     }
 
                     var output: [OutputItem] = []
