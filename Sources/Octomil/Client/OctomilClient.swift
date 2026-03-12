@@ -935,59 +935,15 @@ public final class OctomilClient: @unchecked Sendable {
 
     /// Runs warmup inference to absorb cold-start costs before real inference.
     ///
-    /// Performs a cold inference pass followed by a warm pass, then compares
-    /// Neural Engine vs CPU to determine the best compute path.
+    /// Delegates to ``OctomilModel/warmup()`` for the actual warmup passes,
+    /// then reports timing telemetry to the server.
     ///
     /// - Parameter model: The model to warm up.
     /// - Returns: A ``WarmupResult`` with timing information, or nil if warmup fails.
     public func warmup(model: OctomilModel) async -> WarmupResult? {
-        guard let firstInput = model.mlModel.modelDescription.inputDescriptionsByName.values.first else {
+        guard let result = await model.warmup() else {
             return nil
         }
-
-        // Create a dummy input matching the model's expected shape
-        guard let dummyInput = createDummyInput(for: model) else {
-            return nil
-        }
-
-        // Cold inference
-        let coldStart = Date()
-        _ = try? model.predict(input: dummyInput)
-        let coldInferenceMs = Date().timeIntervalSince(coldStart) * 1000
-
-        // Warm inference
-        let warmStart = Date()
-        _ = try? model.predict(input: dummyInput)
-        let warmInferenceMs = Date().timeIntervalSince(warmStart) * 1000
-
-        // CPU-only inference for comparison (use CPU-only compute units)
-        var cpuInferenceMs: Double? = nil
-        let cpuConfig = MLModelConfiguration()
-        cpuConfig.computeUnits = .cpuOnly
-        if let cpuModel = try? MLModel(contentsOf: model.compiledModelURL, configuration: cpuConfig) {
-            let cpuStart = Date()
-            _ = try? await cpuModel.prediction(from: dummyInput)
-            cpuInferenceMs = Date().timeIntervalSince(cpuStart) * 1000
-        }
-
-        let usingNE = hasNeuralEngine()
-        var activeDelegate = usingNE ? "neural_engine" : "cpu"
-        var disabledDelegates: [String] = []
-
-        // If CPU is faster than Neural Engine, disable NE
-        if let cpuMs = cpuInferenceMs, cpuMs < warmInferenceMs, usingNE {
-            activeDelegate = "cpu"
-            disabledDelegates.append("neural_engine")
-        }
-
-        let result = WarmupResult(
-            coldInferenceMs: coldInferenceMs,
-            warmInferenceMs: warmInferenceMs,
-            cpuInferenceMs: cpuInferenceMs,
-            usingNeuralEngine: activeDelegate == "neural_engine",
-            activeDelegate: activeDelegate,
-            disabledDelegates: disabledDelegates
-        )
 
         // Report warmup event
         if let deviceId = self.deviceId {
@@ -997,8 +953,8 @@ public final class OctomilClient: @unchecked Sendable {
                     event: TrackingEvent(
                         name: "MODEL_WARMUP_COMPLETED",
                         properties: [
-                            "cold_inference_ms": String(format: "%.2f", coldInferenceMs),
-                            "warm_inference_ms": String(format: "%.2f", warmInferenceMs),
+                            "cold_inference_ms": String(format: "%.2f", result.coldInferenceMs),
+                            "warm_inference_ms": String(format: "%.2f", result.warmInferenceMs),
                             "using_neural_engine": String(result.usingNeuralEngine),
                             "active_delegate": result.activeDelegate,
                             "delegate_disabled": String(result.delegateDisabled),
@@ -1010,9 +966,9 @@ public final class OctomilClient: @unchecked Sendable {
         }
 
         if configuration.enableLogging {
-            let coldStr = String(format: "%.1f", coldInferenceMs)
-            let warmStr = String(format: "%.1f", warmInferenceMs)
-            logger.info("Warmup complete: cold=\(coldStr)ms, warm=\(warmStr)ms, delegate=\(activeDelegate)")
+            let coldStr = String(format: "%.1f", result.coldInferenceMs)
+            let warmStr = String(format: "%.1f", result.warmInferenceMs)
+            logger.info("Warmup complete: cold=\(coldStr)ms, warm=\(warmStr)ms, delegate=\(result.activeDelegate)")
         }
 
         return result

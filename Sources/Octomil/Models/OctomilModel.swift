@@ -27,6 +27,13 @@ public final class OctomilModel: @unchecked Sendable {
     /// URL of the compiled model.
     public let compiledModelURL: URL
 
+    /// The model format (e.g. "coreml", "mlx", "onnx", "auto").
+    ///
+    /// Sourced from the server-provided ``ModelMetadata/format``.
+    public var format: String {
+        return metadata.format
+    }
+
     /// Whether this model supports on-device training.
     public var supportsTraining: Bool {
         return metadata.supportsTraining && mlModel.modelDescription.isUpdatable
@@ -212,6 +219,88 @@ public final class OctomilModel: @unchecked Sendable {
 
         let wrapper = InstrumentedStreamWrapper(modality: modality)
         return wrapper.wrap(resolvedEngine, input: input)
+    }
+
+    // MARK: - Warmup
+
+    /// Runs warmup inference to absorb cold-start costs before real inference.
+    ///
+    /// Performs a cold inference pass followed by a warm pass, then compares
+    /// Neural Engine vs CPU to determine the best compute path.
+    ///
+    /// - Returns: A ``WarmupResult`` with timing information, or `nil` if warmup fails
+    ///   (e.g. the model's input schema cannot be synthesised).
+    public func warmup() async -> WarmupResult? {
+        // Create a dummy input matching the model's expected shape
+        guard let dummyInput = createDummyInput() else {
+            return nil
+        }
+
+        // Cold inference
+        let coldStart = Date()
+        _ = try? self.predict(input: dummyInput)
+        let coldInferenceMs = Date().timeIntervalSince(coldStart) * 1000
+
+        // Warm inference
+        let warmStart = Date()
+        _ = try? self.predict(input: dummyInput)
+        let warmInferenceMs = Date().timeIntervalSince(warmStart) * 1000
+
+        // CPU-only inference for comparison
+        var cpuInferenceMs: Double? = nil
+        let cpuConfig = MLModelConfiguration()
+        cpuConfig.computeUnits = .cpuOnly
+        if let cpuModel = try? MLModel(contentsOf: compiledModelURL, configuration: cpuConfig) {
+            let cpuStart = Date()
+            _ = try? await cpuModel.prediction(from: dummyInput)
+            cpuInferenceMs = Date().timeIntervalSince(cpuStart) * 1000
+        }
+
+        let usingNE = hasNeuralEngine()
+        var activeDelegate = usingNE ? "neural_engine" : "cpu"
+        var disabledDelegates: [String] = []
+
+        if let cpuMs = cpuInferenceMs, cpuMs < warmInferenceMs, usingNE {
+            activeDelegate = "cpu"
+            disabledDelegates.append("neural_engine")
+        }
+
+        return WarmupResult(
+            coldInferenceMs: coldInferenceMs,
+            warmInferenceMs: warmInferenceMs,
+            cpuInferenceMs: cpuInferenceMs,
+            usingNeuralEngine: activeDelegate == "neural_engine",
+            activeDelegate: activeDelegate,
+            disabledDelegates: disabledDelegates
+        )
+    }
+
+    // MARK: - Private Helpers
+
+    private func createDummyInput() -> MLFeatureProvider? {
+        let inputDescs = mlModel.modelDescription.inputDescriptionsByName
+        var features: [String: MLFeatureValue] = [:]
+
+        for (name, desc) in inputDescs {
+            if let constraint = desc.multiArrayConstraint {
+                let shape = constraint.shape
+                guard let array = try? MLMultiArray(shape: shape, dataType: .float32) else {
+                    return nil
+                }
+                features[name] = MLFeatureValue(multiArray: array)
+            }
+        }
+
+        guard !features.isEmpty else { return nil }
+        return try? MLDictionaryFeatureProvider(dictionary: features)
+    }
+
+    private func hasNeuralEngine() -> Bool {
+        #if canImport(UIKit)
+        return true
+        #else
+        return false
+        #endif
     }
 }
 
