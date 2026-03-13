@@ -239,12 +239,16 @@ public enum OctomilError: LocalizedError, Sendable {
             return .serverError
         case .invalidAPIKey:
             return .invalidApiKey
-        case .authenticationFailed, .deviceNotRegistered:
+        case .authenticationFailed:
             return .authenticationFailed
+        case .deviceNotRegistered:
+            return .deviceNotRegistered
         case .forbidden:
             return .forbidden
-        case .modelNotFound, .versionNotFound:
+        case .modelNotFound:
             return .modelNotFound
+        case .versionNotFound:
+            return .versionNotFound
         case .modelDisabled:
             return .modelDisabled
         case .downloadFailed:
@@ -276,19 +280,29 @@ public enum OctomilError: LocalizedError, Sendable {
 
     /// Whether this error is retryable, per the contract spec.
     ///
-    /// Matches the `retryable` field from `enums/error_code.yaml`.
+    /// Delegates to the ``RetryClass`` from the contract taxonomy.
     public var isRetryable: Bool {
-        switch errorCode {
-        case .networkUnavailable, .requestTimeout, .serverError,
-             .downloadFailed, .checksumMismatch, .modelLoadFailed,
-             .inferenceFailed, .rateLimited:
-            return true
-        case .invalidApiKey, .authenticationFailed, .forbidden,
-             .modelNotFound, .modelDisabled, .insufficientStorage,
-             .runtimeUnavailable, .insufficientMemory, .invalidInput,
-             .cancelled, .unknown:
-            return false
-        }
+        errorCode.retryClass != .never
+    }
+
+    /// The error category from the contract taxonomy.
+    public var category: ErrorCategory {
+        errorCode.category
+    }
+
+    /// The retry classification from the contract taxonomy.
+    public var retryClass: RetryClass {
+        errorCode.retryClass
+    }
+
+    /// Whether this error is eligible for cloud fallback.
+    public var fallbackEligible: Bool {
+        errorCode.fallbackEligible
+    }
+
+    /// The suggested remediation action from the contract taxonomy.
+    public var suggestedAction: SuggestedAction {
+        errorCode.suggestedAction
     }
 
     /// Creates an ``OctomilError`` from an ``ErrorCode`` and a message string.
@@ -335,6 +349,30 @@ public enum OctomilError: LocalizedError, Sendable {
             return .cancelled
         case .unknown:
             return .unknown(underlying: nil)
+        case .deviceNotRegistered:
+            return .deviceNotRegistered
+        case .unsupportedModality:
+            return .invalidInput(reason: message)
+        case .contextTooLarge:
+            return .invalidInput(reason: message)
+        case .versionNotFound:
+            return .versionNotFound(modelId: "", version: message)
+        case .acceleratorUnavailable:
+            return .runtimeUnavailable(reason: message)
+        case .streamInterrupted:
+            return .inferenceFailed(reason: message)
+        case .policyDenied:
+            return .forbidden(reason: message)
+        case .cloudFallbackDisallowed:
+            return .forbidden(reason: message)
+        case .maxToolRoundsExceeded:
+            return .invalidInput(reason: message)
+        case .controlSyncFailed:
+            return .serverError(statusCode: 500, message: message)
+        case .assignmentNotFound:
+            return .modelNotFound(modelId: message)
+        case .appBackgrounded:
+            return .cancelled
         }
     }
 }
