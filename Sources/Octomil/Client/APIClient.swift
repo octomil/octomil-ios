@@ -935,23 +935,29 @@ public actor APIClient {
     /// to produce a precise error. Otherwise fall back to HTTP status mapping.
     private func mapErrorResponse(data: Data, statusCode: Int) -> OctomilError {
         let parsed = try? jsonDecoder.decode(APIErrorResponse.self, from: data)
-        let message = parsed?.detail ?? String(data: data, encoding: .utf8) ?? "Unknown error"
+        let message = parsed?.displayMessage ?? String(data: data, encoding: .utf8) ?? "Unknown error"
 
         // Prefer the contract error code when present.
         if let codeString = parsed?.code, let errorCode = ErrorCode(rawValue: codeString) {
             return OctomilError.from(errorCode: errorCode, message: message)
         }
 
-        // Fall back to HTTP status code mapping.
+        // Fall back to HTTP status code mapping when `code` is absent.
         switch statusCode {
+        case 400:
+            return .invalidInput(reason: message)
         case 401:
-            return .invalidAPIKey
-        case 403:
             return .authenticationFailed(reason: message)
+        case 403:
+            return .forbidden(reason: message)
         case 404:
-            return .modelNotFound(modelId: message)
+            // 404 is ambiguous without a code — only model endpoints guarantee model_not_found.
+            // Default to unknown for safety; callers on model paths can refine.
+            return .serverError(statusCode: 404, message: message)
         case 429:
             return .rateLimited(retryAfter: nil)
+        case 500...599:
+            return .serverError(statusCode: statusCode, message: message)
         default:
             return .serverError(statusCode: statusCode, message: message)
         }
@@ -959,7 +965,7 @@ public actor APIClient {
 
     private func parseErrorMessage(from data: Data) -> String? {
         if let errorResponse = try? jsonDecoder.decode(APIErrorResponse.self, from: data) {
-            return errorResponse.detail
+            return errorResponse.displayMessage
         }
         return String(data: data, encoding: .utf8)
     }
