@@ -853,6 +853,25 @@ public struct SecAggUnmaskResponse: Codable, Sendable {
 public struct APIErrorResponse: Codable, Sendable {
     /// Error detail message.
     public let detail: String
+    /// Canonical error code from the contract (e.g. "model_not_found").
+    public let code: String?
+    /// Error category from the contract taxonomy.
+    public let category: String?
+    /// Whether this error is retryable per the contract spec.
+    public let retryable: Bool?
+    /// Suggested remediation action.
+    public let suggestedAction: String?
+    /// Whether this error is eligible for cloud fallback.
+    public let fallbackEligible: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case detail
+        case code
+        case category
+        case retryable
+        case suggestedAction = "suggested_action"
+        case fallbackEligible = "fallback_eligible"
+    }
 }
 
 // MARK: - Round Management
