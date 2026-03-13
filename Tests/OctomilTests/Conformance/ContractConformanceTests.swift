@@ -11,28 +11,45 @@ final class ContractConformanceTests: XCTestCase {
 
     // MARK: - ErrorCode Enum Completeness
 
-    /// All 19 error codes defined in enums/error_code.yaml MUST exist
+    /// All 36 canonical error codes from the contract MUST exist
     /// in the generated ErrorCode enum.
     func testAllContractErrorCodesExist() {
         let expected: [String] = [
-            "network_unavailable",
-            "request_timeout",
-            "server_error",
             "invalid_api_key",
             "authentication_failed",
             "forbidden",
+            "device_not_registered",
+            "token_expired",
+            "device_revoked",
+            "network_unavailable",
+            "request_timeout",
+            "server_error",
+            "rate_limited",
+            "invalid_input",
+            "unsupported_modality",
+            "context_too_large",
             "model_not_found",
             "model_disabled",
+            "version_not_found",
             "download_failed",
             "checksum_mismatch",
             "insufficient_storage",
+            "insufficient_memory",
             "runtime_unavailable",
+            "accelerator_unavailable",
             "model_load_failed",
             "inference_failed",
-            "insufficient_memory",
-            "rate_limited",
-            "invalid_input",
+            "stream_interrupted",
+            "policy_denied",
+            "cloud_fallback_disallowed",
+            "max_tool_rounds_exceeded",
+            "training_failed",
+            "training_not_supported",
+            "weight_upload_failed",
+            "control_sync_failed",
+            "assignment_not_found",
             "cancelled",
+            "app_backgrounded",
             "unknown",
         ]
 
@@ -44,11 +61,18 @@ final class ContractConformanceTests: XCTestCase {
         }
         // Verify count matches — guards against extra values that diverge from contract.
         let allCases: [ErrorCode] = [
-            .networkUnavailable, .requestTimeout, .serverError, .invalidApiKey,
-            .authenticationFailed, .forbidden, .modelNotFound, .modelDisabled,
-            .downloadFailed, .checksumMismatch, .insufficientStorage,
-            .runtimeUnavailable, .modelLoadFailed, .inferenceFailed,
-            .insufficientMemory, .rateLimited, .invalidInput, .cancelled, .unknown,
+            .invalidApiKey, .authenticationFailed, .forbidden,
+            .deviceNotRegistered, .tokenExpired, .deviceRevoked,
+            .networkUnavailable, .requestTimeout, .serverError, .rateLimited,
+            .invalidInput, .unsupportedModality, .contextTooLarge,
+            .modelNotFound, .modelDisabled, .versionNotFound,
+            .downloadFailed, .checksumMismatch, .insufficientStorage, .insufficientMemory,
+            .runtimeUnavailable, .acceleratorUnavailable,
+            .modelLoadFailed, .inferenceFailed, .streamInterrupted,
+            .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .trainingFailed, .trainingNotSupported, .weightUploadFailed,
+            .controlSyncFailed, .assignmentNotFound,
+            .cancelled, .appBackgrounded, .unknown,
         ]
         XCTAssertEqual(allCases.count, expected.count, "ErrorCode case count diverges from contract")
     }
@@ -56,14 +80,29 @@ final class ContractConformanceTests: XCTestCase {
     // MARK: - ErrorCode JSON round-trip
 
     /// ErrorCode must encode to and decode from its snake_case raw value.
+    /// Tests all 36 canonical codes for full round-trip coverage.
     func testErrorCodeJSONRoundTrip() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
-        for code in [ErrorCode.networkUnavailable, .forbidden, .rateLimited, .unknown] {
+        let allCodes: [ErrorCode] = [
+            .invalidApiKey, .authenticationFailed, .forbidden,
+            .deviceNotRegistered, .tokenExpired, .deviceRevoked,
+            .networkUnavailable, .requestTimeout, .serverError, .rateLimited,
+            .invalidInput, .unsupportedModality, .contextTooLarge,
+            .modelNotFound, .modelDisabled, .versionNotFound,
+            .downloadFailed, .checksumMismatch, .insufficientStorage, .insufficientMemory,
+            .runtimeUnavailable, .acceleratorUnavailable,
+            .modelLoadFailed, .inferenceFailed, .streamInterrupted,
+            .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .trainingFailed, .trainingNotSupported, .weightUploadFailed,
+            .controlSyncFailed, .assignmentNotFound,
+            .cancelled, .appBackgrounded, .unknown,
+        ]
+
+        for code in allCodes {
             let data = try encoder.encode(code)
             let json = String(data: data, encoding: .utf8)!
-            // Raw value should be quoted snake_case string
             XCTAssertTrue(json.contains(code.rawValue), "Encoded value mismatch for \(code)")
 
             let decoded = try decoder.decode(ErrorCode.self, from: data)
@@ -127,6 +166,34 @@ final class ContractConformanceTests: XCTestCase {
         XCTAssertTrue(error.isRetryable)
     }
 
+    /// All 36 canonical codes must round-trip through OctomilError.from(errorCode:) -> .errorCode.
+    /// This does NOT require every code to be natively produced by an iOS code path —
+    /// it only verifies that the SDK can parse any code the server sends.
+    func testAllCanonicalCodesRoundTripThroughOctomilError() {
+        let allCodes: [ErrorCode] = [
+            .invalidApiKey, .authenticationFailed, .forbidden,
+            .deviceNotRegistered, .tokenExpired, .deviceRevoked,
+            .networkUnavailable, .requestTimeout, .serverError, .rateLimited,
+            .invalidInput, .unsupportedModality, .contextTooLarge,
+            .modelNotFound, .modelDisabled, .versionNotFound,
+            .downloadFailed, .checksumMismatch, .insufficientStorage, .insufficientMemory,
+            .runtimeUnavailable, .acceleratorUnavailable,
+            .modelLoadFailed, .inferenceFailed, .streamInterrupted,
+            .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .trainingFailed, .trainingNotSupported, .weightUploadFailed,
+            .controlSyncFailed, .assignmentNotFound,
+            .cancelled, .appBackgrounded, .unknown,
+        ]
+
+        for code in allCodes {
+            let error = OctomilError.from(errorCode: code, message: "test message")
+            XCTAssertEqual(
+                error.errorCode, code,
+                "Round-trip failed: ErrorCode.\(code.rawValue) -> OctomilError -> errorCode = .\(error.errorCode.rawValue)"
+            )
+        }
+    }
+
     /// Contract fixture: errors/unknown_error_fallback.json
     /// Unrecognized error codes MUST map to ErrorCode.unknown.
     func testUnknownErrorFallback() {
@@ -177,6 +244,18 @@ final class ContractConformanceTests: XCTestCase {
             .insufficientMemory(reason: "test"),
             .rateLimited(retryAfter: "30s"),
             .invalidInput(reason: "test"),
+            .unsupportedModality(reason: "test"),
+            .contextTooLarge(reason: "test"),
+            .acceleratorUnavailable(reason: "test"),
+            .streamInterrupted(reason: "test"),
+            .policyDenied(reason: "test"),
+            .cloudFallbackDisallowed(reason: "test"),
+            .maxToolRoundsExceeded(reason: "test"),
+            .controlSyncFailed(reason: "test"),
+            .assignmentNotFound(reason: "test"),
+            .tokenExpired,
+            .deviceRevoked,
+            .appBackgrounded,
             .unknown(underlying: nil),
             .cancelled,
         ]
@@ -194,24 +273,41 @@ final class ContractConformanceTests: XCTestCase {
     /// Validate retryable flags match the contract YAML exactly.
     func testRetryableFlagsMatchContract() {
         let retryableExpected: [(ErrorCode, Bool)] = [
-            (.networkUnavailable, true),
-            (.requestTimeout, true),
-            (.serverError, true),
             (.invalidApiKey, false),
             (.authenticationFailed, false),
             (.forbidden, false),
+            (.deviceNotRegistered, false),
+            (.tokenExpired, false),
+            (.deviceRevoked, false),
+            (.networkUnavailable, true),
+            (.requestTimeout, true),
+            (.serverError, true),
+            (.rateLimited, true),
+            (.invalidInput, false),
+            (.unsupportedModality, false),
+            (.contextTooLarge, false),
             (.modelNotFound, false),
             (.modelDisabled, false),
+            (.versionNotFound, false),
             (.downloadFailed, true),
             (.checksumMismatch, true),
             (.insufficientStorage, false),
+            (.insufficientMemory, false),
             (.runtimeUnavailable, false),
+            (.acceleratorUnavailable, false),
             (.modelLoadFailed, true),
             (.inferenceFailed, true),
-            (.insufficientMemory, false),
-            (.rateLimited, true),
-            (.invalidInput, false),
+            (.streamInterrupted, true),
+            (.policyDenied, false),
+            (.cloudFallbackDisallowed, false),
+            (.maxToolRoundsExceeded, false),
+            (.trainingFailed, true),
+            (.trainingNotSupported, false),
+            (.weightUploadFailed, true),
+            (.controlSyncFailed, true),
+            (.assignmentNotFound, false),
             (.cancelled, false),
+            (.appBackgrounded, true),
             (.unknown, false),
         ]
 

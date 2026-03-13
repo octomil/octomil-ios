@@ -850,9 +850,43 @@ public struct SecAggUnmaskResponse: Codable, Sendable {
 // MARK: - Error Response
 
 /// Error response from the server.
+///
+/// Wire shape: `{"code": "...", "message": "...", "details": {...}, "request_id": "..."}`.
+/// Legacy servers may send `detail` instead of `message` (FastAPI convention).
+/// `retryable` and `category` are optional derived fields the server may include.
+/// Product metadata like `suggested_action` and `fallback_eligible` are NOT on the
+/// wire — SDKs derive them locally from the contract classification table.
 public struct APIErrorResponse: Codable, Sendable {
-    /// Error detail message.
-    public let detail: String
+    /// Error message (new wire format).
+    public let message: String?
+    /// Legacy error detail message (FastAPI format).
+    public let detail: String?
+    /// Canonical error code from the contract (e.g. "model_not_found").
+    public let code: String?
+    /// Optional structured error details.
+    public let details: [String: AnyCodable]?
+    /// Server-assigned request identifier for tracing.
+    public let requestId: String?
+    /// Whether this error is retryable (optional, server-derived from contract).
+    public let retryable: Bool?
+    /// Error category (optional, server-derived from contract).
+    public let category: String?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case detail
+        case code
+        case details
+        case requestId = "request_id"
+        case retryable
+        case category
+    }
+
+    /// Returns the best available human-readable error message.
+    /// Prefers `message` (new format) over `detail` (legacy FastAPI format).
+    public var displayMessage: String {
+        message ?? detail ?? "Unknown error"
+    }
 }
 
 // MARK: - Round Management

@@ -104,6 +104,49 @@ public enum OctomilError: LocalizedError, Sendable {
     /// Bad input data (malformed, wrong type, out of range).
     case invalidInput(reason: String)
 
+    // MARK: - Input / Context Errors
+
+    /// Input modality not supported by the model.
+    case unsupportedModality(reason: String)
+
+    /// Input context exceeds the model's maximum.
+    case contextTooLarge(reason: String)
+
+    // MARK: - Runtime / Accelerator Errors
+
+    /// Required hardware accelerator is unavailable.
+    case acceleratorUnavailable(reason: String)
+
+    /// Streaming connection was interrupted mid-response.
+    case streamInterrupted(reason: String)
+
+    // MARK: - Policy Errors
+
+    /// Operation denied by an organization policy.
+    case policyDenied(reason: String)
+
+    /// Cloud fallback is disallowed by policy.
+    case cloudFallbackDisallowed(reason: String)
+
+    /// Maximum tool rounds exceeded for this request.
+    case maxToolRoundsExceeded(reason: String)
+
+    // MARK: - Control Plane Errors
+
+    /// Control plane sync failed.
+    case controlSyncFailed(reason: String)
+
+    /// Assignment not found for the requested resource.
+    case assignmentNotFound(reason: String)
+
+    // MARK: - Auth Lifecycle Errors
+
+    /// Access token has expired and must be refreshed or reissued.
+    case tokenExpired
+
+    /// Device registration has been revoked by an administrator.
+    case deviceRevoked
+
     // MARK: - General Errors
 
     /// An unexpected error occurred.
@@ -111,6 +154,9 @@ public enum OctomilError: LocalizedError, Sendable {
 
     /// Operation was cancelled.
     case cancelled
+
+    /// App was backgrounded during an active operation.
+    case appBackgrounded
 
     // MARK: - LocalizedError
 
@@ -177,6 +223,28 @@ public enum OctomilError: LocalizedError, Sendable {
             return "Rate limited. Try again later."
         case .invalidInput(let reason):
             return "Invalid input: \(reason)"
+        case .unsupportedModality(let reason):
+            return "Unsupported modality: \(reason)"
+        case .contextTooLarge(let reason):
+            return "Context too large: \(reason)"
+        case .acceleratorUnavailable(let reason):
+            return "Accelerator unavailable: \(reason)"
+        case .streamInterrupted(let reason):
+            return "Stream interrupted: \(reason)"
+        case .policyDenied(let reason):
+            return "Policy denied: \(reason)"
+        case .cloudFallbackDisallowed(let reason):
+            return "Cloud fallback disallowed: \(reason)"
+        case .maxToolRoundsExceeded(let reason):
+            return "Max tool rounds exceeded: \(reason)"
+        case .controlSyncFailed(let reason):
+            return "Control sync failed: \(reason)"
+        case .assignmentNotFound(let reason):
+            return "Assignment not found: \(reason)"
+        case .tokenExpired:
+            return "Access token has expired. Refresh or reissue the token."
+        case .deviceRevoked:
+            return "Device registration has been revoked by an administrator."
         case .unknown(let underlying):
             if let error = underlying {
                 return "An unexpected error occurred: \(error.localizedDescription)"
@@ -184,6 +252,8 @@ public enum OctomilError: LocalizedError, Sendable {
             return "An unexpected error occurred."
         case .cancelled:
             return "Operation was cancelled."
+        case .appBackgrounded:
+            return "Operation interrupted because the app was backgrounded."
         }
     }
 
@@ -217,6 +287,24 @@ public enum OctomilError: LocalizedError, Sendable {
             return "Close other apps to free memory, or use a smaller model."
         case .modelLoadFailed:
             return "Try re-downloading the model or use a different format."
+        case .tokenExpired:
+            return "Refresh or reissue the access token."
+        case .deviceRevoked:
+            return "Re-register the device with the server."
+        case .contextTooLarge:
+            return "Reduce input size or use a model with a larger context window."
+        case .acceleratorUnavailable:
+            return "Try CPU-only mode or fall back to cloud."
+        case .streamInterrupted:
+            return "Retry the request."
+        case .policyDenied:
+            return "Check your organization's policy settings."
+        case .cloudFallbackDisallowed:
+            return "Change the fallback policy or fix the local runtime issue."
+        case .controlSyncFailed:
+            return "Retry the operation."
+        case .appBackgrounded:
+            return "Bring the app to the foreground to resume."
         default:
             return nil
         }
@@ -269,11 +357,41 @@ public enum OctomilError: LocalizedError, Sendable {
             return .rateLimited
         case .invalidInput, .invalidRequest:
             return .invalidInput
+        case .unsupportedModality:
+            return .unsupportedModality
+        case .contextTooLarge:
+            return .contextTooLarge
+        case .acceleratorUnavailable:
+            return .acceleratorUnavailable
+        case .streamInterrupted:
+            return .streamInterrupted
+        case .policyDenied:
+            return .policyDenied
+        case .cloudFallbackDisallowed:
+            return .cloudFallbackDisallowed
+        case .maxToolRoundsExceeded:
+            return .maxToolRoundsExceeded
+        case .controlSyncFailed:
+            return .controlSyncFailed
+        case .assignmentNotFound:
+            return .assignmentNotFound
         case .cancelled:
             return .cancelled
-        case .unknown, .decodingError, .cacheError, .keychainError,
-             .trainingFailed, .trainingNotSupported,
-             .weightExtractionFailed, .uploadFailed:
+        case .appBackgrounded:
+            return .appBackgrounded
+        case .tokenExpired:
+            return .tokenExpired
+        case .deviceRevoked:
+            return .deviceRevoked
+        case .trainingFailed:
+            return .trainingFailed
+        case .trainingNotSupported:
+            return .trainingNotSupported
+        case .uploadFailed, .weightExtractionFailed:
+            return .weightUploadFailed
+        // SDK-specific cases with no direct contract counterpart.
+        // cacheError is too implementation-specific for a canonical code.
+        case .unknown, .decodingError, .cacheError, .keychainError:
             return .unknown
         }
     }
@@ -323,56 +441,66 @@ public enum OctomilError: LocalizedError, Sendable {
             return .authenticationFailed(reason: message)
         case .forbidden:
             return .forbidden(reason: message)
+        case .deviceNotRegistered:
+            return .deviceNotRegistered
+        case .tokenExpired:
+            return .tokenExpired
+        case .deviceRevoked:
+            return .deviceRevoked
+        case .rateLimited:
+            return .rateLimited(retryAfter: nil)
+        case .invalidInput:
+            return .invalidInput(reason: message)
+        case .unsupportedModality:
+            return .unsupportedModality(reason: message)
+        case .contextTooLarge:
+            return .contextTooLarge(reason: message)
         case .modelNotFound:
             return .modelNotFound(modelId: message)
         case .modelDisabled:
             return .modelDisabled(modelId: message)
+        case .versionNotFound:
+            return .versionNotFound(modelId: "", version: message)
         case .downloadFailed:
             return .downloadFailed(reason: message)
         case .checksumMismatch:
             return .checksumMismatch
         case .insufficientStorage:
             return .insufficientStorage
+        case .insufficientMemory:
+            return .insufficientMemory(reason: message)
         case .runtimeUnavailable:
             return .runtimeUnavailable(reason: message)
+        case .acceleratorUnavailable:
+            return .acceleratorUnavailable(reason: message)
         case .modelLoadFailed:
             return .modelLoadFailed(reason: message)
         case .inferenceFailed:
             return .inferenceFailed(reason: message)
-        case .insufficientMemory:
-            return .insufficientMemory(reason: message)
-        case .rateLimited:
-            return .rateLimited(retryAfter: nil)
-        case .invalidInput:
-            return .invalidInput(reason: message)
+        case .streamInterrupted:
+            return .streamInterrupted(reason: message)
+        case .policyDenied:
+            return .policyDenied(reason: message)
+        case .cloudFallbackDisallowed:
+            return .cloudFallbackDisallowed(reason: message)
+        case .maxToolRoundsExceeded:
+            return .maxToolRoundsExceeded(reason: message)
+        case .controlSyncFailed:
+            return .controlSyncFailed(reason: message)
+        case .assignmentNotFound:
+            return .assignmentNotFound(reason: message)
+        case .trainingFailed:
+            return .trainingFailed(reason: message)
+        case .trainingNotSupported:
+            return .trainingNotSupported
+        case .weightUploadFailed:
+            return .uploadFailed(reason: message)
         case .cancelled:
             return .cancelled
+        case .appBackgrounded:
+            return .appBackgrounded
         case .unknown:
             return .unknown(underlying: nil)
-        case .deviceNotRegistered:
-            return .deviceNotRegistered
-        case .unsupportedModality:
-            return .invalidInput(reason: message)
-        case .contextTooLarge:
-            return .invalidInput(reason: message)
-        case .versionNotFound:
-            return .versionNotFound(modelId: "", version: message)
-        case .acceleratorUnavailable:
-            return .runtimeUnavailable(reason: message)
-        case .streamInterrupted:
-            return .inferenceFailed(reason: message)
-        case .policyDenied:
-            return .forbidden(reason: message)
-        case .cloudFallbackDisallowed:
-            return .forbidden(reason: message)
-        case .maxToolRoundsExceeded:
-            return .invalidInput(reason: message)
-        case .controlSyncFailed:
-            return .serverError(statusCode: 500, message: message)
-        case .assignmentNotFound:
-            return .modelNotFound(modelId: message)
-        case .appBackgrounded:
-            return .cancelled
         }
     }
 }

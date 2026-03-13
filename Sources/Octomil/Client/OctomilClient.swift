@@ -21,8 +21,7 @@ import UIKit
 ///
 /// ```swift
 /// let client = OctomilClient(
-///     apiKey: "<your-api-key>",
-///     orgId: "org_123"
+///     auth: .orgApiKey(apiKey: "<your-api-key>", orgId: "org_123")
 /// )
 ///
 /// // Register device
@@ -159,64 +158,27 @@ public final class OctomilClient: @unchecked Sendable {
 
     // MARK: - Initialization
 
-    /// Creates a new Octomil client using an API key.
+    /// Creates a new Octomil client using an ``AuthConfig``.
     ///
-    /// This is the recommended initializer. The `apiKey` is used for all
-    /// server communication. If you are migrating from the older
-    /// ``init(deviceAccessToken:orgId:serverURL:configuration:heartbeatInterval:)``
-    /// initializer, pass the same token here.
+    /// This is the sole initializer. Pass either `.orgApiKey(...)` or
+    /// `.deviceToken(...)` to configure authentication.
     ///
-    /// - Parameters:
-    ///   - apiKey: API key for authenticating with the Octomil server.
-    ///   - orgId: Organization identifier.
-    ///   - deviceId: Optional stable device identifier (e.g., IDFV). When provided,
-    ///     this is used as the default for ``register(deviceId:appVersion:metadata:)``
-    ///     and is forwarded to the telemetry resource context.
-    ///   - serverURL: Base URL of the Octomil server.
-    ///   - configuration: SDK configuration options.
-    ///   - heartbeatInterval: Interval for automatic heartbeats (default: 5 minutes).
-    public convenience init(
-        apiKey: String,
-        orgId: String,
-        deviceId: String? = nil,
-        serverURL: URL = OctomilClient.defaultServerURL,
-        configuration: OctomilConfiguration = .standard,
-        heartbeatInterval: TimeInterval = 300
-    ) {
-        self.init(
-            deviceAccessToken: apiKey,
-            orgId: orgId,
-            deviceId: deviceId,
-            serverURL: serverURL,
-            configuration: configuration,
-            heartbeatInterval: heartbeatInterval
-        )
-    }
-
-    /// Creates a new Octomil client using a device access token.
-    ///
-    /// This initializer is retained for backward compatibility.
-    /// Prefer ``init(apiKey:orgId:deviceId:serverURL:configuration:heartbeatInterval:)``
-    /// for new integrations.
+    /// ```swift
+    /// let client = OctomilClient(
+    ///     auth: .orgApiKey(apiKey: "edg_...", orgId: "org_123")
+    /// )
+    /// ```
     ///
     /// - Parameters:
-    ///   - deviceAccessToken: Short-lived device access token from backend bootstrap flow.
-    ///   - orgId: Organization identifier.
-    ///   - deviceId: Optional stable device identifier (e.g., IDFV). When provided,
-    ///     this is used as the default for ``register(deviceId:appVersion:metadata:)``
-    ///     and is forwarded to the telemetry resource context.
-    ///   - serverURL: Base URL of the Octomil server.
+    ///   - auth: Authentication configuration.
     ///   - configuration: SDK configuration options.
     ///   - heartbeatInterval: Interval for automatic heartbeats (default: 5 minutes).
     public init(
-        deviceAccessToken: String,
-        orgId: String,
-        deviceId: String? = nil,
-        serverURL: URL = OctomilClient.defaultServerURL,
+        auth: AuthConfig,
         configuration: OctomilConfiguration = .standard,
         heartbeatInterval: TimeInterval = 300
     ) {
-        self.orgId = orgId
+        self.orgId = auth.orgId
         self.configuration = configuration
         self.heartbeatInterval = heartbeatInterval
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "OctomilClient")
@@ -224,7 +186,7 @@ public final class OctomilClient: @unchecked Sendable {
         self.secureStorage = SecureStorage()
         self.eventQueue = EventQueue.shared
         self.apiClient = APIClient(
-            serverURL: serverURL,
+            serverURL: auth.serverURL,
             configuration: configuration
         )
 
@@ -234,9 +196,10 @@ public final class OctomilClient: @unchecked Sendable {
         )
 
         // Store device token securely
-        try? secureStorage.storeDeviceToken(deviceAccessToken)
+        let token = auth.token
+        try? secureStorage.storeDeviceToken(token)
         Task {
-            await apiClient.setDeviceToken(deviceAccessToken)
+            await apiClient.setDeviceToken(token)
         }
 
         // Try to restore device token from keychain
@@ -251,11 +214,11 @@ public final class OctomilClient: @unchecked Sendable {
             self.serverDeviceId = storedId
         }
 
-        // Apply constructor-provided deviceId
-        if let deviceId {
+        // Apply constructor-provided deviceId from auth config
+        if let deviceId = auth.deviceId {
             self.clientDeviceIdentifier = deviceId
             // Forward to telemetry resource context so events carry the device ID
-            TelemetryQueue.shared?.setResourceContext(deviceId: deviceId, orgId: orgId)
+            TelemetryQueue.shared?.setResourceContext(deviceId: deviceId, orgId: auth.orgId)
         }
 
         // Set as shared instance
