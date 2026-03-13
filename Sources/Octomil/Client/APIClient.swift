@@ -834,14 +834,7 @@ public actor APIClient {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            let errorMessage = parseErrorMessage(from: data) ?? "Unknown error"
-
-            switch httpResponse.statusCode {
-            case 404:
-                throw OctomilError.serverError(statusCode: 404, message: errorMessage)
-            default:
-                throw OctomilError.serverError(statusCode: httpResponse.statusCode, message: errorMessage)
-            }
+            throw self.mapErrorResponse(data: data, statusCode: httpResponse.statusCode)
         }
 
         // Handle empty responses
@@ -889,18 +882,7 @@ public actor APIClient {
                 }
 
                 guard (200...299).contains(httpResponse.statusCode) else {
-                    let errorMessage = parseErrorMessage(from: data) ?? "Unknown error"
-
-                    switch httpResponse.statusCode {
-                    case 401:
-                        throw OctomilError.invalidAPIKey
-                    case 403:
-                        throw OctomilError.authenticationFailed(reason: errorMessage)
-                    case 404:
-                        throw OctomilError.serverError(statusCode: 404, message: errorMessage)
-                    default:
-                        throw OctomilError.serverError(statusCode: httpResponse.statusCode, message: errorMessage)
-                    }
+                    throw self.mapErrorResponse(data: data, statusCode: httpResponse.statusCode)
                 }
 
                 // Handle empty responses
@@ -945,6 +927,34 @@ public actor APIClient {
         }
 
         throw OctomilError.unknown(underlying: lastError)
+    }
+
+    /// Maps an error HTTP response to an ``OctomilError``.
+    ///
+    /// If the response body contains a contract `code` field, use ``ErrorCode``
+    /// to produce a precise error. Otherwise fall back to HTTP status mapping.
+    private func mapErrorResponse(data: Data, statusCode: Int) -> OctomilError {
+        let parsed = try? jsonDecoder.decode(APIErrorResponse.self, from: data)
+        let message = parsed?.detail ?? String(data: data, encoding: .utf8) ?? "Unknown error"
+
+        // Prefer the contract error code when present.
+        if let codeString = parsed?.code, let errorCode = ErrorCode(rawValue: codeString) {
+            return OctomilError.from(errorCode: errorCode, message: message)
+        }
+
+        // Fall back to HTTP status code mapping.
+        switch statusCode {
+        case 401:
+            return .invalidAPIKey
+        case 403:
+            return .authenticationFailed(reason: message)
+        case 404:
+            return .modelNotFound(modelId: message)
+        case 429:
+            return .rateLimited(retryAfter: nil)
+        default:
+            return .serverError(statusCode: statusCode, message: message)
+        }
     }
 
     private func parseErrorMessage(from data: Data) -> String? {
