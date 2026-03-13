@@ -383,6 +383,10 @@ public enum OctomilError: LocalizedError, Sendable {
             return .tokenExpired
         case .deviceRevoked:
             return .deviceRevoked
+        // TEMP: These SDK-specific cases have no direct contract counterpart.
+        // trainingFailed != inference_failed, trainingNotSupported != unsupported_modality,
+        // uploadFailed != download_failed, cacheError has no contract code.
+        // Mapped to .unknown until contract revision adds dedicated codes.
         case .unknown, .decodingError, .cacheError, .keychainError,
              .trainingFailed, .trainingNotSupported,
              .weightExtractionFailed, .uploadFailed:

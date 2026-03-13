@@ -11,7 +11,7 @@ final class ContractConformanceTests: XCTestCase {
 
     // MARK: - ErrorCode Enum Completeness
 
-    /// All 19 error codes defined in enums/error_code.yaml MUST exist
+    /// All 33 canonical error codes from the contract MUST exist
     /// in the generated ErrorCode enum.
     func testAllContractErrorCodesExist() {
         let expected: [String] = [
@@ -76,14 +76,28 @@ final class ContractConformanceTests: XCTestCase {
     // MARK: - ErrorCode JSON round-trip
 
     /// ErrorCode must encode to and decode from its snake_case raw value.
+    /// Tests all 33 canonical codes for full round-trip coverage.
     func testErrorCodeJSONRoundTrip() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
-        for code in [ErrorCode.networkUnavailable, .forbidden, .rateLimited, .unknown] {
+        let allCodes: [ErrorCode] = [
+            .invalidApiKey, .authenticationFailed, .forbidden,
+            .deviceNotRegistered, .tokenExpired, .deviceRevoked,
+            .networkUnavailable, .requestTimeout, .serverError, .rateLimited,
+            .invalidInput, .unsupportedModality, .contextTooLarge,
+            .modelNotFound, .modelDisabled, .versionNotFound,
+            .downloadFailed, .checksumMismatch, .insufficientStorage, .insufficientMemory,
+            .runtimeUnavailable, .acceleratorUnavailable,
+            .modelLoadFailed, .inferenceFailed, .streamInterrupted,
+            .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .controlSyncFailed, .assignmentNotFound,
+            .cancelled, .appBackgrounded, .unknown,
+        ]
+
+        for code in allCodes {
             let data = try encoder.encode(code)
             let json = String(data: data, encoding: .utf8)!
-            // Raw value should be quoted snake_case string
             XCTAssertTrue(json.contains(code.rawValue), "Encoded value mismatch for \(code)")
 
             let decoded = try decoder.decode(ErrorCode.self, from: data)
@@ -145,6 +159,33 @@ final class ContractConformanceTests: XCTestCase {
         let error = OctomilError.from(errorCode: errorCode, message: fixture.message)
         XCTAssertEqual(error.errorCode, .rateLimited)
         XCTAssertTrue(error.isRetryable)
+    }
+
+    /// All 33 canonical codes must round-trip through OctomilError.from(errorCode:) -> .errorCode.
+    /// This does NOT require every code to be natively produced by an iOS code path —
+    /// it only verifies that the SDK can parse any code the server sends.
+    func testAllCanonicalCodesRoundTripThroughOctomilError() {
+        let allCodes: [ErrorCode] = [
+            .invalidApiKey, .authenticationFailed, .forbidden,
+            .deviceNotRegistered, .tokenExpired, .deviceRevoked,
+            .networkUnavailable, .requestTimeout, .serverError, .rateLimited,
+            .invalidInput, .unsupportedModality, .contextTooLarge,
+            .modelNotFound, .modelDisabled, .versionNotFound,
+            .downloadFailed, .checksumMismatch, .insufficientStorage, .insufficientMemory,
+            .runtimeUnavailable, .acceleratorUnavailable,
+            .modelLoadFailed, .inferenceFailed, .streamInterrupted,
+            .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .controlSyncFailed, .assignmentNotFound,
+            .cancelled, .appBackgrounded, .unknown,
+        ]
+
+        for code in allCodes {
+            let error = OctomilError.from(errorCode: code, message: "test message")
+            XCTAssertEqual(
+                error.errorCode, code,
+                "Round-trip failed: ErrorCode.\(code.rawValue) -> OctomilError -> errorCode = .\(error.errorCode.rawValue)"
+            )
+        }
     }
 
     /// Contract fixture: errors/unknown_error_fallback.json
