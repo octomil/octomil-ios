@@ -1,11 +1,16 @@
-// Auto-generated from octomil-contracts. Do not edit.
+// Auto-generated OTLP resource attribute keys.
 
-/// OTLP resource attribute keys used for telemetry.
 public enum OTLPResourceAttribute {
     public static let serviceName = "service.name"
     public static let serviceVersion = "service.version"
-    public static let octomilSdk = "octomil.sdk"
-    public static let octomilOrgId = "octomil.org_id"
-    public static let octomilDeviceId = "octomil.device_id"
-    public static let osType = "os.type"
+    public static let telemetrySdkName = "telemetry.sdk.name"
+    public static let telemetrySdkLanguage = "telemetry.sdk.language"
+    public static let telemetrySdkVersion = "telemetry.sdk.version"
+    public static let octomilOrgId = "octomil.org.id"
+    public static let octomilDeviceId = "octomil.device.id"
+    public static let octomilPlatform = "octomil.platform"
+    public static let octomilSdkSurface = "octomil.sdk.surface"
+    public static let octomilDeviceClass = "octomil.device.class"
+    public static let octomilAvailableRuntimes = "octomil.available_runtimes"
+    public static let octomilAccelerators = "octomil.accelerators"
 }
