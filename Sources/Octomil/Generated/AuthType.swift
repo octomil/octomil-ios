@@ -4,4 +4,5 @@ public enum AuthType: String, Codable, Sendable {
     case orgApiKey = "org_api_key"
     case deviceToken = "device_token"
     case serviceToken = "service_token"
+    case publishableKey = "publishable_key"
 }

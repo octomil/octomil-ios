@@ -10,6 +10,7 @@ public enum OTLPResourceAttribute {
     public static let octomilDeviceId = "octomil.device.id"
     public static let octomilPlatform = "octomil.platform"
     public static let octomilSdkSurface = "octomil.sdk.surface"
+    public static let octomilInstallId = "octomil.install.id"
     public static let octomilDeviceClass = "octomil.device.class"
     public static let octomilAvailableRuntimes = "octomil.available_runtimes"
     public static let octomilAccelerators = "octomil.accelerators"

@@ -37,6 +37,7 @@ public enum SpanEventName {
     public static let desiredStateFetched = "desired_state_fetched"
     public static let observedStateReported = "observed_state_reported"
     public static let stateDriftDetected = "state_drift_detected"
+    public static let deviceRegistered = "device.registered"
 
     public static let eventParentSpan: [String: String] = [
         "first_token": "octomil.response",
@@ -75,5 +76,6 @@ public enum SpanEventName {
         "desired_state_fetched": "octomil.device.sync",
         "observed_state_reported": "octomil.device.sync",
         "state_drift_detected": "octomil.device.sync",
+        "device.registered": "octomil.control.register",
     ]
 }
