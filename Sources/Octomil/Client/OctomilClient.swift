@@ -90,6 +90,25 @@ public final class OctomilClient: @unchecked Sendable {
     /// Response API for on-device LLM inference.
     public private(set) lazy var responses = OctomilResponses()
 
+    /// Model catalog service, initialized via ``configure(manifest:)``.
+    public private(set) var catalog: ModelCatalogService?
+
+    /// Readiness manager for managed model downloads.
+    public private(set) var readiness: ModelReadinessManager?
+
+    /// Maps capability to model ID, populated by ``configure(manifest:)``.
+    private var capabilityModelIds: [ModelCapability: String] = [:]
+
+    /// Audio API namespace (transcription, etc.).
+    public private(set) lazy var audio = OctomilAudio(runtimeResolver: { [weak self] ref in
+        self?.resolveRuntime(ref)
+    })
+
+    /// Text prediction API namespace.
+    public private(set) lazy var text = OctomilText(runtimeResolver: { [weak self] ref in
+        self?.resolveRuntime(ref)
+    })
+
     /// Control-plane sync for configuration, assignments, and rollouts.
     public private(set) lazy var control = ControlSync(apiClient: apiClient)
 
@@ -262,6 +281,74 @@ public final class OctomilClient: @unchecked Sendable {
 
         if configuration.enableLogging {
             logger.info("OctomilClient closed")
+        }
+    }
+
+    // MARK: - Manifest Configuration
+
+    /// Configure the SDK with an app manifest.
+    ///
+    /// Bootstraps all declared models: bundled models are loaded from the
+    /// app bundle, managed models are queued for download, and cloud models
+    /// are registered immediately.
+    ///
+    /// ```swift
+    /// let manifest = AppManifest(models: [
+    ///     AppModelEntry(id: "phi-4-mini", capability: .chat, delivery: .managed),
+    ///     AppModelEntry(id: "whisper-base", capability: .transcription, delivery: .bundled,
+    ///                   bundledPath: "Models/whisper-base.mlmodelc"),
+    /// ])
+    /// try await client.configure(manifest: manifest)
+    /// ```
+    ///
+    /// - Parameter manifest: The app manifest.
+    public func configure(manifest: AppManifest) async throws {
+        let readinessManager = ModelReadinessManager(modelManager: modelManager)
+        self.readiness = readinessManager
+
+        let serverURLString = OctomilClient.defaultServerURL.absoluteString
+        let apiKey = self.orgId
+        let catalogService = ModelCatalogService(
+            manifest: manifest,
+            modelManager: modelManager,
+            readiness: readinessManager,
+            cloudRuntimeFactory: { modelId in
+                CloudModelRuntime(
+                    serverURL: serverURLString,
+                    apiKey: apiKey,
+                    model: modelId
+                )
+            }
+        )
+        self.catalog = catalogService
+
+        // Build capability → model ID mapping for synchronous lookups
+        for entry in manifest.models {
+            capabilityModelIds[entry.capability] = entry.id
+        }
+
+        try await catalogService.bootstrap()
+
+        if configuration.enableLogging {
+            logger.info("Manifest configured with \(manifest.models.count) model(s)")
+        }
+    }
+
+    /// Resolve a ``ModelRuntime`` from a ``ModelRef``.
+    ///
+    /// Resolution order:
+    /// 1. Capability → model ID via manifest mapping → ModelRuntimeRegistry
+    /// 2. Model ID → ModelRuntimeRegistry
+    private func resolveRuntime(_ ref: ModelRef) -> ModelRuntime? {
+        switch ref {
+        case .id(let modelId):
+            return ModelRuntimeRegistry.shared.resolve(modelId: modelId)
+        case .capability(let cap):
+            // Look up the model ID mapped for this capability in the manifest
+            if let modelId = capabilityModelIds[cap] {
+                return ModelRuntimeRegistry.shared.resolve(modelId: modelId)
+            }
+            return nil
         }
     }
 
