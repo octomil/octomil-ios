@@ -237,13 +237,14 @@ public final class TelemetryQueue: @unchecked Sendable {
     /// - Parameters:
     ///   - latencyMs: Inference latency in milliseconds.
     ///   - format: The model format used for inference (resolved at runtime, not hardcoded).
-    public func reportInferenceCompleted(latencyMs: Double, format: String = "auto") {
+    public func reportInferenceCompleted(latencyMs: Double, format: String = "auto", locality: String = "on_device") {
         let event = TelemetryEvent(
             name: "inference.completed",
             attributes: [
                 "model.id": .string(modelId),
                 "inference.duration_ms": .double(latencyMs),
                 "model.format": .string(format),
+                SpanAttribute.locality: .string(locality),
             ]
         )
         recordEvent(event)
@@ -276,12 +277,13 @@ public final class TelemetryQueue: @unchecked Sendable {
     /// - Parameters:
     ///   - modelId: The model identifier for the inference.
     ///   - format: The model format used for inference (resolved at runtime, not hardcoded).
-    public func reportInferenceStarted(modelId: String, format: String = "auto") {
+    public func reportInferenceStarted(modelId: String, format: String = "auto", locality: String = "on_device") {
         let event = TelemetryEvent(
             name: "inference.started",
             attributes: [
                 "model.id": .string(modelId),
                 "model.format": .string(format),
+                SpanAttribute.locality: .string(locality),
             ]
         )
         recordEvent(event)

@@ -94,8 +94,22 @@ public actor ControlSync {
     /// ```swift
     /// client.control.heartbeat()
     /// ```
+    /// Monotonically increasing heartbeat sequence number for telemetry.
+    private var heartbeatSequence = 0
+
     nonisolated public func heartbeat() {
-        Task.detached { [apiClient, logger] in
+        Task.detached { [apiClient, logger, weak self] in
+            // Emit octomil.control.heartbeat telemetry span
+            if let self = self {
+                let seq = await self.nextHeartbeatSequence()
+                TelemetryQueue.shared?.recordEvent(TelemetryEvent(
+                    name: SpanName.octomilControlHeartbeat,
+                    attributes: [
+                        SpanAttribute.heartbeatSequence: .int(seq),
+                    ]
+                ))
+            }
+
             do {
                 let _: HeartbeatAck = try await apiClient.postJSON(
                     path: "api/v1/control/heartbeat",
@@ -107,6 +121,13 @@ public actor ControlSync {
                 logger.debug("Control heartbeat failed (non-fatal): \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Returns the next heartbeat sequence number (actor-isolated).
+    private func nextHeartbeatSequence() -> Int {
+        let seq = heartbeatSequence
+        heartbeatSequence += 1
+        return seq
     }
 }
 
