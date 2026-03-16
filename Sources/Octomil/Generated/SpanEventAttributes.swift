@@ -18,6 +18,8 @@ public enum SpanEventAttribute {
     public static let octomilChecksumAlgorithm = "octomil.checksum.algorithm"
     public static let octomilRuntimeExecutor = "octomil.runtime.executor"
     public static let octomilRuntimeInitMs = "octomil.runtime.init_ms"
+    public static let octomilToolExtractionStrategy = "octomil.tool.extraction_strategy"
+    public static let octomilToolRawTextPreview = "octomil.tool.raw_text_preview"
 
     public static let eventRequiredAttributes: [String: [String]] = [
         "first_token": ["octomil.ttft_ms"],
@@ -29,5 +31,7 @@ public enum SpanEventAttribute {
         "download_completed": ["octomil.download.duration_ms", "octomil.download.bytes"],
         "checksum_verified": [],
         "runtime_initialized": ["octomil.runtime.executor", "octomil.runtime.init_ms"],
+        "tool_call_parse_succeeded": ["octomil.tool.name", "octomil.tool.extraction_strategy"],
+        "tool_call_parse_failed": ["octomil.tool.extraction_strategy"],
     ]
 }
