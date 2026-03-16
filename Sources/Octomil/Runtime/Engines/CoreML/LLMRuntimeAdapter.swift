@@ -11,22 +11,29 @@ public final class LLMRuntimeAdapter: ModelRuntime, @unchecked Sendable {
 
     public init(
         llmRuntime: LLMRuntime,
-        capabilities: RuntimeCapabilities = RuntimeCapabilities(
-            supportsToolCalls: false,
-            supportsStructuredOutput: false,
-            supportsMultimodalInput: false,
-            supportsStreaming: true
-        )
+        capabilities: RuntimeCapabilities? = nil
     ) {
         self.llmRuntime = llmRuntime
-        self.capabilities = capabilities
+        self.capabilities = capabilities ?? RuntimeCapabilities(
+            supportsToolCalls: false,
+            supportsStructuredOutput: false,
+            supportsMultimodalInput: llmRuntime.supportsVision() || llmRuntime.supportsAudio(),
+            supportsStreaming: true
+        )
     }
 
     public func run(request: RuntimeRequest) async throws -> RuntimeResponse {
         let config = makeConfig(from: request)
         var tokens: [String] = []
 
-        for try await token in llmRuntime.generate(prompt: request.prompt, config: config) {
+        let stream: AsyncThrowingStream<String, Error>
+        if let mediaData = request.mediaData {
+            stream = llmRuntime.generateMultimodal(text: request.prompt, mediaData: mediaData, config: config)
+        } else {
+            stream = llmRuntime.generate(prompt: request.prompt, config: config)
+        }
+
+        for try await token in stream {
             tokens.append(token)
         }
 
@@ -49,7 +56,13 @@ public final class LLMRuntimeAdapter: ModelRuntime, @unchecked Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    for try await token in runtime.generate(prompt: request.prompt, config: config) {
+                    let tokenStream: AsyncThrowingStream<String, Error>
+                    if let mediaData = request.mediaData {
+                        tokenStream = runtime.generateMultimodal(text: request.prompt, mediaData: mediaData, config: config)
+                    } else {
+                        tokenStream = runtime.generate(prompt: request.prompt, config: config)
+                    }
+                    for try await token in tokenStream {
                         continuation.yield(RuntimeChunk(text: token))
                     }
                     continuation.finish()
