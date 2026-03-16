@@ -567,7 +567,8 @@ public final class TelemetryQueue: @unchecked Sendable {
 
         return OtlpResource.fromSDK(
             deviceId: devId,
-            orgId: org
+            orgId: org,
+            installId: InstallId.getOrCreate()
         )
     }
 
