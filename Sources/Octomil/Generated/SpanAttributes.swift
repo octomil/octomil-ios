@@ -12,6 +12,7 @@ public enum SpanAttribute {
     public static let deviceClass = "device.class"
     public static let fallbackReason = "fallback.reason"
     public static let errorType = "error.type"
+    public static let toolCallTier = "tool.call_tier"
     public static let modelSourceFormat = "model.source_format"
     public static let modelSizeBytes = "model.size_bytes"
     public static let toolName = "tool.name"

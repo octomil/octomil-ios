@@ -1,0 +1,26 @@
+// Auto-generated from octomil-contracts. Do not edit.
+
+public enum FederatedParticipationState: String, Codable, Sendable {
+    case notEnrolled = "not_enrolled"
+    case offered = "offered"
+    case accepted = "accepted"
+    case planFetching = "plan_fetching"
+    case planReady = "plan_ready"
+    case waitingForWindow = "waiting_for_window"
+    case localTraining = "local_training"
+    case localEval = "local_eval"
+    case updatePreparing = "update_preparing"
+    case clipping = "clipping"
+    case noising = "noising"
+    case encrypting = "encrypting"
+    case uploading = "uploading"
+    case uploaded = "uploaded"
+    case acknowledged = "acknowledged"
+    case completed = "completed"
+    case declinedPolicy = "declined_policy"
+    case failedRetryable = "failed_retryable"
+    case abortedPolicy = "aborted_policy"
+    case rejectedLocal = "rejected_local"
+    case uploadDeferred = "upload_deferred"
+    case expiredRound = "expired_round"
+}
