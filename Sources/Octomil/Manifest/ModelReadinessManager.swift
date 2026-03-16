@@ -35,7 +35,7 @@ public actor ModelReadinessManager {
     private var readyURLs: [String: URL] = [:]
 
     /// Active download tasks.
-    private var activeTasks: [String: Task<Void, Never>] = []
+    private var activeTasks: [String: Task<Void, Never>] = [:]
 
     /// Continuation for the download updates stream.
     private var updateContinuation: AsyncStream<DownloadUpdate>.Continuation?
@@ -115,11 +115,7 @@ public actor ModelReadinessManager {
             do {
                 guard let self = self else { return }
                 let model = try await self.modelManager.downloadModel(modelId: modelId, version: "latest")
-                guard let url = model.compiledModelURL else {
-                    let error = OctomilError.downloadFailed(reason: "No compiled URL for \(modelId)")
-                    await self.markFailed(modelId: modelId, error: error)
-                    return
-                }
+                let url = model.compiledModelURL
                 await self.markReady(modelId: modelId, url: url)
             } catch {
                 await self?.markFailed(modelId: modelId, error: error)

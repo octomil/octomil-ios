@@ -119,13 +119,12 @@ public actor ModelCatalogService {
     private func bootstrapManaged(_ entry: AppModelEntry) async {
         // Check if a cached version is already available
         if let cached = modelManager.getCachedModel(modelId: entry.id) {
-            if let compiledURL = cached.compiledModelURL {
-                let runtime = LocalFileModelRuntime(modelId: entry.id, fileURL: compiledURL)
-                capabilityRuntimes[entry.capability] = runtime
-                runtimeRegistry.register(family: entry.id) { _ in runtime }
-                logger.info("Managed model '\(entry.id)' loaded from cache")
-                return
-            }
+            let compiledURL = cached.compiledModelURL
+            let runtime = LocalFileModelRuntime(modelId: entry.id, fileURL: compiledURL)
+            capabilityRuntimes[entry.capability] = runtime
+            runtimeRegistry.register(family: entry.id) { _ in runtime }
+            logger.info("Managed model '\(entry.id)' loaded from cache")
+            return
         }
 
         // Queue download — readiness manager will notify when complete

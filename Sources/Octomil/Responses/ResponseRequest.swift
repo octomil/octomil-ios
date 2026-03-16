@@ -20,6 +20,14 @@ public struct ResponseRequest: Sendable {
     /// Chain a conversation by referencing a prior response ID.
     public let previousResponseId: String?
 
+    /// Model reference for capability-based routing.
+    /// When set, the ``OctomilResponses`` layer resolves via ``ModelCatalogService``
+    /// before falling back to ``model`` as a plain ID.
+    public let modelRef: ModelRef?
+
+    /// Per-request routing policy override.
+    public let routing: AppRoutingPolicy?
+
     public init(
         model: String,
         input: [InputItem],
@@ -33,7 +41,9 @@ public struct ResponseRequest: Sendable {
         stop: [String]? = nil,
         metadata: [String: String]? = nil,
         instructions: String? = nil,
-        previousResponseId: String? = nil
+        previousResponseId: String? = nil,
+        modelRef: ModelRef? = nil,
+        routing: AppRoutingPolicy? = nil
     ) {
         self.model = model
         self.input = input
@@ -48,6 +58,8 @@ public struct ResponseRequest: Sendable {
         self.metadata = metadata
         self.instructions = instructions
         self.previousResponseId = previousResponseId
+        self.modelRef = modelRef
+        self.routing = routing
     }
 
     /// Convenience: create a request with a plain string input.
@@ -64,7 +76,9 @@ public struct ResponseRequest: Sendable {
         stop: [String]? = nil,
         metadata: [String: String]? = nil,
         instructions: String? = nil,
-        previousResponseId: String? = nil
+        previousResponseId: String? = nil,
+        modelRef: ModelRef? = nil,
+        routing: AppRoutingPolicy? = nil
     ) {
         self.init(
             model: model,
@@ -79,7 +93,50 @@ public struct ResponseRequest: Sendable {
             stop: stop,
             metadata: metadata,
             instructions: instructions,
-            previousResponseId: previousResponseId
+            previousResponseId: previousResponseId,
+            modelRef: modelRef,
+            routing: routing
+        )
+    }
+
+    /// Convenience: create a request using a ``ModelRef`` instead of a plain model ID.
+    public init(
+        modelRef: ModelRef,
+        input: [InputItem],
+        tools: [Tool] = [],
+        toolChoice: ToolChoice = .auto,
+        responseFormat: ResponseFormat = .text,
+        stream: Bool = false,
+        maxOutputTokens: Int? = nil,
+        temperature: Double? = nil,
+        topP: Double? = nil,
+        stop: [String]? = nil,
+        metadata: [String: String]? = nil,
+        instructions: String? = nil,
+        previousResponseId: String? = nil,
+        routing: AppRoutingPolicy? = nil
+    ) {
+        let modelString: String
+        switch modelRef {
+        case .id(let id): modelString = id
+        case .capability(let cap): modelString = cap.rawValue
+        }
+        self.init(
+            model: modelString,
+            input: input,
+            tools: tools,
+            toolChoice: toolChoice,
+            responseFormat: responseFormat,
+            stream: stream,
+            maxOutputTokens: maxOutputTokens,
+            temperature: temperature,
+            topP: topP,
+            stop: stop,
+            metadata: metadata,
+            instructions: instructions,
+            previousResponseId: previousResponseId,
+            modelRef: modelRef,
+            routing: routing
         )
     }
 }

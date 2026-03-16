@@ -329,6 +329,11 @@ public final class OctomilClient: @unchecked Sendable {
 
         try await catalogService.bootstrap()
 
+        // Wire catalog resolution into the Response API
+        responses.catalogResolver = { [weak self] ref in
+            self?.resolveRuntime(ref)
+        }
+
         if configuration.enableLogging {
             logger.info("Manifest configured with \(manifest.models.count) model(s)")
         }

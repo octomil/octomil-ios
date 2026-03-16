@@ -14,6 +14,10 @@ import Foundation
 public final class OctomilResponses: @unchecked Sendable {
     private let runtimeResolver: ((String) -> ModelRuntime?)?
 
+    /// Optional resolver for ``ModelRef``-based lookups (capability routing).
+    /// Set by ``OctomilClient`` when a manifest is configured.
+    public var catalogResolver: ((ModelRef) -> ModelRuntime?)?
+
     /// Cache of recent responses for conversation chaining via `previousResponseId`.
     private var responseCache: [String: Response] = [:]
     private let cacheLock = NSLock()
@@ -26,7 +30,7 @@ public final class OctomilResponses: @unchecked Sendable {
     // MARK: - Non-streaming
 
     public func create(_ request: ResponseRequest) async throws -> Response {
-        let runtime = try resolveRuntime(request.model)
+        let runtime = try resolveRuntimeForRequest(request)
         let effectiveRequest = buildEffectiveRequest(request)
         let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
         let runtimeResponse = try await runtime.run(request: runtimeRequest)
@@ -38,20 +42,15 @@ public final class OctomilResponses: @unchecked Sendable {
     // MARK: - Streaming
 
     public func stream(_ request: ResponseRequest) -> AsyncThrowingStream<ResponseStreamEvent, Error> {
-        let runtimeResolver = self.runtimeResolver
         let effectiveRequest = buildEffectiveRequest(request)
 
         return AsyncThrowingStream { [weak self] continuation in
             let task = Task {
                 do {
-                    let runtime: ModelRuntime
-                    if let resolver = runtimeResolver, let resolved = resolver(effectiveRequest.model) {
-                        runtime = resolved
-                    } else if let resolved = ModelRuntimeRegistry.shared.resolve(modelId: effectiveRequest.model) {
-                        runtime = resolved
-                    } else {
+                    guard let self = self else {
                         throw OctomilResponsesError.noRuntime(effectiveRequest.model)
                     }
+                    let runtime = try self.resolveRuntimeForRequest(request)
 
                     let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
                     let responseId = Self.generateId()
@@ -117,7 +116,7 @@ public final class OctomilResponses: @unchecked Sendable {
                         finishReason: finishReason,
                         usage: usage
                     )
-                    self?.cacheResponse(response)
+                    self.cacheResponse(response)
                     continuation.yield(.done(response))
                     continuation.finish()
                 } catch {
@@ -131,14 +130,29 @@ public final class OctomilResponses: @unchecked Sendable {
 
     // MARK: - Private
 
-    private func resolveRuntime(_ model: String) throws -> ModelRuntime {
-        if let resolver = runtimeResolver, let runtime = resolver(model) {
+    /// Resolve a runtime for a request, checking catalog first.
+    ///
+    /// Resolution order:
+    /// 1. ``modelRef`` via ``catalogResolver`` (capability or ID routing)
+    /// 2. Custom ``runtimeResolver`` closure (model ID)
+    /// 3. ``ModelRuntimeRegistry`` (model ID)
+    private func resolveRuntimeForRequest(_ request: ResponseRequest) throws -> ModelRuntime {
+        // 1. Try catalog resolver with modelRef
+        if let ref = request.modelRef, let resolver = catalogResolver, let runtime = resolver(ref) {
             return runtime
         }
-        if let runtime = ModelRuntimeRegistry.shared.resolve(modelId: model) {
+
+        // 2. Try custom runtime resolver
+        if let resolver = runtimeResolver, let runtime = resolver(request.model) {
             return runtime
         }
-        throw OctomilResponsesError.noRuntime(model)
+
+        // 3. Fall back to global registry
+        if let runtime = ModelRuntimeRegistry.shared.resolve(modelId: request.model) {
+            return runtime
+        }
+
+        throw OctomilResponsesError.noRuntime(request.model)
     }
 
     /// Build effective request by prepending instructions and previous response context.
@@ -188,7 +202,9 @@ public final class OctomilResponses: @unchecked Sendable {
             stop: request.stop,
             metadata: request.metadata,
             instructions: nil,
-            previousResponseId: nil
+            previousResponseId: nil,
+            modelRef: request.modelRef,
+            routing: request.routing
         )
     }
 

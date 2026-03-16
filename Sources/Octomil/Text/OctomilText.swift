@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ```swift
 /// let suggestions = try await client.text.predict(
-///     model: .capability(.textPrediction),
+///     model: .capability(.textCompletion),
 ///     prefix: "The quick brown"
 /// )
 /// ```
@@ -26,7 +26,7 @@ public final class OctomilText: @unchecked Sendable {
     ///   - maxSuggestions: Maximum suggestions to return (default: 3).
     /// - Returns: An array of completion suggestions.
     public func predict(
-        model: ModelRef = .capability(.textPrediction),
+        model: ModelRef = .capability(.textCompletion),
         prefix: String,
         maxSuggestions: Int = 3
     ) async throws -> [String] {
@@ -56,7 +56,7 @@ public final class OctomilText: @unchecked Sendable {
     ///
     /// - Parameter capability: The model capability to use.
     /// - Returns: A ``OctomilPredictor`` instance.
-    public func predictor(capability: ModelCapability = .textPrediction) -> OctomilPredictor? {
+    public func predictor(capability: ModelCapability = .textCompletion) -> OctomilPredictor? {
         guard let runtime = runtimeResolver(.capability(capability)) else { return nil }
         return OctomilPredictor(runtime: runtime, modelId: capability.rawValue)
     }

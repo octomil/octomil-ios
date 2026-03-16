@@ -6,7 +6,7 @@ import Foundation
 /// ``OctomilText/predictor(model:)``.
 ///
 /// ```swift
-/// let predictor = client.text.predictor(capability: .textPrediction)
+/// let predictor = client.text.predictor(capability: .textCompletion)
 /// let suggestions = try await predictor.predict(prefix: "The quick brown")
 /// ```
 public final class OctomilPredictor: @unchecked Sendable {

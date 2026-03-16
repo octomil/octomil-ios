@@ -4,13 +4,15 @@ import Foundation
 
 /// Declares the capability a model provides.
 ///
-/// SDK-local enum — will be replaced by codegen from octomil-contracts.
+/// SDK-local enum — will be replaced by codegen from octomil-contracts
+/// once naming conflicts with existing types are resolved.
 public enum ModelCapability: String, Sendable, Codable, Hashable {
     case chat
     case transcription
-    case textPrediction = "text_prediction"
-    case imageClassification = "image_classification"
+    case textCompletion = "text_completion"
+    case keyboardPrediction = "keyboard_prediction"
     case embedding
+    case classification
 }
 
 // MARK: - DeliveryMode
@@ -31,7 +33,8 @@ public enum DeliveryMode: String, Sendable, Codable {
 
 /// Per-model routing policy governing local vs. cloud inference.
 ///
-/// SDK-local enum — will be replaced by codegen from octomil-contracts.
+/// Named `AppRoutingPolicy` to avoid collision with the existing
+/// `RoutingPolicy` struct in `QueryRoutingClient`.
 public enum AppRoutingPolicy: String, Sendable, Codable {
     case localOnly = "local_only"
     case localFirst = "local_first"
