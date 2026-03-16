@@ -3,32 +3,72 @@ import XCTest
 
 final class AuthConfigTests: XCTestCase {
 
-    // MARK: - publishableKey
+    // MARK: - publishableKey (basic)
 
     func testPublishableKeyToken() {
-        let auth = AuthConfig.publishableKey("oct_pub_test123")
-        XCTAssertEqual(auth.token, "oct_pub_test123")
+        let auth = AuthConfig.publishableKey("oct_pub_test_123")
+        XCTAssertEqual(auth.token, "oct_pub_test_123")
     }
 
     func testPublishableKeyOrgIdIsEmpty() {
-        let auth = AuthConfig.publishableKey("oct_pub_test123")
+        let auth = AuthConfig.publishableKey("oct_pub_test_123")
         XCTAssertEqual(auth.orgId, "")
     }
 
     func testPublishableKeyServerURL() {
-        let auth = AuthConfig.publishableKey("oct_pub_test123")
+        let auth = AuthConfig.publishableKey("oct_pub_test_123")
         XCTAssertEqual(auth.serverURL, OctomilClient.defaultServerURL)
     }
 
     func testPublishableKeyCustomServerURL() {
         let custom = URL(string: "https://custom.example.com")!
-        let auth = AuthConfig.publishableKey("oct_pub_test123", serverURL: custom)
+        let auth = AuthConfig.publishableKey("oct_pub_test_123", serverURL: custom)
         XCTAssertEqual(auth.serverURL, custom)
     }
 
     func testPublishableKeyDeviceIdIsNil() {
-        let auth = AuthConfig.publishableKey("oct_pub_test123")
+        let auth = AuthConfig.publishableKey("oct_pub_test_123")
         XCTAssertNil(auth.deviceId)
+    }
+
+    // MARK: - validatedPublishableKey
+
+    func testValidatedPublishableKeyAcceptsTestPrefix() {
+        let auth = AuthConfig.validatedPublishableKey("oct_pub_test_abc")
+        XCTAssertEqual(auth.token, "oct_pub_test_abc")
+    }
+
+    func testValidatedPublishableKeyAcceptsLivePrefix() {
+        let auth = AuthConfig.validatedPublishableKey("oct_pub_live_abc")
+        XCTAssertEqual(auth.token, "oct_pub_live_abc")
+    }
+
+    func testValidatedPublishableKeyCustomServerURL() {
+        let custom = URL(string: "https://custom.example.com")!
+        let auth = AuthConfig.validatedPublishableKey("oct_pub_test_abc", serverURL: custom)
+        XCTAssertEqual(auth.serverURL, custom)
+    }
+
+    // MARK: - publishableKeyEnvironment
+
+    func testPublishableKeyEnvironmentTest() {
+        let auth = AuthConfig.publishableKey("oct_pub_test_abc")
+        XCTAssertEqual(auth.publishableKeyEnvironment, "test")
+    }
+
+    func testPublishableKeyEnvironmentLive() {
+        let auth = AuthConfig.publishableKey("oct_pub_live_abc")
+        XCTAssertEqual(auth.publishableKeyEnvironment, "live")
+    }
+
+    func testPublishableKeyEnvironmentNilForBarePrefix() {
+        let auth = AuthConfig.publishableKey("oct_pub_abc")
+        XCTAssertNil(auth.publishableKeyEnvironment)
+    }
+
+    func testPublishableKeyEnvironmentNilForOtherAuthTypes() {
+        let auth = AuthConfig.anonymous(appId: "com.example.app")
+        XCTAssertNil(auth.publishableKeyEnvironment)
     }
 
     // MARK: - deviceToken (bootstrapToken)
