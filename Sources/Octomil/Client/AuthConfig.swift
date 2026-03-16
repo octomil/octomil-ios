@@ -17,6 +17,12 @@ import Foundation
 ///     bootstrapToken: "jwt..."
 /// )
 ///
+/// // Publishable key (for mobile/edge SDKs — safe to embed in client code)
+/// let auth: AuthConfig = .publishableKey("oct_pub_...")
+///
+/// // Anonymous (local-only, no server registration)
+/// let auth: AuthConfig = .anonymous(appId: "com.example.myapp")
+///
 /// let client = OctomilClient(auth: auth)
 /// ```
 public enum AuthConfig: Sendable {
@@ -46,6 +52,24 @@ public enum AuthConfig: Sendable {
         serverURL: URL = OctomilClient.defaultServerURL
     )
 
+    /// Publishable key authentication for mobile/edge SDKs.
+    ///
+    /// Safe to embed in client code. Only `oct_pub_...` keys are accepted.
+    /// Org info is extracted server-side from the key.
+    ///
+    /// - Parameters:
+    ///   - key: Publishable key with `oct_pub_` prefix.
+    ///   - serverURL: Base URL of the Octomil server.
+    case publishableKey(
+        _ key: String,
+        serverURL: URL = OctomilClient.defaultServerURL
+    )
+
+    /// Anonymous / local-only mode. No server registration will occur.
+    ///
+    /// - Parameter appId: Application bundle identifier.
+    case anonymous(appId: String)
+
     /// The bearer token used for API requests.
     var token: String {
         switch self {
@@ -53,6 +77,10 @@ public enum AuthConfig: Sendable {
             return apiKey
         case .deviceToken(_, let bootstrapToken, _):
             return bootstrapToken
+        case .publishableKey(let key, _):
+            return key
+        case .anonymous:
+            return ""
         }
     }
 
@@ -62,6 +90,11 @@ public enum AuthConfig: Sendable {
         case .orgApiKey(_, let orgId, _):
             return orgId
         case .deviceToken:
+            return ""
+        case .publishableKey:
+            // Org info is extracted server-side from the publishable key
+            return ""
+        case .anonymous:
             return ""
         }
     }
@@ -73,6 +106,10 @@ public enum AuthConfig: Sendable {
             return serverURL
         case .deviceToken(_, _, let serverURL):
             return serverURL
+        case .publishableKey(_, let serverURL):
+            return serverURL
+        case .anonymous:
+            return OctomilClient.defaultServerURL
         }
     }
 
@@ -83,6 +120,10 @@ public enum AuthConfig: Sendable {
             return nil
         case .deviceToken(let deviceId, _, _):
             return deviceId
+        case .publishableKey:
+            return nil
+        case .anonymous:
+            return nil
         }
     }
 
@@ -92,6 +133,10 @@ public enum AuthConfig: Sendable {
         case .orgApiKey:
             return .orgApiKey
         case .deviceToken:
+            return .deviceToken
+        case .publishableKey:
+            return .serviceToken
+        case .anonymous:
             return .deviceToken
         }
     }
