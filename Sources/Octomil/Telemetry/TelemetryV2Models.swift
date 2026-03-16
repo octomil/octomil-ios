@@ -46,15 +46,20 @@ public struct OtlpResource: Codable, Sendable {
         sdkVersion: String = OctomilVersion.current,
         deviceId: String,
         platform: String = "ios",
-        orgId: String
+        orgId: String,
+        installId: String? = nil
     ) -> OtlpResource {
-        OtlpResource(attributes: [
+        var attrs = [
             KeyValue(key: "sdk", value: .stringValue(sdk)),
             KeyValue(key: "sdk.version", value: .stringValue(sdkVersion)),
             KeyValue(key: "device.id", value: .stringValue(deviceId)),
             KeyValue(key: "platform", value: .stringValue(platform)),
             KeyValue(key: "org.id", value: .stringValue(orgId)),
-        ])
+        ]
+        if let installId {
+            attrs.append(KeyValue(key: OTLPResourceAttribute.octomilInstallId, value: .stringValue(installId)))
+        }
+        return OtlpResource(attributes: attrs)
     }
 }
 
@@ -361,7 +366,8 @@ public struct TelemetryResource: Codable, Sendable {
             sdkVersion: sdkVersion,
             deviceId: deviceId,
             platform: platform,
-            orgId: orgId
+            orgId: orgId,
+            installId: InstallId.getOrCreate()
         )
     }
 }
