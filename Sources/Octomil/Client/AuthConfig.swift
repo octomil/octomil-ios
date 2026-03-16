@@ -54,11 +54,12 @@ public enum AuthConfig: Sendable {
 
     /// Publishable key authentication for mobile/edge SDKs.
     ///
-    /// Safe to embed in client code. Only `oct_pub_...` keys are accepted.
+    /// Safe to embed in client code. Only environment-scoped keys are accepted:
+    /// `oct_pub_test_...` or `oct_pub_live_...`.
     /// Org info is extracted server-side from the key.
     ///
     /// - Parameters:
-    ///   - key: Publishable key with `oct_pub_` prefix.
+    ///   - key: Publishable key with `oct_pub_test_` or `oct_pub_live_` prefix.
     ///   - serverURL: Base URL of the Octomil server.
     case publishableKey(
         _ key: String,
@@ -69,6 +70,40 @@ public enum AuthConfig: Sendable {
     ///
     /// - Parameter appId: Application bundle identifier.
     case anonymous(appId: String)
+
+    // MARK: - Validated Factory
+
+    /// Creates a publishable key config with prefix validation.
+    ///
+    /// - Precondition: `key` must start with `oct_pub_test_` or `oct_pub_live_`.
+    /// - Parameters:
+    ///   - key: Environment-scoped publishable key.
+    ///   - serverURL: Base URL of the Octomil server.
+    /// - Returns: A validated `.publishableKey` config.
+    public static func validatedPublishableKey(
+        _ key: String,
+        serverURL: URL = OctomilClient.defaultServerURL
+    ) -> AuthConfig {
+        precondition(
+            key.hasPrefix("oct_pub_test_") || key.hasPrefix("oct_pub_live_"),
+            "Publishable key must start with 'oct_pub_test_' or 'oct_pub_live_'"
+        )
+        return .publishableKey(key, serverURL: serverURL)
+    }
+
+    /// The environment scope extracted from the publishable key prefix: `"test"` or `"live"`.
+    ///
+    /// Returns `nil` for non-publishable-key auth configs or keys without the expected prefix.
+    var publishableKeyEnvironment: String? {
+        switch self {
+        case .publishableKey(let key, _):
+            if key.hasPrefix("oct_pub_test_") { return "test" }
+            if key.hasPrefix("oct_pub_live_") { return "live" }
+            return nil
+        default:
+            return nil
+        }
+    }
 
     /// The bearer token used for API requests.
     var token: String {
