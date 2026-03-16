@@ -4,42 +4,25 @@ import Foundation
 
 /// Declares the capability a model provides.
 ///
-/// SDK-local enum — will be replaced by codegen from octomil-contracts
-/// once naming conflicts with existing types are resolved.
-public enum ModelCapability: String, Sendable, Codable, Hashable {
-    case chat
-    case transcription
-    case textCompletion = "text_completion"
-    case keyboardPrediction = "keyboard_prediction"
-    case embedding
-    case classification
-}
+/// Typealiased from the contract-generated `ContractModelCapability` so the
+/// rest of the SDK continues to use the stable `ModelCapability` name.
+public typealias ModelCapability = ContractModelCapability
 
 // MARK: - DeliveryMode
 
 /// How the model artifact is delivered to the device.
 ///
-/// SDK-local enum — will be replaced by codegen from octomil-contracts.
-public enum DeliveryMode: String, Sendable, Codable {
-    /// Model is bundled inside the app binary.
-    case bundled
-    /// Model is downloaded and managed by the SDK at runtime.
-    case managed
-    /// Model runs entirely in the cloud.
-    case cloud
-}
+/// Typealiased from the contract-generated `ContractDeliveryMode`.
+public typealias DeliveryMode = ContractDeliveryMode
 
 // MARK: - AppRoutingPolicy
 
 /// Per-model routing policy governing local vs. cloud inference.
 ///
+/// Typealiased from the contract-generated `ContractRoutingPolicy`.
 /// Named `AppRoutingPolicy` to avoid collision with the existing
 /// `RoutingPolicy` struct in `QueryRoutingClient`.
-public enum AppRoutingPolicy: String, Sendable, Codable {
-    case localOnly = "local_only"
-    case localFirst = "local_first"
-    case cloudOnly = "cloud_only"
-}
+public typealias AppRoutingPolicy = ContractRoutingPolicy
 
 // MARK: - ModelRef
 
