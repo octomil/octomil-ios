@@ -203,6 +203,14 @@ public final class TelemetryQueue: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Sets the resource context from a ``DeviceContext`` actor.
+    public func setResourceContext(from context: DeviceContext) async {
+        let resource = await context.telemetryResource()
+        let devId = resource["device.id"] ?? "unknown"
+        let org = resource["org.id"] ?? "unknown"
+        setResourceContext(deviceId: devId, orgId: org)
+    }
+
     // MARK: - Public API (v2 TelemetryEvent)
 
     /// Records a v2 telemetry event.

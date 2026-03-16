@@ -9,6 +9,8 @@ public struct RuntimeRequest: Sendable {
     public let stop: [String]?
     public let toolDefinitions: [RuntimeToolDef]?
     public let jsonSchema: String?
+    public let mediaData: Data?
+    public let mediaType: String?
 
     public init(
         prompt: String,
@@ -17,7 +19,9 @@ public struct RuntimeRequest: Sendable {
         topP: Double = 1.0,
         stop: [String]? = nil,
         toolDefinitions: [RuntimeToolDef]? = nil,
-        jsonSchema: String? = nil
+        jsonSchema: String? = nil,
+        mediaData: Data? = nil,
+        mediaType: String? = nil
     ) {
         self.prompt = prompt
         self.maxTokens = maxTokens
@@ -26,6 +30,8 @@ public struct RuntimeRequest: Sendable {
         self.stop = stop
         self.toolDefinitions = toolDefinitions
         self.jsonSchema = jsonSchema
+        self.mediaData = mediaData
+        self.mediaType = mediaType
     }
 }
 
