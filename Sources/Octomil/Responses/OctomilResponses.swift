@@ -18,13 +18,17 @@ public final class OctomilResponses: @unchecked Sendable {
     /// Set by ``OctomilClient`` when a manifest is configured.
     public var catalogResolver: ((ModelRef) -> ModelRuntime?)?
 
+    /// Device context for cloud fallback auth. Local inference never reads this.
+    public var deviceContext: DeviceContext?
+
     /// Cache of recent responses for conversation chaining via `previousResponseId`.
     private var responseCache: [String: Response] = [:]
     private let cacheLock = NSLock()
     private let maxCacheSize = 100
 
-    public init(runtimeResolver: ((String) -> ModelRuntime?)? = nil) {
+    public init(runtimeResolver: ((String) -> ModelRuntime?)? = nil, deviceContext: DeviceContext? = nil) {
         self.runtimeResolver = runtimeResolver
+        self.deviceContext = deviceContext
     }
 
     // MARK: - Non-streaming
@@ -298,6 +302,7 @@ public final class OctomilResponses: @unchecked Sendable {
 public enum OctomilResponsesError: Error, LocalizedError {
     case noRuntime(String)
     case runtimeNotFound(String)
+    case authRequired(String)
 
     public var errorDescription: String? {
         switch self {
@@ -305,6 +310,8 @@ public enum OctomilResponsesError: Error, LocalizedError {
             return "No ModelRuntime registered for model: \(model)"
         case .runtimeNotFound(let message):
             return message
+        case .authRequired(let model):
+            return "Cloud fallback for model '\(model)' requires authentication, but no valid token is available"
         }
     }
 }

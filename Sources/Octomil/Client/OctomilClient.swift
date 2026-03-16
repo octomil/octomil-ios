@@ -385,6 +385,9 @@ public final class OctomilClient: @unchecked Sendable {
         )
         self.deviceContext = context
 
+        // Wire DeviceContext into Response API for cloud fallback auth
+        responses.deviceContext = context
+
         // 3. Set up telemetry resource context
         TelemetryQueue.shared?.setResourceContext(
             deviceId: installationId,
