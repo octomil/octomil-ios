@@ -1,5 +1,6 @@
 // swiftlint:disable file_length
 import Foundation
+import CommonCrypto
 import CryptoKit
 import os.log
 
@@ -676,9 +677,9 @@ public actor SecureAggregationClient {
 
     /// SHA-256 using CommonCrypto (available on all Apple platforms without imports).
     private func sha256(_ data: Data) -> Data {
-        var hash = [UInt8](repeating: 0, count: 32)
+        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
         _ = data.withUnsafeBytes { buffer in
-            ccSha256(buffer.baseAddress, CC_LONG(data.count), &hash)
+            CC_SHA256(buffer.baseAddress, CC_LONG(data.count), &hash)
         }
         return Data(hash)
     }
@@ -1238,12 +1239,4 @@ public actor SecAggPlusClient {
 // Forward-declare CommonCrypto SHA256 symbols so we avoid `import CommonCrypto`
 // which is unavailable in Swift Package Manager targets by default.
 // These are available via the Darwin module on all Apple platforms.
-@_silgen_name("CC_SHA256")
-private func ccSha256(
-    _ data: UnsafeRawPointer?,
-    _ len: UInt32,
-    _ md: UnsafeMutablePointer<UInt8>?
-) -> UnsafeMutablePointer<UInt8>?
-
-// swiftlint:disable:next type_name
-private typealias CC_LONG = UInt32
+// CC_SHA256 and CC_LONG are now used directly via `import CommonCrypto`
