@@ -110,22 +110,22 @@ let package = Package(
         .binaryTarget(
             name: "llama",
             url: "https://github.com/octomil/octomil-ios/releases/download/engines-v1/llama.xcframework.zip",
-            checksum: "PLACEHOLDER_LLAMA_CHECKSUM"
+            checksum: "7454c373c8de8d485f697cac8a280738a5670d97f9923f08fa03cde877267032"
         ),
         .binaryTarget(
             name: "sherpa_onnx",
             url: "https://github.com/octomil/octomil-ios/releases/download/engines-v1/sherpa_onnx.xcframework.zip",
-            checksum: "PLACEHOLDER_SHERPA_CHECKSUM"
+            checksum: "0e38c2bde75435b884e4d8e573a71ac3e40cebc857e795c152ee858da3838174"
         ),
         .binaryTarget(
             name: "onnxruntime",
             url: "https://github.com/octomil/octomil-ios/releases/download/engines-v1/onnxruntime.xcframework.zip",
-            checksum: "PLACEHOLDER_ONNXRUNTIME_CHECKSUM"
+            checksum: "dde8b761b4afbc78c9b7092504db9d313360c8a10fa59d38f71f247676fef263"
         ),
         .binaryTarget(
             name: "whisper",
             url: "https://github.com/octomil/octomil-ios/releases/download/engines-v1/whisper.xcframework.zip",
-            checksum: "PLACEHOLDER_WHISPER_CHECKSUM"
+            checksum: "324d8143ae9ebf7d313288079bb67c7ba86088ef262c3a2340529b84a3278aaa"
         ),
 
         // ──────────────────────────────────────────────
