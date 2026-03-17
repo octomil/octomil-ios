@@ -1,0 +1,15 @@
+import Foundation
+import Octomil
+
+extension EngineRegistry {
+
+    /// Register the llama.cpp engine for text generation.
+    ///
+    /// After calling this method, `resolve(modality: .text, engine: .llamaCpp, ...)`
+    /// produces a ``LlamaCppEngine`` that loads the GGUF model from the given URL.
+    public func registerLlamaCpp() {
+        register(modality: .text, engine: .llamaCpp) { url in
+            LlamaCppEngine(modelPath: url)
+        }
+    }
+}

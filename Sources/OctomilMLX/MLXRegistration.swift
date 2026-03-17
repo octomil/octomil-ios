@@ -65,4 +65,12 @@ extension EngineRegistry {
             LazyMLXEngine(loader: loader, modelURL: url)
         }
     }
+
+    /// Register the MLX LLM engine with a default ``MLXModelLoader``.
+    ///
+    /// Convenience for auto-registration — creates a loader with default
+    /// GPU cache limits. Used by the ``OctomilClient`` bootstrap.
+    public func registerMLX() {
+        registerMLX(loader: MLXModelLoader())
+    }
 }
