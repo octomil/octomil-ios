@@ -202,30 +202,4 @@ public struct DesiredStateResponse: Decodable, Sendable {
     }
 }
 
-/// Type-erased Codable wrapper for mixed-type JSON values.
-public struct AnyCodable: Codable, Sendable {
-    public let value: Any
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if let dict = try? container.decode([String: AnyCodable].self) {
-            value = dict.mapValues { $0.value }
-        } else if let arr = try? container.decode([AnyCodable].self) {
-            value = arr.map { $0.value }
-        } else if let str = try? container.decode(String.self) {
-            value = str
-        } else if let num = try? container.decode(Double.self) {
-            value = num
-        } else if let bool = try? container.decode(Bool.self) {
-            value = bool
-        } else {
-            value = NSNull()
-        }
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        // Encoding not needed for response-only types; satisfy Codable requirement.
-        var container = encoder.singleValueContainer()
-        try container.encodeNil()
-    }
-}
+// AnyCodable is defined in Chat/Tool.swift
