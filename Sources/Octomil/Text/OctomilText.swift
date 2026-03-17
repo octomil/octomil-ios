@@ -3,22 +3,32 @@ import Foundation
 /// Namespace for text prediction APIs on ``OctomilClient``.
 ///
 /// ```swift
-/// let suggestions = try await client.text.predict(
-///     model: .capability(.textCompletion),
-///     prefix: "The quick brown"
+/// // Contract-aligned API:
+/// let result = try await client.text.predictions.create(
+///     input: "The quick brown",
+///     n: 5
 /// )
+///
+/// // Convenience shorthand (backward compatible):
+/// let suggestions = try await client.text.predict(prefix: "The quick brown")
 /// ```
 public final class OctomilText: @unchecked Sendable {
 
     private let runtimeResolver: (ModelRef) -> ModelRuntime?
 
+    /// Text predictions sub-namespace — matches `text.predictions.create` contract.
+    public let predictions: TextPredictions
+
     init(runtimeResolver: @escaping (ModelRef) -> ModelRuntime?) {
         self.runtimeResolver = runtimeResolver
+        self.predictions = TextPredictions(runtimeResolver: runtimeResolver)
     }
 
-    // MARK: - One-shot Prediction
+    // MARK: - Convenience (backward compatible)
 
     /// Generate text completion suggestions for the given prefix.
+    ///
+    /// This is a convenience wrapper around ``TextPredictions/create(model:input:n:)``.
     ///
     /// - Parameters:
     ///   - model: Model reference — by ID or capability.
@@ -30,24 +40,12 @@ public final class OctomilText: @unchecked Sendable {
         prefix: String,
         maxSuggestions: Int = 3
     ) async throws -> [String] {
-        guard let runtime = runtimeResolver(model) else {
-            throw OctomilError.runtimeUnavailable(reason: "No runtime for text prediction model")
-        }
-
-        let request = RuntimeRequest(
-            prompt: prefix,
-            maxTokens: 32,
-            temperature: 0.3
+        let result = try await predictions.create(
+            model: model,
+            input: prefix,
+            n: maxSuggestions
         )
-
-        let response = try await runtime.run(request: request)
-
-        let raw = response.text
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        return Array(raw.prefix(maxSuggestions))
+        return result.predictions.map(\.text)
     }
 
     // MARK: - Stateful Predictor

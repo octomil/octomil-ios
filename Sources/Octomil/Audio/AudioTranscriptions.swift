@@ -1,5 +1,20 @@
 import Foundation
 
+/// Format of the transcription output.
+public enum TranscriptionResponseFormat: String, Sendable {
+    case text
+    case json
+    case verboseJson = "verbose_json"
+    case srt
+    case vtt
+}
+
+/// Granularity level for timestamp generation.
+public enum TimestampGranularity: String, Sendable {
+    case word
+    case segment
+}
+
 /// Audio transcription API.
 ///
 /// Wraps the underlying audio runtime to provide speech-to-text.
@@ -27,11 +42,16 @@ public final class AudioTranscriptions: @unchecked Sendable {
     ///   - model: Model reference — by ID or capability.
     ///   - audio: Raw audio data (WAV, MP3, etc.).
     ///   - language: Optional language hint (BCP 47 code, e.g. "en").
+    ///   - responseFormat: Format of the transcription output (default: `.text`).
+    ///   - timestampGranularities: Granularities of timestamps to include.
+    ///     Requires `responseFormat` of `.verboseJson` to populate segments.
     /// - Returns: The transcription result.
     public func create(
         model: ModelRef = .capability(.transcription),
         audio: Data,
-        language: String? = nil
+        language: String? = nil,
+        responseFormat: TranscriptionResponseFormat = .text,
+        timestampGranularities: [TimestampGranularity]? = nil
     ) async throws -> TranscriptionResult {
         guard let runtime = runtimeResolver(model) else {
             throw OctomilError.runtimeUnavailable(reason: "No runtime for transcription model")
