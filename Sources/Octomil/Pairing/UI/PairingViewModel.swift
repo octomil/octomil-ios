@@ -192,7 +192,7 @@ public final class PairingViewModel: ObservableObject {
 
             // Step 6: Show success
             let sizeString = DownloadProgressInfo.formatBytes(Int64(deployment.sizeBytes ?? 0))
-            let runtime = runtimeDisplayName(deployment.format)
+            let runtime = deployment.executor ?? deployment.format
 
             state = .success(model: PairedModelInfo(
                 name: deployment.modelName,
