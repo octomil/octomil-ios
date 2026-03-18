@@ -7,13 +7,32 @@ import Foundation
 /// registry decides based on modality and file extension.
 ///
 /// Used by ``ModelCatalogService`` for both bundled and downloaded models.
+///
+/// ## Multimodal / multi-resource support
+///
+/// When ``resourceBindings`` is provided, the runtime exposes resolved
+/// file URLs for each resource kind (weights, projector, processor, etc.).
+/// Engine factories can use ``resolvedResource(_:)`` to look up sidecar
+/// files without relying on filename heuristics.
 public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     /// Catalog model identifier.
     public let modelId: String
 
-    /// File URL of the model artifact on disk.
+    /// File URL of the primary model artifact on disk.
+    ///
+    /// For single-resource packages this is the only artifact. For
+    /// multi-resource packages this should point to the primary weights file.
     public let fileURL: URL
+
+    /// Explicit resource bindings mapping ``ArtifactResourceKind`` to file URLs.
+    ///
+    /// When non-empty, engines should use ``resolvedResource(_:)`` to locate
+    /// files instead of pattern-matching against the filesystem.
+    public let resourceBindings: [ArtifactResourceKind: URL]
+
+    /// Executor-specific configuration hints.
+    public let engineConfig: EngineConfig?
 
     /// Resolved engine, lazily created on first use.
     private var engine: StreamingInferenceEngine?
@@ -21,6 +40,8 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public let capabilities: RuntimeCapabilities
 
+    /// Creates a runtime for a single-resource model.
+    ///
     /// - Parameters:
     ///   - modelId: Catalog model identifier.
     ///   - fileURL: File URL pointing to the local model artifact.
@@ -32,7 +53,58 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     ) {
         self.modelId = modelId
         self.fileURL = fileURL
+        self.resourceBindings = [:]
+        self.engineConfig = nil
         self.capabilities = capabilities
+    }
+
+    /// Creates a runtime for a multi-resource model with explicit resource bindings.
+    ///
+    /// - Parameters:
+    ///   - modelId: Catalog model identifier.
+    ///   - fileURL: File URL pointing to the primary model artifact (weights).
+    ///   - resourceBindings: Mapping of resource kinds to their resolved file URLs.
+    ///   - engineConfig: Optional executor-specific configuration hints.
+    ///   - capabilities: Override capabilities.
+    public init(
+        modelId: String,
+        fileURL: URL,
+        resourceBindings: [ArtifactResourceKind: URL],
+        engineConfig: EngineConfig? = nil,
+        capabilities: RuntimeCapabilities = RuntimeCapabilities(supportsStreaming: true)
+    ) {
+        self.modelId = modelId
+        self.fileURL = fileURL
+        self.resourceBindings = resourceBindings
+        self.engineConfig = engineConfig
+        self.capabilities = capabilities
+    }
+
+    // MARK: - Resource Resolution
+
+    /// Resolve the file URL for a specific resource kind.
+    ///
+    /// Checks ``resourceBindings`` first; falls back to ``fileURL`` for `.weights`.
+    ///
+    /// - Parameter kind: The resource kind to resolve.
+    /// - Returns: The file URL, or nil if no binding exists for this kind.
+    public func resolvedResource(_ kind: ArtifactResourceKind) -> URL? {
+        if let url = resourceBindings[kind] {
+            return url
+        }
+        // Fall back: for .weights, the primary fileURL is the implicit binding
+        if kind == .weights {
+            return fileURL
+        }
+        return nil
+    }
+
+    /// Whether this runtime has a projector resource available.
+    ///
+    /// This is a convenience check for multimodal (vision-language) models
+    /// that require a separate projector file for image encoding.
+    public var hasProjector: Bool {
+        resourceBindings[.projector] != nil
     }
 
     // MARK: - ModelRuntime
