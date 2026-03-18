@@ -130,6 +130,8 @@ build_sherpa_framework() {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleExecutable</key>
+  <string>sherpa_onnx</string>
   <key>CFBundleIdentifier</key>
   <string>ai.octomil.sherpa-onnx</string>
   <key>CFBundleName</key>
@@ -245,6 +247,8 @@ build_onnx_framework() {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleExecutable</key>
+  <string>onnxruntime</string>
   <key>CFBundleIdentifier</key>
   <string>ai.octomil.onnxruntime</string>
   <key>CFBundleName</key>
