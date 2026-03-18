@@ -35,6 +35,9 @@ public struct PairingScreen: View {
     /// Callback invoked when the user taps "Open Dashboard".
     private let onOpenDashboard: (() -> Void)?
 
+    /// Callback invoked when the user dismisses the pairing screen (e.g. after an error).
+    private let onDismiss: (() -> Void)?
+
     /// Tracks whether the built-in TryItOutScreen is being presented.
     @State private var showTryItOut = false
     @State private var tryItOutModelInfo: PairedModelInfo?
@@ -46,15 +49,18 @@ public struct PairingScreen: View {
     ///   - onTryModel: Called when the user taps "Try it out". When nil,
     ///     the built-in ``TryItOutScreen`` is presented automatically.
     ///   - onOpenDashboard: Called when the user taps "Open Dashboard".
+    ///   - onDismiss: Called when the user dismisses after an error.
     public init(
         token: String,
         host: String,
         onTryModel: ((PairedModelInfo) -> Void)? = nil,
-        onOpenDashboard: (() -> Void)? = nil
+        onOpenDashboard: (() -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: PairingViewModel(token: token, host: host))
         self.onTryModel = onTryModel
         self.onOpenDashboard = onOpenDashboard
+        self.onDismiss = onDismiss
     }
 
     public var body: some View {
@@ -312,6 +318,18 @@ public struct PairingScreen: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
             .controlSize(.large)
+
+            if let onDismiss {
+                Button {
+                    onDismiss()
+                } label: {
+                    Text("Dismiss")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 

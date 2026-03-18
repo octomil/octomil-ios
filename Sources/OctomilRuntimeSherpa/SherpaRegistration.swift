@@ -17,5 +17,13 @@ extension EngineRegistry {
         register(modality: .audio) { url in
             SherpaStreamingEngine(modelPath: url)
         }
+
+        // Register live transcriber for real-time microphone streaming
+        LiveTranscriberFactory.shared.register(engine: "sherpa") { url in
+            SherpaLiveTranscriber(modelPath: url)
+        }
+        LiveTranscriberFactory.shared.register(engine: "sherpa-onnx") { url in
+            SherpaLiveTranscriber(modelPath: url)
+        }
     }
 }
