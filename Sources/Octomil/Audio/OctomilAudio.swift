@@ -3,7 +3,7 @@ import Foundation
 /// Namespace for audio APIs on ``OctomilClient``.
 ///
 /// ```swift
-/// let result = try await client.audio.transcriptions.create(audio: audioData)
+/// let result = try await client.audio.transcriptions.create(audio: audioData, model: "whisper-small")
 /// print(result.text)
 /// ```
 public final class OctomilAudio: @unchecked Sendable {
