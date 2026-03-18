@@ -292,24 +292,20 @@ final class DeployTests: XCTestCase {
         }
     }
 
-    func testDeployAcceptsPairingCodeAndApiClient() async {
-        // Verify both pairingCode and apiClient parameters are accepted
+    func testDeployAcceptsPairingCodeAndSubmitBenchmark() async {
+        // Verify pairingCode and submitBenchmark parameters are accepted
         let tmpDir = FileManager.default.temporaryDirectory
         let fakePath = tmpDir.appendingPathComponent("test.bin")
         FileManager.default.createFile(atPath: fakePath.path, contents: Data())
         defer { try? FileManager.default.removeItem(at: fakePath) }
-
-        let apiClient = APIClient(
-            serverURL: URL(string: "https://api.test.octomil.com")!,
-            configuration: .standard
-        )
 
         do {
             _ = try await Deploy.model(
                 at: fakePath,
                 benchmark: true,
                 pairingCode: "TEST_CODE",
-                apiClient: apiClient
+                submitBenchmark: true,
+                serverURL: URL(string: "https://api.test.octomil.com")!
             )
             XCTFail("Expected error")
         } catch {
@@ -325,7 +321,27 @@ final class DeployTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: fakePath) }
 
         do {
-            _ = try await Deploy.model(at: fakePath, pairingCode: nil, apiClient: nil)
+            _ = try await Deploy.model(at: fakePath, pairingCode: nil)
+            XCTFail("Expected error")
+        } catch {
+            XCTAssertTrue(error is DeployError)
+        }
+    }
+
+    func testDeploySubmitBenchmarkOptOut() async {
+        // When submitBenchmark is false, no submission should happen even
+        // with a pairingCode present.
+        let tmpDir = FileManager.default.temporaryDirectory
+        let fakePath = tmpDir.appendingPathComponent("test.bin")
+        FileManager.default.createFile(atPath: fakePath.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: fakePath) }
+
+        do {
+            _ = try await Deploy.model(
+                at: fakePath,
+                pairingCode: "TEST_CODE",
+                submitBenchmark: false
+            )
             XCTFail("Expected error")
         } catch {
             XCTAssertTrue(error is DeployError)
