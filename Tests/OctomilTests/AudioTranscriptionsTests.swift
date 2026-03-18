@@ -217,7 +217,6 @@ final class AudioTranscriptionsTests: XCTestCase {
         let mockEngine = MockStreamingEngine()
         mockEngine.chunks = [MockStreamingEngine.ChunkSpec("hello from speech engine")]
 
-        let previousState = EngineRegistry.shared
         EngineRegistry.shared.register(modality: .audio) { _ in mockEngine }
         defer { EngineRegistry.shared.reset() }
 
