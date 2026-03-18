@@ -117,7 +117,7 @@ public enum Deploy {
 
         // Submit benchmark results to the server (opt-out: on by default)
         if submitBenchmark, let code = pairingCode, let warmup = deployed.warmupResult {
-            await submitBenchmark(
+            await Self.submitBenchmarkResult(
                 warmup: warmup,
                 modelName: resolvedName,
                 modelLoadTimeMs: deployDurationMs,
@@ -205,7 +205,7 @@ public enum Deploy {
     /// via `URLSession`. No `APIClient` dependency -- the endpoint is
     /// unauthenticated. Non-fatal: logs a warning on failure but does not
     /// propagate errors.
-    private static func submitBenchmark(
+    private static func submitBenchmarkResult(
         warmup: WarmupResult,
         modelName: String,
         modelLoadTimeMs: Double,

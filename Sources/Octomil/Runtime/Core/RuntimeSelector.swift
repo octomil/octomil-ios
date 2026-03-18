@@ -41,6 +41,8 @@ public actor RuntimeSelector {
     ///   - modelId: The model identifier (e.g. "whisper-tiny", "llama-3.2-1b").
     ///   - modality: The output modality.
     ///   - modelURL: URL of the model file/directory, used for URL-based engine inference.
+    ///   - modelVersion: Immutable artifact version from catalog, if known.
+    ///   - artifactDigest: Pre-computed SHA-256 hex digest of the artifact, if known.
     ///   - registry: The engine registry to resolve against. Defaults to shared.
     /// - Returns: A configured ``StreamingInferenceEngine``.
     /// - Throws: ``EngineResolutionError`` if no matching factory is found.
@@ -48,6 +50,8 @@ public actor RuntimeSelector {
         modelId: String,
         modality: Modality,
         modelURL: URL,
+        modelVersion: String? = nil,
+        artifactDigest: String? = nil,
         registry: EngineRegistry = .shared
     ) throws -> StreamingInferenceEngine {
         // 1-2. Server overrides (model-specific, then global)
@@ -61,7 +65,12 @@ public actor RuntimeSelector {
         }
 
         // 5. Persisted benchmark winner
-        if let engine = BenchmarkStore.shared.winner(modelId: modelId, modelURL: modelURL) {
+        if let engine = BenchmarkStore.shared.winner(
+            modelId: modelId,
+            modelURL: modelURL,
+            modelVersion: modelVersion,
+            artifactDigest: artifactDigest
+        ) {
             return try registry.resolve(modality: modality, engine: engine, modelURL: modelURL)
         }
 
