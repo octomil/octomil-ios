@@ -30,6 +30,8 @@ public struct PairingSession: Codable, Sendable {
     public let quantization: String?
     /// Inference executor (e.g. "coreml", "mnn").
     public let executor: String?
+    /// Multi-file resources for this deployment, if any.
+    public let resources: [DownloadResource]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -43,6 +45,35 @@ public struct PairingSession: Codable, Sendable {
         case deviceClass = "device_class"
         case quantization
         case executor
+        case resources
+    }
+}
+
+// MARK: - Download Resource
+
+/// A single downloadable resource within a multi-file deployment.
+///
+/// Resources are downloaded in ``loadOrder`` sequence and placed into
+/// a model directory using their ``filename``.
+public struct DownloadResource: Codable, Sendable {
+    /// Resource kind (e.g. "weights", "tokenizer", "config").
+    public let kind: String
+    /// Pre-signed download URI.
+    public let uri: String
+    /// Filename to use when saving the resource locally.
+    public let filename: String
+    /// Order in which this resource should be loaded (0-based).
+    public let loadOrder: Int
+    /// Size in bytes, if known.
+    public let sizeBytes: Int?
+    /// SHA-256 checksum of the file contents, if known.
+    public let checksumSha256: String?
+
+    enum CodingKeys: String, CodingKey {
+        case kind, uri, filename
+        case loadOrder = "load_order"
+        case sizeBytes = "size_bytes"
+        case checksumSha256 = "checksum_sha256"
     }
 }
 
@@ -86,6 +117,8 @@ public struct DeploymentInfo: Sendable {
     public let executor: String?
     /// Download size in bytes, if known.
     public let sizeBytes: Int?
+    /// Multi-file resources for this deployment, if any.
+    public let resources: [DownloadResource]?
 
     public init(
         modelName: String,
@@ -94,7 +127,8 @@ public struct DeploymentInfo: Sendable {
         format: String,
         quantization: String? = nil,
         executor: String? = nil,
-        sizeBytes: Int? = nil
+        sizeBytes: Int? = nil,
+        resources: [DownloadResource]? = nil
     ) {
         self.modelName = modelName
         self.modelVersion = modelVersion
@@ -103,6 +137,7 @@ public struct DeploymentInfo: Sendable {
         self.quantization = quantization
         self.executor = executor
         self.sizeBytes = sizeBytes
+        self.resources = resources
     }
 }
 

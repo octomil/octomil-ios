@@ -159,7 +159,8 @@ public actor PairingManager {
                     format: format,
                     quantization: session.quantization,
                     executor: session.executor,
-                    sizeBytes: session.downloadSizeBytes
+                    sizeBytes: session.downloadSizeBytes,
+                    resources: session.resources
                 )
 
                 if configuration.enableLogging {
@@ -199,7 +200,120 @@ public actor PairingManager {
             logger.info("Executing deployment: \(deployment.modelName)")
         }
 
-        // Download model
+        // Multi-resource path: download each resource into a model directory
+        if let resources = deployment.resources, !resources.isEmpty {
+            return try await executeMultiResourceDeployment(deployment, resources: resources)
+        }
+
+        // Single-file fallback (legacy path)
+        return try await executeSingleFileDeployment(deployment)
+    }
+
+    /// Downloads multiple resources into a model directory, then compiles and benchmarks.
+    private func executeMultiResourceDeployment(
+        _ deployment: DeploymentInfo,
+        resources: [DownloadResource]
+    ) async throws -> BenchmarkReport {
+        let modelLoadStart = Date()
+        let fm = FileManager.default
+        let modelDir = fm.temporaryDirectory
+            .appendingPathComponent("ai.octomil.deploy", isDirectory: true)
+            .appendingPathComponent(deployment.modelName, isDirectory: true)
+
+        try fm.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: modelDir) }
+
+        let sortedResources = resources.sorted { $0.loadOrder < $1.loadOrder }
+        let totalBytes = sortedResources.compactMap(\.sizeBytes).reduce(0, +)
+        var downloadedBytes = 0
+
+        for resource in sortedResources {
+            guard let resourceURL = URL(string: resource.uri) else {
+                throw PairingError.invalidDeployment(
+                    reason: "Invalid resource URI: \(resource.uri)"
+                )
+            }
+
+            if configuration.enableLogging {
+                logger.info("Downloading resource [\(resource.loadOrder)]: \(resource.filename) (\(resource.kind))")
+            }
+
+            let data: Data
+            do {
+                data = try await apiClient.downloadData(from: resourceURL)
+            } catch {
+                throw PairingError.downloadFailed(
+                    reason: "Failed to download resource '\(resource.filename)': \(error.localizedDescription)"
+                )
+            }
+
+            let fileURL = modelDir.appendingPathComponent(resource.filename)
+            try data.write(to: fileURL)
+
+            downloadedBytes += data.count
+            if totalBytes > 0, configuration.enableLogging {
+                let pct = Int(Double(downloadedBytes) / Double(totalBytes) * 100)
+                logger.info("Download progress: \(pct)% (\(downloadedBytes)/\(totalBytes) bytes)")
+            }
+        }
+
+        // Find the .mlmodel file in the downloaded resources for compilation
+        let mlmodelFile = sortedResources.first { $0.filename.hasSuffix(".mlmodel") }
+            ?? sortedResources.first
+
+        guard let primaryFile = mlmodelFile else {
+            throw PairingError.invalidDeployment(reason: "No resources to compile")
+        }
+
+        let primaryURL = modelDir.appendingPathComponent(primaryFile.filename)
+
+        let compiledURL: URL
+        do {
+            compiledURL = try await MLModel.compileModel(at: primaryURL)
+        } catch {
+            throw PairingError.benchmarkFailed(
+                reason: "Model compilation failed: \(error.localizedDescription)"
+            )
+        }
+
+        let mlModel: MLModel
+        do {
+            mlModel = try MLModel(contentsOf: compiledURL)
+        } catch {
+            defer { try? FileManager.default.removeItem(at: compiledURL) }
+            throw PairingError.benchmarkFailed(
+                reason: "Model loading failed: \(error.localizedDescription)"
+            )
+        }
+
+        let modelLoadTimeMs = Date().timeIntervalSince(modelLoadStart) * 1000
+
+        var report = try runBenchmarks(
+            model: mlModel,
+            compiledURL: compiledURL,
+            modelName: deployment.modelName,
+            modelLoadTimeMs: modelLoadTimeMs
+        )
+
+        let persistedURL = try Self.persistCompiledModel(
+            compiledURL: compiledURL,
+            modelName: deployment.modelName,
+            version: deployment.modelVersion
+        )
+        report.persistedModelURL = persistedURL
+
+        if configuration.enableLogging {
+            let tps = String(format: "%.1f", report.tokensPerSecond)
+            logger.info("Benchmark complete: \(tps) tokens/sec, p50=\(String(format: "%.1f", report.p50LatencyMs))ms")
+        }
+
+        return report
+    }
+
+    /// Downloads a single model file, compiles, and benchmarks (legacy path).
+    private func executeSingleFileDeployment(
+        _ deployment: DeploymentInfo
+    ) async throws -> BenchmarkReport {
         guard let downloadURL = URL(string: deployment.downloadURL) else {
             throw PairingError.invalidDeployment(reason: "Invalid download URL: \(deployment.downloadURL)")
         }
