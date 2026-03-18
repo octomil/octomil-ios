@@ -174,6 +174,11 @@ public actor PairingManager {
             case .cancelled:
                 throw PairingError.sessionCancelled
 
+            case .error:
+                throw PairingError.invalidDeployment(
+                    reason: "Server encountered an error preparing the deployment"
+                )
+
             case .pending, .connected:
                 // Keep polling
                 try await Task.sleep(nanoseconds: UInt64(Self.defaultPollInterval * 1_000_000_000))

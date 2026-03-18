@@ -62,6 +62,8 @@ public enum PairingStatus: String, Codable, Sendable {
     case expired
     /// Session was manually cancelled.
     case cancelled
+    /// Server encountered an error during deployment.
+    case error
 }
 
 // MARK: - Deployment Info
