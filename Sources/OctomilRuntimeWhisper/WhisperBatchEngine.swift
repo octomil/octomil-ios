@@ -25,7 +25,7 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
             let task = Task {
                 do {
                     let samples = try Self.extractSamples(from: input)
-                    print("[Whisper] samples count: \(samples.count), first 5: \(Array(samples.prefix(5)))")
+                    NSLog("[Whisper] samples count: \(samples.count), first 5: \(Array(samples.prefix(5)))")
 
                     var params = whisper_context_default_params()
                     #if targetEnvironment(simulator)
@@ -34,12 +34,12 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
                     params.flash_attn = true
                     #endif
 
-                    print("[Whisper] Loading model from: \(path)")
+                    NSLog("[Whisper] Loading model from: \(path)")
                     guard let ctx = whisper_init_from_file_with_params(path, params) else {
-                        print("[Whisper] ERROR: Failed to load model at \(path)")
+                        NSLog("[Whisper] ERROR: Failed to load model at \(path)")
                         throw WhisperError.modelLoadFailed(path)
                     }
-                    print("[Whisper] Model loaded successfully")
+                    NSLog("[Whisper] Model loaded successfully")
                     defer { whisper_free(ctx) }
 
                     // Configure transcription parameters
@@ -59,14 +59,14 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
                         whisper_full(ctx, fullParams, buffer.baseAddress, Int32(buffer.count))
                     }
 
-                    print("[Whisper] whisper_full returned: \(result)")
+                    NSLog("[Whisper] whisper_full returned: \(result)")
                     if result != 0 {
                         throw WhisperError.transcriptionFailed
                     }
 
                     // Emit one chunk per segment
                     let nSegments = whisper_full_n_segments(ctx)
-                    print("[Whisper] nSegments: \(nSegments)")
+                    NSLog("[Whisper] nSegments: \(nSegments)")
                     for i in 0..<nSegments {
                         if Task.isCancelled { break }
 
