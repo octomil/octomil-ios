@@ -223,7 +223,7 @@ public final class PairingViewModel: ObservableObject {
         } catch let error as PairingError {
             state = .error(message: errorMessage(for: error))
         } catch let error as OctomilError {
-            state = .error(message: friendlyMessage(for: error))
+            state = .error(message: error.localizedDescription)
         } catch {
             state = .error(message: "Could not complete pairing: \(error.localizedDescription)")
         }
@@ -267,28 +267,5 @@ public final class PairingViewModel: ObservableObject {
         }
     }
 
-    private func friendlyMessage(for error: OctomilError) -> String {
-        switch error {
-        case .serverError(let statusCode, let message):
-            let lower = message.lowercased()
-            if statusCode == 409 || lower.contains("already") || lower.contains("completed") || lower.contains("done") {
-                return "This pairing session has already been used. The model may already be on your device — check the Home tab."
-            }
-            return "Server error: \(message)"
-
-        case .invalidInput(let reason):
-            let lower = reason.lowercased()
-            if lower.contains("already") || lower.contains("connected") || lower.contains("used") {
-                return "This pairing session has already been used. The model may already be on your device — check the Home tab."
-            }
-            return reason
-
-        case .modelNotFound:
-            return "Could not find the pairing session. The QR code may have expired — please scan a new one."
-
-        default:
-            return error.localizedDescription
-        }
-    }
 }
 #endif
