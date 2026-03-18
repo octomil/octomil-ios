@@ -404,7 +404,7 @@ public struct PairingView: View {
                     ?? URL(string: "https://api.octomil.com")!
                 viewModel.startPairing(code: token, serverURL: serverURL)
             case .unknown:
-                viewModel.state = .error("Unrecognized deep link: \(url.absoluteString)")
+                viewModel.state = .error(message: "Unrecognized deep link: \(url.absoluteString)")
             }
             return
         }
@@ -413,7 +413,7 @@ public struct PairingView: View {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
               let codeItem = components.queryItems?.first(where: { $0.name == "code" }),
               let code = codeItem.value else {
-            viewModel.state = .error("Invalid pairing URL. Missing code parameter.")
+            viewModel.state = .error(message: "Invalid pairing URL. Missing code parameter.")
             return
         }
 
