@@ -163,37 +163,27 @@ public final class PairingViewModel: ObservableObject {
             if Task.isCancelled { return }
 
             // Step 3: Show download progress
-            let totalBytes = Int64(deployment.sizeBytes ?? 0)
             state = .downloading(progress: DownloadProgressInfo(
                 modelName: deployment.modelName,
                 fraction: 0.0,
                 bytesDownloaded: 0,
-                totalBytes: totalBytes
+                totalBytes: 0
             ))
 
-            // Simulate early progress while download runs (the PairingManager
-            // executeDeployment does not expose incremental progress, so we
-            // show an indeterminate-ish progression).
-            let progressTask = Task { [weak self] in
-                var fraction = 0.1
-                while !Task.isCancelled && fraction < 0.9 {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    guard let self, !Task.isCancelled else { return }
-                    fraction = min(fraction + 0.08, 0.9)
-                    let downloaded = Int64(Double(totalBytes) * fraction)
+            // Step 4: Execute deployment with real progress callback
+            let modelName = deployment.modelName
+            let report = try await manager.executeDeployment(deployment) { [weak self] downloaded, total in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let fraction = total > 0 ? Double(downloaded) / Double(total) : 0
                     self.state = .downloading(progress: DownloadProgressInfo(
-                        modelName: deployment.modelName,
-                        fraction: fraction,
+                        modelName: modelName,
+                        fraction: min(fraction, 1.0),
                         bytesDownloaded: downloaded,
-                        totalBytes: totalBytes
+                        totalBytes: total
                     ))
                 }
             }
-
-            // Step 4: Execute deployment (download + benchmark)
-            let report = try await manager.executeDeployment(deployment)
-
-            progressTask.cancel()
 
             if Task.isCancelled { return }
 

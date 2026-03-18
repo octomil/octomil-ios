@@ -1,9 +1,5 @@
 import Foundation
-import CoreML
 import os.log
-#if canImport(UIKit)
-import UIKit
-#endif
 
 /// Manages the QR code pairing flow for deploying models to this device.
 ///
@@ -27,10 +23,6 @@ public actor PairingManager {
     private let apiClient: APIClient
     private let configuration: OctomilConfiguration
     private let logger: Logger
-
-    /// Default number of warm inferences during benchmarking.
-    /// 50 gives meaningful p95/p99 percentiles.
-    private static let defaultWarmInferenceCount = 50
 
     /// Default polling interval in seconds when waiting for deployment.
     private static let defaultPollInterval: TimeInterval = 2.0
@@ -189,39 +181,44 @@ public actor PairingManager {
         throw PairingError.deploymentTimeout
     }
 
-    /// Download the model specified in the deployment, run benchmarks,
-    /// and report results to the server.
+    /// Download model resources and persist them to disk.
     ///
-    /// - Parameter deployment: Deployment info from ``waitForDeployment(code:timeout:)``.
-    /// - Returns: Benchmark report with performance metrics.
-    /// - Throws: ``PairingError`` if download or benchmarking fails.
-    public func executeDeployment(_ deployment: DeploymentInfo) async throws -> BenchmarkReport {
+    /// - Parameters:
+    ///   - deployment: Deployment info from ``waitForDeployment(code:timeout:)``.
+    ///   - progress: Called as data arrives with `(bytesDownloaded, totalBytes)`.
+    /// - Returns: Benchmark report with download timing and persisted model URL.
+    /// - Throws: ``PairingError`` if download fails.
+    public func executeDeployment(
+        _ deployment: DeploymentInfo,
+        progress: @Sendable @escaping (Int64, Int64) -> Void = { _, _ in }
+    ) async throws -> BenchmarkReport {
+        guard let resources = deployment.resources, !resources.isEmpty else {
+            throw PairingError.invalidDeployment(reason: "No resources in deployment")
+        }
+
         if configuration.enableLogging {
-            logger.info("Executing deployment: \(deployment.modelName)")
+            logger.info("Executing deployment: \(deployment.modelName) (\(resources.count) resources)")
         }
 
-        // Multi-resource path: download each resource into a model directory
-        if let resources = deployment.resources, !resources.isEmpty {
-            return try await executeMultiResourceDeployment(deployment, resources: resources)
-        }
-
-        // Single-file fallback (legacy path)
-        return try await executeSingleFileDeployment(deployment)
+        return try await executeMultiResourceDeployment(deployment, resources: resources, progress: progress)
     }
 
-    /// Downloads multiple resources into a model directory, then compiles and benchmarks.
+    /// Downloads multiple resources into a model directory and persists them.
+    ///
+    /// Runtime-specific loading (CoreML compilation, ONNX init, etc.)
+    /// is handled by the engine abstraction, not here.
     private func executeMultiResourceDeployment(
         _ deployment: DeploymentInfo,
-        resources: [DownloadResource]
+        resources: [DownloadResource],
+        progress: @Sendable @escaping (Int64, Int64) -> Void = { _, _ in }
     ) async throws -> BenchmarkReport {
-        let modelLoadStart = Date()
+        let downloadStart = Date()
         let fm = FileManager.default
         let modelDir = fm.temporaryDirectory
             .appendingPathComponent("ai.octomil.deploy", isDirectory: true)
             .appendingPathComponent(deployment.modelName, isDirectory: true)
 
         try fm.createDirectory(at: modelDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: modelDir) }
 
         let sortedResources = resources.sorted { $0.loadOrder < $1.loadOrder }
         let totalSize = Int64(sortedResources.compactMap(\.sizeBytes).reduce(0, +))
@@ -241,8 +238,6 @@ public actor PairingManager {
             let fileURL = modelDir.appendingPathComponent(resource.filename)
             let resourceSize = Int64(resource.sizeBytes ?? 0)
             let capturedCompleted = completedBytes
-            let enableLogging = configuration.enableLogging
-            let loggerRef = self.logger
 
             do {
                 try await apiClient.downloadFile(
@@ -252,156 +247,61 @@ public actor PairingManager {
                 ) { written, fileTotal in
                     let currentTotal = capturedCompleted + written
                     let effectiveTotal = totalSize > 0 ? totalSize : fileTotal
-                    if enableLogging, effectiveTotal > 0 {
-                        let pct = Int(Double(currentTotal) / Double(effectiveTotal) * 100)
-                        loggerRef.info("Download progress: \(pct)% (\(currentTotal)/\(effectiveTotal) bytes)")
-                    }
+                    progress(currentTotal, effectiveTotal)
                 }
             } catch {
+                try? fm.removeItem(at: modelDir)
                 throw PairingError.downloadFailed(
                     reason: "Failed to download resource '\(resource.filename)': \(error.localizedDescription)"
                 )
             }
 
-            // Track completed bytes for aggregate progress across files
             if resourceSize > 0 {
                 completedBytes += resourceSize
             } else {
-                // Fall back to actual file size on disk
                 let attrs = try? fm.attributesOfItem(atPath: fileURL.path)
                 completedBytes += Int64((attrs?[.size] as? UInt64) ?? 0)
             }
         }
 
-        // Find the .mlmodel file in the downloaded resources for compilation
-        let mlmodelFile = sortedResources.first { $0.filename.hasSuffix(".mlmodel") }
-            ?? sortedResources.first
+        // Report 100%
+        let finalTotal = totalSize > 0 ? totalSize : completedBytes
+        progress(finalTotal, finalTotal)
 
-        guard let primaryFile = mlmodelFile else {
-            throw PairingError.invalidDeployment(reason: "No resources to compile")
-        }
-
-        let primaryURL = modelDir.appendingPathComponent(primaryFile.filename)
-
-        let compiledURL: URL
-        do {
-            compiledURL = try await MLModel.compileModel(at: primaryURL)
-        } catch {
-            throw PairingError.benchmarkFailed(
-                reason: "Model compilation failed: \(error.localizedDescription)"
-            )
-        }
-
-        let mlModel: MLModel
-        do {
-            mlModel = try MLModel(contentsOf: compiledURL)
-        } catch {
-            defer { try? FileManager.default.removeItem(at: compiledURL) }
-            throw PairingError.benchmarkFailed(
-                reason: "Model loading failed: \(error.localizedDescription)"
-            )
-        }
-
-        let modelLoadTimeMs = Date().timeIntervalSince(modelLoadStart) * 1000
-
-        var report = try runBenchmarks(
-            model: mlModel,
-            compiledURL: compiledURL,
-            modelName: deployment.modelName,
-            modelLoadTimeMs: modelLoadTimeMs
-        )
-
-        let persistedURL = try Self.persistCompiledModel(
-            compiledURL: compiledURL,
+        // Persist downloaded files to model cache
+        let persistedURL = try Self.persistModelDirectory(
+            sourceDir: modelDir,
             modelName: deployment.modelName,
             version: deployment.modelVersion
         )
-        report.persistedModelURL = persistedURL
+
+        let downloadTimeMs = Date().timeIntervalSince(downloadStart) * 1000
+        let caps = PairingDeviceCapabilities.current()
 
         if configuration.enableLogging {
-            let tps = String(format: "%.1f", report.tokensPerSecond)
-            logger.info("Benchmark complete: \(tps) tokens/sec, p50=\(String(format: "%.1f", report.p50LatencyMs))ms")
+            logger.info("Model persisted to: \(persistedURL.path) (\(String(format: "%.0f", downloadTimeMs))ms)")
         }
 
-        return report
-    }
-
-    /// Downloads a single model file, compiles, and benchmarks (legacy path).
-    private func executeSingleFileDeployment(
-        _ deployment: DeploymentInfo
-    ) async throws -> BenchmarkReport {
-        guard let downloadURL = URL(string: deployment.downloadURL) else {
-            throw PairingError.invalidDeployment(reason: "Invalid download URL: \(deployment.downloadURL)")
-        }
-
-        let modelLoadStart = Date()
-
-        // Stream to temp file instead of buffering entire model in memory
-        let tempDir = FileManager.default.temporaryDirectory
-        let tempFile = tempDir.appendingPathComponent(
-            "\(deployment.modelName)_\(deployment.modelVersion).mlmodel"
-        )
-        defer { try? FileManager.default.removeItem(at: tempFile) }
-
-        let expectedBytes = Int64(deployment.sizeBytes ?? 0)
-        let enableLogging = configuration.enableLogging
-        let loggerRef = self.logger
-
-        do {
-            try await apiClient.downloadFile(
-                from: downloadURL,
-                to: tempFile,
-                expectedBytes: expectedBytes
-            ) { written, totalBytes in
-                let effectiveTotal = expectedBytes > 0 ? expectedBytes : totalBytes
-                if enableLogging, effectiveTotal > 0 {
-                    let pct = Int(Double(written) / Double(effectiveTotal) * 100)
-                    loggerRef.info("Download progress: \(pct)% (\(written)/\(effectiveTotal) bytes)")
-                }
-            }
-        } catch {
-            throw PairingError.downloadFailed(reason: error.localizedDescription)
-        }
-
-        let compiledURL: URL
-        do {
-            compiledURL = try await MLModel.compileModel(at: tempFile)
-        } catch {
-            throw PairingError.benchmarkFailed(reason: "Model compilation failed: \(error.localizedDescription)")
-        }
-
-        let mlModel: MLModel
-        do {
-            mlModel = try MLModel(contentsOf: compiledURL)
-        } catch {
-            defer { try? FileManager.default.removeItem(at: compiledURL) }
-            throw PairingError.benchmarkFailed(reason: "Model loading failed: \(error.localizedDescription)")
-        }
-
-        let modelLoadTimeMs = Date().timeIntervalSince(modelLoadStart) * 1000
-
-        // Run benchmarks (pass compiledURL for CPU-only delegate comparison)
-        var report = try runBenchmarks(
-            model: mlModel,
-            compiledURL: compiledURL,
+        return BenchmarkReport(
             modelName: deployment.modelName,
-            modelLoadTimeMs: modelLoadTimeMs
+            deviceName: caps.deviceName,
+            chipFamily: caps.chipFamily,
+            ramGB: caps.ramGB,
+            osVersion: caps.osVersion,
+            ttftMs: 0,
+            tpotMs: 0,
+            tokensPerSecond: 0,
+            p50LatencyMs: 0,
+            p95LatencyMs: 0,
+            p99LatencyMs: 0,
+            memoryPeakBytes: 0,
+            inferenceCount: 0,
+            modelLoadTimeMs: downloadTimeMs,
+            coldInferenceMs: 0,
+            warmInferenceMs: 0,
+            activeDelegate: deployment.executor,
+            persistedModelURL: persistedURL
         )
-
-        // Persist compiled model for on-device inference (TryItOut)
-        let persistedURL = try Self.persistCompiledModel(
-            compiledURL: compiledURL,
-            modelName: deployment.modelName,
-            version: deployment.modelVersion
-        )
-        report.persistedModelURL = persistedURL
-
-        if configuration.enableLogging {
-            let tps = String(format: "%.1f", report.tokensPerSecond)
-            logger.info("Benchmark complete: \(tps) tokens/sec, p50=\(String(format: "%.1f", report.p50LatencyMs))ms")
-        }
-
-        return report
     }
 
     /// Submit benchmark results to the server.
@@ -451,244 +351,38 @@ public actor PairingManager {
         return report
     }
 
-    // MARK: - Benchmarking
-
-    /// Runs the benchmark sequence on a compiled model.
-    ///
-    /// Flow:
-    /// 1. Cold inference (captures TTFT)
-    /// 2. Delegate auto-selection (warm pass vs CPU-only pass)
-    /// 3. 50 warm inferences for percentile calculations
-    /// 4. Assemble the benchmark report
-    private func runBenchmarks(
-        model: MLModel,
-        compiledURL: URL,
-        modelName: String,
-        modelLoadTimeMs: Double
-    ) throws -> BenchmarkReport {
-        // Create dummy input matching model's expected shape
-        guard let dummyInput = createDummyInput(for: model) else {
-            throw PairingError.benchmarkFailed(reason: "Could not create dummy input for model")
-        }
-
-        // Capture memory before
-        let memoryBefore = availableMemoryBytes()
-
-        // Cold inference (TTFT)
-        let coldStart = Date()
-        _ = try? model.prediction(from: dummyInput)
-        let coldInferenceMs = Date().timeIntervalSince(coldStart) * 1000
-
-        // Delegate auto-selection: warm pass then CPU-only comparison
-        let warmupStart = Date()
-        _ = try? model.prediction(from: dummyInput)
-        let warmPassMs = Date().timeIntervalSince(warmupStart) * 1000
-
-        var cpuInferenceMs: Double? = nil
-        let cpuConfig = MLModelConfiguration()
-        cpuConfig.computeUnits = .cpuOnly
-        if let cpuModel = try? MLModel(contentsOf: compiledURL, configuration: cpuConfig) {
-            let cpuStart = Date()
-            _ = try? cpuModel.prediction(from: dummyInput)
-            cpuInferenceMs = Date().timeIntervalSince(cpuStart) * 1000
-        }
-
-        let hasNPU = detectNPUAvailable()
-        var activeDelegate = hasNPU ? "neural_engine" : "gpu"
-        var disabledDelegates: [String] = []
-
-        // If CPU is faster than the hardware-accelerated warm pass, disable the accelerator
-        if let cpuMs = cpuInferenceMs, cpuMs < warmPassMs {
-            if hasNPU {
-                disabledDelegates.append("neural_engine")
-            } else {
-                disabledDelegates.append("gpu")
-            }
-            activeDelegate = "cpu"
-        }
-
-        if configuration.enableLogging {
-            let warmStr = String(format: "%.1f", warmPassMs)
-            let cpuStr = cpuInferenceMs.map { String(format: "%.1f", $0) } ?? "n/a"
-            let disabledStr = disabledDelegates.joined(separator: ",")
-            logger.info("Delegate selected: \(activeDelegate), disabled: [\(disabledStr)], warm=\(warmStr)ms, cpu=\(cpuStr)ms")
-        }
-
-        // Warm inferences (50 iterations for meaningful percentiles)
-        var latencies: [Double] = []
-        for _ in 0..<Self.defaultWarmInferenceCount {
-            let start = Date()
-            _ = try? model.prediction(from: dummyInput)
-            let latencyMs = Date().timeIntervalSince(start) * 1000
-            latencies.append(latencyMs)
-        }
-
-        // Capture memory after
-        let memoryAfter = availableMemoryBytes()
-        let memoryPeakBytes = max(0, memoryBefore - memoryAfter)
-
-        // Compute percentiles
-        let sortedLatencies = latencies.sorted()
-        let p50 = percentile(sortedLatencies, p: 0.50)
-        let p95 = percentile(sortedLatencies, p: 0.95)
-        let p99 = percentile(sortedLatencies, p: 0.99)
-        let avgLatency = latencies.isEmpty ? 0 : latencies.reduce(0, +) / Double(latencies.count)
-        let tokensPerSecond = avgLatency > 0 ? 1000.0 / avgLatency : 0
-
-        // Warmup inference (best of warm latencies)
-        let warmInferenceMs = sortedLatencies.first ?? coldInferenceMs
-
-        // Device info
-        let caps = PairingDeviceCapabilities.current()
-
-        // Battery
-        let batteryLevel = currentBatteryLevel()
-
-        // Thermal state
-        let thermalState = currentThermalState()
-
-        // Total inference count: 1 cold + 1 warm-pass + 1 CPU-pass (if run) + N warm
-        let totalInferences = Self.defaultWarmInferenceCount + 2 + (cpuInferenceMs != nil ? 1 : 0)
-
-        return BenchmarkReport(
-            modelName: modelName,
-            deviceName: caps.deviceName,
-            chipFamily: caps.chipFamily,
-            ramGB: caps.ramGB,
-            osVersion: caps.osVersion,
-            ttftMs: coldInferenceMs,
-            tpotMs: avgLatency,
-            tokensPerSecond: tokensPerSecond,
-            p50LatencyMs: p50,
-            p95LatencyMs: p95,
-            p99LatencyMs: p99,
-            memoryPeakBytes: memoryPeakBytes,
-            inferenceCount: totalInferences,
-            modelLoadTimeMs: modelLoadTimeMs,
-            coldInferenceMs: coldInferenceMs,
-            warmInferenceMs: warmInferenceMs,
-            activeDelegate: activeDelegate,
-            disabledDelegates: disabledDelegates,
-            batteryLevel: batteryLevel,
-            thermalState: thermalState
-        )
-    }
-
     // MARK: - Model Persistence
 
-    /// Copies the compiled model to a stable cache directory for on-device inference.
+    /// Moves a model directory to the persistent cache.
     ///
-    /// Path: `~/Library/Caches/ai.octomil.models/{name}/{version}/model.mlmodelc`
-    private static func persistCompiledModel(
-        compiledURL: URL,
+    /// Path: `~/Library/Caches/ai.octomil.models/{name}/{version}/`
+    private static func persistModelDirectory(
+        sourceDir: URL,
         modelName: String,
         version: String
     ) throws -> URL {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let modelsDir = cacheDir
+        let fm = FileManager.default
+        let cacheDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let targetDir = cacheDir
             .appendingPathComponent("ai.octomil.models", isDirectory: true)
             .appendingPathComponent(modelName, isDirectory: true)
             .appendingPathComponent(version, isDirectory: true)
 
-        try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
-
-        let targetURL = modelsDir.appendingPathComponent("model.mlmodelc")
-
-        // Remove existing model if present
-        if FileManager.default.fileExists(atPath: targetURL.path) {
-            try FileManager.default.removeItem(at: targetURL)
+        // Remove existing model directory if present
+        if fm.fileExists(atPath: targetDir.path) {
+            try fm.removeItem(at: targetDir)
         }
 
-        // Move compiled model to persistent location (more efficient than copy)
-        try FileManager.default.moveItem(at: compiledURL, to: targetURL)
+        // Ensure parent exists
+        try fm.createDirectory(
+            at: targetDir.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
 
-        return targetURL
+        // Move entire directory (more efficient than copy)
+        try fm.moveItem(at: sourceDir, to: targetDir)
+
+        return targetDir
     }
 
-    // MARK: - Helpers
-
-    /// Creates a dummy MLFeatureProvider matching the model's input description.
-    private func createDummyInput(for model: MLModel) -> MLFeatureProvider? {
-        let inputDescs = model.modelDescription.inputDescriptionsByName
-        var features: [String: MLFeatureValue] = [:]
-
-        for (name, desc) in inputDescs {
-            if let constraint = desc.multiArrayConstraint {
-                guard let array = try? MLMultiArray(shape: constraint.shape, dataType: .float32) else {
-                    return nil
-                }
-                features[name] = MLFeatureValue(multiArray: array)
-            }
-        }
-
-        guard !features.isEmpty else { return nil }
-        return try? MLDictionaryFeatureProvider(dictionary: features)
-    }
-
-    /// Computes a percentile value from sorted data.
-    private func percentile(_ sorted: [Double], p: Double) -> Double {
-        guard !sorted.isEmpty else { return 0 }
-        let index = max(0, min(sorted.count - 1, Int(Double(sorted.count - 1) * p)))
-        return sorted[index]
-    }
-
-    /// Returns available memory in bytes.
-    ///
-    /// Uses `os_proc_available_memory()` on iOS/tvOS/watchOS.
-    /// Falls back to `ProcessInfo.physicalMemory` on macOS.
-    private func availableMemoryBytes() -> Int {
-        #if os(iOS) || os(tvOS) || os(watchOS)
-        return Int(os_proc_available_memory())
-        #else
-        return Int(ProcessInfo.processInfo.physicalMemory)
-        #endif
-    }
-
-    /// Returns current battery level as a Double (0.0 - 1.0), or nil if unavailable.
-    private func currentBatteryLevel() -> Double? {
-        #if canImport(UIKit) && os(iOS)
-        // UIDevice.current requires main thread, but we're inside an actor.
-        // Use a synchronous DispatchQueue.main.sync call to safely read it.
-        let level: Float = DispatchQueue.main.sync {
-            UIDevice.current.isBatteryMonitoringEnabled = true
-            let l = UIDevice.current.batteryLevel
-            UIDevice.current.isBatteryMonitoringEnabled = false
-            return l
-        }
-        return level >= 0 ? Double(level) : nil
-        #else
-        return nil
-        #endif
-    }
-
-    /// Detects whether the Neural Processing Unit is available.
-    ///
-    /// On real iOS hardware (A11+) the Neural Engine is always present.
-    /// Returns false on macOS and Simulator.
-    private func detectNPUAvailable() -> Bool {
-        #if targetEnvironment(simulator)
-        return false
-        #elseif os(iOS) || os(tvOS) || os(watchOS)
-        return true
-        #else
-        return false
-        #endif
-    }
-
-    /// Returns current thermal state as a string.
-    private func currentThermalState() -> String {
-        let state = ProcessInfo.processInfo.thermalState
-        switch state {
-        case .nominal:
-            return "nominal"
-        case .fair:
-            return "fair"
-        case .serious:
-            return "serious"
-        case .critical:
-            return "critical"
-        @unknown default:
-            return "unknown"
-        }
-    }
 }
