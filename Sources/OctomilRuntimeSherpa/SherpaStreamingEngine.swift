@@ -132,10 +132,19 @@ final class SherpaStreamingEngine: StreamingInferenceEngine, @unchecked Sendable
         if let samples = input as? [Float] {
             return samples
         } else if let data = input as? Data {
+            // Strip WAV/RIFF header if present (44 bytes for standard PCM WAV).
+            let pcmData: Data
+            if data.count > 44,
+               data[0] == 0x52, data[1] == 0x49, data[2] == 0x46, data[3] == 0x46 { // "RIFF"
+                pcmData = data.subdata(in: 44..<data.count)
+            } else {
+                pcmData = data
+            }
+
             // Interpret as 16-bit PCM and convert to Float [-1, 1]
-            let count = data.count / 2
+            let count = pcmData.count / 2
             var samples = [Float](repeating: 0, count: count)
-            data.withUnsafeBytes { rawBuffer in
+            pcmData.withUnsafeBytes { rawBuffer in
                 let int16Buffer = rawBuffer.bindMemory(to: Int16.self)
                 for i in 0..<count {
                     samples[i] = Float(int16Buffer[i]) / 32768.0
