@@ -224,8 +224,8 @@ public actor PairingManager {
         defer { try? fm.removeItem(at: modelDir) }
 
         let sortedResources = resources.sorted { $0.loadOrder < $1.loadOrder }
-        let totalBytes = sortedResources.compactMap(\.sizeBytes).reduce(0, +)
-        var downloadedBytes = 0
+        let totalSize = Int64(sortedResources.compactMap(\.sizeBytes).reduce(0, +))
+        var completedBytes: Int64 = 0
 
         for resource in sortedResources {
             guard let resourceURL = URL(string: resource.uri) else {
@@ -238,22 +238,38 @@ public actor PairingManager {
                 logger.info("Downloading resource [\(resource.loadOrder)]: \(resource.filename) (\(resource.kind))")
             }
 
-            let data: Data
+            let fileURL = modelDir.appendingPathComponent(resource.filename)
+            let resourceSize = Int64(resource.sizeBytes ?? 0)
+            let capturedCompleted = completedBytes
+            let enableLogging = configuration.enableLogging
+            let loggerRef = self.logger
+
             do {
-                data = try await apiClient.downloadData(from: resourceURL)
+                try await apiClient.downloadFile(
+                    from: resourceURL,
+                    to: fileURL,
+                    expectedBytes: resourceSize
+                ) { written, fileTotal in
+                    let currentTotal = capturedCompleted + written
+                    let effectiveTotal = totalSize > 0 ? totalSize : fileTotal
+                    if enableLogging, effectiveTotal > 0 {
+                        let pct = Int(Double(currentTotal) / Double(effectiveTotal) * 100)
+                        loggerRef.info("Download progress: \(pct)% (\(currentTotal)/\(effectiveTotal) bytes)")
+                    }
+                }
             } catch {
                 throw PairingError.downloadFailed(
                     reason: "Failed to download resource '\(resource.filename)': \(error.localizedDescription)"
                 )
             }
 
-            let fileURL = modelDir.appendingPathComponent(resource.filename)
-            try data.write(to: fileURL)
-
-            downloadedBytes += data.count
-            if totalBytes > 0, configuration.enableLogging {
-                let pct = Int(Double(downloadedBytes) / Double(totalBytes) * 100)
-                logger.info("Download progress: \(pct)% (\(downloadedBytes)/\(totalBytes) bytes)")
+            // Track completed bytes for aggregate progress across files
+            if resourceSize > 0 {
+                completedBytes += resourceSize
+            } else {
+                // Fall back to actual file size on disk
+                let attrs = try? fm.attributesOfItem(atPath: fileURL.path)
+                completedBytes += Int64((attrs?[.size] as? UInt64) ?? 0)
             }
         }
 
@@ -319,20 +335,33 @@ public actor PairingManager {
         }
 
         let modelLoadStart = Date()
-        let modelData: Data
-        do {
-            modelData = try await apiClient.downloadData(from: downloadURL)
-        } catch {
-            throw PairingError.downloadFailed(reason: error.localizedDescription)
-        }
 
-        // Save to temp file and compile
+        // Stream to temp file instead of buffering entire model in memory
         let tempDir = FileManager.default.temporaryDirectory
         let tempFile = tempDir.appendingPathComponent(
             "\(deployment.modelName)_\(deployment.modelVersion).mlmodel"
         )
-        try modelData.write(to: tempFile)
         defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        let expectedBytes = Int64(deployment.sizeBytes ?? 0)
+        let enableLogging = configuration.enableLogging
+        let loggerRef = self.logger
+
+        do {
+            try await apiClient.downloadFile(
+                from: downloadURL,
+                to: tempFile,
+                expectedBytes: expectedBytes
+            ) { written, totalBytes in
+                let effectiveTotal = expectedBytes > 0 ? expectedBytes : totalBytes
+                if enableLogging, effectiveTotal > 0 {
+                    let pct = Int(Double(written) / Double(effectiveTotal) * 100)
+                    loggerRef.info("Download progress: \(pct)% (\(written)/\(effectiveTotal) bytes)")
+                }
+            }
+        } catch {
+            throw PairingError.downloadFailed(reason: error.localizedDescription)
+        }
 
         let compiledURL: URL
         do {

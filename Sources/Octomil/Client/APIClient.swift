@@ -699,7 +699,7 @@ public actor APIClient {
 
     // MARK: - Download
 
-    /// Downloads data from a URL.
+    /// Downloads data from a URL, buffering the entire response in memory.
     /// - Parameter url: URL to download from.
     /// - Returns: Downloaded data.
     public func downloadData(from url: URL) async throws -> Data {
@@ -730,6 +730,97 @@ public actor APIClient {
                 retries += 1
                 if retries < configuration.maxRetryAttempts {
                     // Exponential backoff
+                    try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(retries)) * 1_000_000_000))
+                }
+            }
+        }
+
+        throw OctomilError.downloadFailed(reason: lastError?.localizedDescription ?? "Unknown error")
+    }
+
+    /// Downloads a file using streaming I/O, writing data incrementally to disk.
+    ///
+    /// Unlike ``downloadData(from:)`` this never holds the full file in memory.
+    /// Progress is reported as bytes accumulate.
+    ///
+    /// - Parameters:
+    ///   - url: URL to download from.
+    ///   - destination: Local file URL to write the downloaded data to.
+    ///   - expectedBytes: Expected total size in bytes (used when the server omits Content-Length).
+    ///   - progress: Closure called as data arrives with `(bytesWritten, totalBytes)`.
+    ///               `totalBytes` is -1 when the size is unknown.
+    public func downloadFile(
+        from url: URL,
+        to destination: URL,
+        expectedBytes: Int64 = -1,
+        progress: @Sendable (Int64, Int64) -> Void = { _, _ in }
+    ) async throws {
+        if configuration.enableLogging {
+            logger.debug("Streaming download from: \(url.absoluteString)")
+        }
+
+        var retries = 0
+        var lastError: Error?
+
+        while retries < configuration.maxRetryAttempts {
+            do {
+                let (asyncBytes, response) = try await session.bytes(from: url)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw OctomilError.unknown(underlying: nil)
+                }
+
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    throw OctomilError.downloadFailed(reason: "HTTP \(httpResponse.statusCode)")
+                }
+
+                let contentLength = httpResponse.expectedContentLength  // -1 if unknown
+                let totalBytes: Int64 = if contentLength > 0 {
+                    contentLength
+                } else if expectedBytes > 0 {
+                    expectedBytes
+                } else {
+                    -1
+                }
+
+                // Open file handle for incremental writes
+                FileManager.default.createFile(atPath: destination.path, contents: nil)
+                let fileHandle = try FileHandle(forWritingTo: destination)
+                defer { try? fileHandle.close() }
+
+                var bytesWritten: Int64 = 0
+                // 256 KB write buffer — balances syscall overhead vs memory use
+                let bufferSize = 256 * 1024
+                var buffer = Data()
+                buffer.reserveCapacity(bufferSize)
+
+                for try await byte in asyncBytes {
+                    buffer.append(byte)
+
+                    if buffer.count >= bufferSize {
+                        fileHandle.write(buffer)
+                        bytesWritten += Int64(buffer.count)
+                        buffer.removeAll(keepingCapacity: true)
+                        progress(bytesWritten, totalBytes)
+                    }
+                }
+
+                // Flush remaining bytes
+                if !buffer.isEmpty {
+                    fileHandle.write(buffer)
+                    bytesWritten += Int64(buffer.count)
+                    progress(bytesWritten, totalBytes)
+                }
+
+                return
+            } catch let error as OctomilError {
+                throw error
+            } catch {
+                // Clean up partial file on retry
+                try? FileManager.default.removeItem(at: destination)
+                lastError = error
+                retries += 1
+                if retries < configuration.maxRetryAttempts {
                     try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(retries)) * 1_000_000_000))
                 }
             }
