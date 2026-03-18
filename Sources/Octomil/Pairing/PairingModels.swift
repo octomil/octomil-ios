@@ -531,6 +531,8 @@ public enum PairingError: LocalizedError, Sendable {
     case downloadFailed(reason: String)
     /// Benchmark execution failed.
     case benchmarkFailed(reason: String)
+    /// The pairing session was already used / model already deployed.
+    case sessionAlreadyUsed
 
     public var errorDescription: String? {
         switch self {
@@ -548,6 +550,8 @@ public enum PairingError: LocalizedError, Sendable {
             return "Model download failed: \(reason)"
         case .benchmarkFailed(let reason):
             return "Benchmark failed: \(reason)"
+        case .sessionAlreadyUsed:
+            return "This pairing session has already been used."
         }
     }
 }
