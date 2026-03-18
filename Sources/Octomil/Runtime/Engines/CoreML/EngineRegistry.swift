@@ -128,8 +128,10 @@ public final class EngineRegistry: @unchecked Sendable {
         switch url.pathExtension.lowercased() {
         case "mlmodelc", "mlmodel", "mlpackage":
             return .coreml
-        case "safetensors", "gguf":
+        case "safetensors":
             return .mlx
+        case "gguf":
+            return .llamaCpp
         default:
             return nil
         }
@@ -187,10 +189,17 @@ public final class EngineRegistry: @unchecked Sendable {
     // MARK: - Private
 
     private func registerDefaults() {
+        // CoreML engines registered both as modality default AND with explicit .coreml key
+        // so RuntimeSelector can target CoreML by name for overrides/benchmarks.
         register(modality: .text) { url in LLMEngine(modelPath: url) }
+        register(modality: .text, engine: .coreml) { url in LLMEngine(modelPath: url) }
         register(modality: .image) { url in ImageEngine(modelPath: url) }
+        register(modality: .image, engine: .coreml) { url in ImageEngine(modelPath: url) }
         register(modality: .audio) { url in AudioEngine(modelPath: url) }
+        register(modality: .audio, engine: .coreml) { url in AudioEngine(modelPath: url) }
         register(modality: .video) { url in VideoEngine(modelPath: url) }
+        register(modality: .video, engine: .coreml) { url in VideoEngine(modelPath: url) }
         register(modality: .timeSeries) { url in LLMEngine(modelPath: url) }
+        register(modality: .timeSeries, engine: .coreml) { url in LLMEngine(modelPath: url) }
     }
 }

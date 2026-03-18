@@ -8,18 +8,17 @@
 import OctomilRuntimeLlama
 import OctomilRuntimeSherpa
 import OctomilRuntimeWhisper
-import OctomilMLX
 
 /// Auto-register all bundled engines on module load.
 ///
 /// This runs once when the OctomilClient module is first imported.
 /// The customer never needs to call this — it happens automatically.
+/// MLX is opt-in — call `EngineRegistry.installMLX()` separately if linked.
 private let _bootstrapEngines: Void = {
     let registry = EngineRegistry.shared
     registry.registerLlamaCpp()
     registry.registerSherpa()
     registry.registerWhisper()
-    registry.registerMLX()
 }()
 
 /// Ensures engine bootstrap has run. Called internally by SDK init paths

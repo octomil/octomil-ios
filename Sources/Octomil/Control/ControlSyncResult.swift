@@ -13,6 +13,9 @@ public struct ControlSyncResult: Codable, Sendable {
     public let assignmentsChanged: Bool
     /// Whether model rollout state changed.
     public let rolloutsChanged: Bool
+    /// Server-side engine overrides (kill switch).
+    /// Key: model ID or `"*"`. Value: engine raw value (e.g. `"llama_cpp"`, `"coreml"`).
+    public let engineOverrides: [String: String]?
     /// Timestamp when the sync completed.
     public let fetchedAt: Date
 
@@ -21,6 +24,7 @@ public struct ControlSyncResult: Codable, Sendable {
         case configVersion = "config_version"
         case assignmentsChanged = "assignments_changed"
         case rolloutsChanged = "rollouts_changed"
+        case engineOverrides = "engine_overrides"
         case fetchedAt = "fetched_at"
     }
 
@@ -29,12 +33,14 @@ public struct ControlSyncResult: Codable, Sendable {
         configVersion: String,
         assignmentsChanged: Bool,
         rolloutsChanged: Bool,
+        engineOverrides: [String: String]? = nil,
         fetchedAt: Date
     ) {
         self.updated = updated
         self.configVersion = configVersion
         self.assignmentsChanged = assignmentsChanged
         self.rolloutsChanged = rolloutsChanged
+        self.engineOverrides = engineOverrides
         self.fetchedAt = fetchedAt
     }
 }

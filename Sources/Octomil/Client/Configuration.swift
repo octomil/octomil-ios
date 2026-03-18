@@ -92,6 +92,15 @@ public struct OctomilConfiguration: Sendable {
     /// and ``TrainingOutcome/degraded`` is set to `true`.
     public let allowDegradedTraining: Bool
 
+    /// Pin specific engines per model ID. Overrides benchmark results.
+    ///
+    /// Key: model ID (e.g. `"whisper-tiny"`) or `"*"` for all models.
+    /// Value: engine to force (e.g. `.llamaCpp`, `.coreml`).
+    ///
+    /// These overrides take precedence over persisted benchmark winners
+    /// but are overridden by server-side overrides from ControlSync.
+    public let engineOverrides: [String: Engine]
+
     /// SHA-256 hashes of pinned server public keys (base64-encoded).
     /// When non-empty, the SDK validates the server certificate against these pins.
     /// Leave empty to use system default certificate validation.
@@ -155,6 +164,7 @@ public struct OctomilConfiguration: Sendable {
         training: TrainingPolicy = TrainingPolicy(),
         privacyConfiguration: PrivacyConfiguration = .standard,
         allowDegradedTraining: Bool = false,
+        engineOverrides: [String: Engine] = [:],
         pinnedCertificateHashes: [String] = []
     ) {
         self.network = network
@@ -165,6 +175,7 @@ public struct OctomilConfiguration: Sendable {
         self.training = training
         self.privacyConfiguration = privacyConfiguration
         self.allowDegradedTraining = allowDegradedTraining
+        self.engineOverrides = engineOverrides
         self.pinnedCertificateHashes = pinnedCertificateHashes
     }
 

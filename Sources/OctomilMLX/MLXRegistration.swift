@@ -68,9 +68,19 @@ extension EngineRegistry {
 
     /// Register the MLX LLM engine with a default ``MLXModelLoader``.
     ///
-    /// Convenience for auto-registration — creates a loader with default
-    /// GPU cache limits. Used by the ``OctomilClient`` bootstrap.
+    /// Convenience — creates a loader with default GPU cache limits.
     public func registerMLX() {
         registerMLX(loader: MLXModelLoader())
+    }
+
+    /// Install all MLX engines into the shared registry.
+    ///
+    /// Call once from app startup if `OctomilMLX` is linked as a dependency.
+    /// ```swift
+    /// // In your App init or @main entry point:
+    /// EngineRegistry.installMLX()
+    /// ```
+    public static func installMLX() {
+        EngineRegistry.shared.registerMLX()
     }
 }
