@@ -87,17 +87,30 @@ public actor PairingManager {
             logger.info("Connecting to pairing session: \(code)")
         }
 
-        let session = try await apiClient.connectToPairing(
-            code: code,
-            deviceId: UUID().uuidString,
-            platform: "ios",
-            deviceName: deviceCapabilities.deviceName,
-            chipFamily: deviceCapabilities.chipFamily,
-            ramGB: deviceCapabilities.ramGB,
-            osVersion: deviceCapabilities.osVersion,
-            npuAvailable: deviceCapabilities.npuAvailable,
-            gpuAvailable: deviceCapabilities.gpuAvailable
-        )
+        let session: PairingSession
+        do {
+            session = try await apiClient.connectToPairing(
+                code: code,
+                deviceId: UUID().uuidString,
+                platform: "ios",
+                deviceName: deviceCapabilities.deviceName,
+                chipFamily: deviceCapabilities.chipFamily,
+                ramGB: deviceCapabilities.ramGB,
+                osVersion: deviceCapabilities.osVersion,
+                npuAvailable: deviceCapabilities.npuAvailable,
+                gpuAvailable: deviceCapabilities.gpuAvailable
+            )
+        } catch let error as OctomilError {
+            // Map server errors that indicate "session already used" to a typed pairing error.
+            switch error {
+            case .serverError(409, _):
+                throw PairingError.sessionAlreadyUsed
+            case .invalidInput(let reason) where reason.lowercased().contains("already"):
+                throw PairingError.sessionAlreadyUsed
+            default:
+                throw error
+            }
+        }
 
         if configuration.enableLogging {
             logger.info("Connected to session \(session.id), model: \(session.modelName)")

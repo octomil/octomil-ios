@@ -262,6 +262,8 @@ public final class PairingViewModel: ObservableObject {
             return "Deployment error: \(reason)"
         case .benchmarkFailed(let reason):
             return "Benchmark failed: \(reason)"
+        case .sessionAlreadyUsed:
+            return "This pairing session has already been used. The model may already be on your device — check the Home tab."
         }
     }
 
