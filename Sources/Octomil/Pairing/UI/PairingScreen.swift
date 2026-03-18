@@ -10,10 +10,16 @@ import UIKit
 /// received. It drives the full pairing flow through ``PairingViewModel``,
 /// showing connecting, downloading, success, and error states.
 ///
+/// Designed to be embedded inside a `NavigationStack` — does not render its
+/// own navigation bar or full-screen background.
+///
 /// # Usage
 ///
 /// ```swift
-/// PairingScreen(token: "ABC123", host: "https://api.octomil.com")
+/// NavigationStack {
+///     PairingScreen(token: "ABC123", host: "https://api.octomil.com")
+///         .navigationTitle("Pair Device")
+/// }
 /// ```
 ///
 /// Or use the `.octomilPairing()` view modifier for automatic deep link handling.
@@ -32,7 +38,6 @@ public struct PairingScreen: View {
     /// Tracks whether the built-in TryItOutScreen is being presented.
     @State private var showTryItOut = false
     @State private var tryItOutModelInfo: PairedModelInfo?
-
 
     /// Creates a pairing screen.
     /// - Parameters:
@@ -53,15 +58,10 @@ public struct PairingScreen: View {
     }
 
     public var body: some View {
-        ZStack {
-            backgroundGradient
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                headerBar
-                    .padding(.bottom, 8)
-
-                Spacer()
+        ScrollView {
+            VStack(spacing: 32) {
+                stateIcon
+                    .padding(.top, 40)
 
                 switch viewModel.state {
                 case .connecting(let host):
@@ -76,10 +76,9 @@ public struct PairingScreen: View {
                 case .error(let message):
                     errorCard(message: message)
                 }
-
-                Spacer()
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
         }
         .onAppear {
             viewModel.startPairing()
@@ -104,55 +103,91 @@ public struct PairingScreen: View {
         #endif
     }
 
-    // MARK: - Background
+    // MARK: - State Icon
 
-    private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.05, green: 0.05, blue: 0.12),
-                Color(red: 0.08, green: 0.08, blue: 0.18)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
+    @ViewBuilder
+    private var stateIcon: some View {
+        switch viewModel.state {
+        case .connecting:
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.12))
+                        .frame(width: 80, height: 80)
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.blue)
+                }
+                Text("Connecting to server")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
-    // MARK: - Header
+        case .downloading:
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.12))
+                        .frame(width: 80, height: 80)
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.blue)
+                }
+                Text("Deploying model to device")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
-    private var headerBar: some View {
-        HStack {
-            Circle()
-                .fill(Color.green.opacity(0.8))
-                .frame(width: 8, height: 8)
-            Text("Octomil")
-                .font(.headline)
-                .foregroundColor(.white.opacity(0.9))
-            Spacer()
+        case .success:
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.green.opacity(0.12))
+                        .frame(width: 80, height: 80)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.green)
+                }
+                Text("Model deployed successfully")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+        case .error:
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.12))
+                        .frame(width: 80, height: 80)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.orange)
+                }
+                Text("Something went wrong")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.top, 16)
     }
 
     // MARK: - Connecting State
 
     private func connectingCard(host: String) -> some View {
         PairingCardView {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.3)
+                    .controlSize(.large)
 
                 Text("Connecting...")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
+                    .font(.headline)
 
-                VStack(spacing: 6) {
-                    Text("Server")
+                HStack(spacing: 6) {
+                    Image(systemName: "server.rack")
                         .font(.caption)
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundStyle(.tertiary)
                     Text(displayHost(host))
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -162,49 +197,26 @@ public struct PairingScreen: View {
 
     private func downloadingCard(progress: DownloadProgressInfo) -> some View {
         PairingCardView {
-            VStack(spacing: 20) {
-                Text("Downloading...")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-
-                Text(progress.modelName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white.opacity(0.7))
-
-                VStack(spacing: 8) {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.white.opacity(0.15))
-                                .frame(height: 8)
-
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.blue, Color.cyan],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(width: max(0, geo.size.width * progress.fraction), height: 8)
-                        }
-                    }
-                    .frame(height: 8)
-
-                    HStack {
-                        Text("\(Int(progress.fraction * 100))%")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.6))
-                        Spacer()
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(progress.modelName)
+                            .font(.headline)
                         if progress.totalBytes > 0 {
-                            Text("\(progress.downloadedString) / \(progress.totalString)")
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.6))
+                            Text("\(progress.downloadedString) of \(progress.totalString)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
+                    Spacer()
+                    Text("\(Int(progress.fraction * 100))%")
+                        .font(.system(.title3, design: .rounded))
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.blue)
                 }
+
+                ProgressView(value: progress.fraction)
+                    .tint(.blue)
             }
         }
     }
@@ -212,107 +224,94 @@ public struct PairingScreen: View {
     // MARK: - Success State
 
     private func successCard(model: PairedModelInfo) -> some View {
-        PairingCardView {
-            VStack(spacing: 20) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 44))
-                    .foregroundColor(.green)
-
-                Text("Ready!")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-
-                VStack(spacing: 10) {
-                    modelInfoRow(label: "Model", value: model.name)
-                    modelInfoRow(label: "Version", value: model.version)
-                    modelInfoRow(label: "Size", value: model.sizeString)
-                    modelInfoRow(label: "Runtime", value: model.runtime)
-                    if let tps = model.tokensPerSecond, tps > 0 {
-                        modelInfoRow(label: "Perf", value: String(format: "%.1f tok/s", tps))
-                    }
-                }
-                .padding(.vertical, 4)
-
-                VStack(spacing: 10) {
-                    Button {
-                        if let handler = onTryModel {
-                            handler(model)
-                        } else {
-                            tryItOutModelInfo = model
-                            showTryItOut = true
-                        }
-                    } label: {
-                        Text("Try it out")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.blue, Color.cyan],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(10)
+        VStack(spacing: 16) {
+            PairingCardView {
+                VStack(spacing: 12) {
+                    HStack {
+                        Text(model.name)
+                            .font(.headline)
+                        Spacer()
+                        Text(model.version)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.secondary.opacity(0.15))
+                            .clipShape(Capsule())
                     }
 
-                    Button {
-                        if let handler = onOpenDashboard {
-                            handler()
-                        } else {
-                            openDashboardFallback()
+                    Divider()
+
+                    VStack(spacing: 8) {
+                        modelInfoRow(label: "Size", value: model.sizeString)
+                        modelInfoRow(label: "Runtime", value: model.runtime)
+                        if let tps = model.tokensPerSecond, tps > 0 {
+                            modelInfoRow(label: "Performance", value: String(format: "%.1f tok/s", tps))
                         }
-                    } label: {
-                        Text("Open Dashboard")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white.opacity(0.7))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(10)
                     }
                 }
             }
+
+            Button {
+                if let handler = onTryModel {
+                    handler(model)
+                } else {
+                    tryItOutModelInfo = model
+                    showTryItOut = true
+                }
+            } label: {
+                Label("Try it out", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            Button {
+                if let handler = onOpenDashboard {
+                    handler()
+                } else {
+                    openDashboardFallback()
+                }
+            } label: {
+                Text("Open Dashboard")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.bordered)
         }
     }
 
     // MARK: - Error State
 
     private func errorCard(message: String) -> some View {
-        PairingCardView {
-            VStack(spacing: 20) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 44))
-                    .foregroundColor(.orange)
+        VStack(spacing: 16) {
+            PairingCardView {
+                VStack(spacing: 12) {
+                    Text("Pairing Failed")
+                        .font(.headline)
 
-                Text("Pairing Failed")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.6))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    viewModel.retry()
-                } label: {
-                    Text("Retry")
+                    Text(message)
                         .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.orange.opacity(0.8))
-                        .cornerRadius(10)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+
+            Button {
+                viewModel.retry()
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+            .controlSize(.large)
         }
     }
 
@@ -322,24 +321,21 @@ public struct PairingScreen: View {
         HStack {
             Text(label)
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundStyle(.secondary)
             Spacer()
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(.white.opacity(0.9))
         }
     }
 
     private func displayHost(_ host: String) -> String {
-        // Strip scheme for display
         var display = host
         if display.hasPrefix("https://") {
             display = String(display.dropFirst(8))
         } else if display.hasPrefix("http://") {
             display = String(display.dropFirst(7))
         }
-        // Strip trailing slash
         if display.hasSuffix("/") {
             display = String(display.dropLast())
         }
@@ -357,7 +353,7 @@ public struct PairingScreen: View {
 
 // MARK: - Card Container
 
-/// Rounded card with translucent background used by ``PairingScreen``.
+/// Rounded card used by ``PairingScreen``.
 @available(iOS 15.0, macOS 12.0, *)
 struct PairingCardView<Content: View>: View {
     let content: () -> Content
@@ -368,16 +364,10 @@ struct PairingCardView<Content: View>: View {
 
     var body: some View {
         content()
-            .padding(24)
+            .padding(20)
             .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.08))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
+            .background(Color.secondary.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -387,10 +377,13 @@ struct PairingCardView<Content: View>: View {
 @available(iOS 15.0, macOS 12.0, *)
 struct PairingScreen_Previews: PreviewProvider {
     static var previews: some View {
-        PairingScreen(
-            token: "ABC123",
-            host: "https://api.octomil.com"
-        )
+        NavigationStack {
+            PairingScreen(
+                token: "ABC123",
+                host: "https://api.octomil.com"
+            )
+            .navigationTitle("Pair Device")
+        }
     }
 }
 #endif
