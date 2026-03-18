@@ -110,10 +110,13 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     // MARK: - ModelRuntime
 
     public func run(request: RuntimeRequest) async throws -> RuntimeResponse {
-        let eng = try resolveEngine()
-        var tokens: [String] = []
+        // Determine modality from the request's mediaType.
+        let modality = Self.modality(for: request)
+        let input: Any = Self.engineInput(for: request)
+        let eng = try resolveEngine(modality: modality)
 
-        for try await chunk in eng.generate(input: request.prompt, modality: .text) {
+        var tokens: [String] = []
+        for try await chunk in eng.generate(input: input, modality: modality) {
             if let text = String(data: chunk.data, encoding: .utf8) {
                 tokens.append(text)
             }
@@ -133,19 +136,20 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public func stream(request: RuntimeRequest) -> AsyncThrowingStream<RuntimeChunk, Error> {
         let fileURL = self.fileURL
+        let modality = Self.modality(for: request)
+        let input: Any = Self.engineInput(for: request)
 
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let eng: StreamingInferenceEngine
                     let inferredEngine = EngineRegistry.engineFromURL(fileURL)
-                    eng = try EngineRegistry.shared.resolve(
-                        modality: .text,
+                    let eng = try EngineRegistry.shared.resolve(
+                        modality: modality,
                         engine: inferredEngine,
                         modelURL: fileURL
                     )
 
-                    for try await chunk in eng.generate(input: request.prompt, modality: .text) {
+                    for try await chunk in eng.generate(input: input, modality: modality) {
                         if let text = String(data: chunk.data, encoding: .utf8) {
                             continuation.yield(RuntimeChunk(text: text))
                         }
@@ -167,7 +171,31 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     // MARK: - Private
 
-    private func resolveEngine() throws -> StreamingInferenceEngine {
+    /// Determine the ``Modality`` from a ``RuntimeRequest``.
+    ///
+    /// Checks `mediaType` first; defaults to `.text` when absent.
+    private static func modality(for request: RuntimeRequest) -> Modality {
+        guard let mediaType = request.mediaType?.lowercased() else { return .text }
+        switch mediaType {
+        case "audio":  return .audio
+        case "image":  return .image
+        case "video":  return .video
+        default:       return .text
+        }
+    }
+
+    /// Extract the appropriate engine input from a ``RuntimeRequest``.
+    ///
+    /// For audio/image/video requests that carry `mediaData`, the raw `Data` is
+    /// passed to the engine. For text requests, the prompt string is used.
+    private static func engineInput(for request: RuntimeRequest) -> Any {
+        if let mediaData = request.mediaData, request.mediaType != nil {
+            return mediaData
+        }
+        return request.prompt
+    }
+
+    private func resolveEngine(modality: Modality) throws -> StreamingInferenceEngine {
         lock.lock()
         defer { lock.unlock() }
 
@@ -175,7 +203,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
         let inferredEngine = EngineRegistry.engineFromURL(fileURL)
         let resolved = try EngineRegistry.shared.resolve(
-            modality: .text,
+            modality: modality,
             engine: inferredEngine,
             modelURL: fileURL
         )
