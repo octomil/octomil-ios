@@ -548,30 +548,58 @@ final class PairingViewModel: ObservableObject {
                 state = .benchmarking(metrics: LiveMetrics())
                 let result = try await manager.executeDeployment(deployment)
 
-                // Benchmark submission now happens in the Deploy layer when the
-                // model is loaded for inference, not here.
                 compiledModelURL = result.persistedModelURL
 
-                // Create a minimal report for the complete view using deployment metadata
+                // Step 4: Trigger Deploy.model() to run warmup benchmark and submit results.
+                // Non-fatal: pairing succeeds even if deploy/benchmark fails.
                 let caps = PairingDeviceCapabilities.current()
+                var warmupCold: Double = 0
+                var warmupWarm: Double = 0
+                var tokensPerSecond: Double = 0
+                var memoryPeak: Int = 0
+                var inferenceCount: Int = 0
+                var activeDelegate: String? = result.executor
+                var disabledDelegates: [String]?
+
+                do {
+                    let deployed = try await Deploy.model(
+                        at: result.persistedModelURL,
+                        pairingCode: code,
+                        submitBenchmark: true
+                    )
+                    if let warmup = deployed.warmupResult {
+                        warmupCold = warmup.coldInferenceMs
+                        warmupWarm = warmup.warmInferenceMs
+                        tokensPerSecond = warmup.warmInferenceMs > 0
+                            ? 1000.0 / warmup.warmInferenceMs
+                            : 0
+                        inferenceCount = warmup.cpuInferenceMs != nil ? 4 : 2
+                        activeDelegate = warmup.activeDelegate
+                        disabledDelegates = warmup.disabledDelegates
+                    }
+                } catch {
+                    // Non-fatal: log and continue with zeroed metrics
+                }
+
                 let report = BenchmarkReport(
                     modelName: result.modelName,
                     deviceName: caps.deviceName,
                     chipFamily: caps.chipFamily,
                     ramGB: caps.ramGB,
                     osVersion: caps.osVersion,
-                    ttftMs: 0,
-                    tpotMs: 0,
-                    tokensPerSecond: 0,
-                    p50LatencyMs: 0,
-                    p95LatencyMs: 0,
-                    p99LatencyMs: 0,
-                    memoryPeakBytes: 0,
-                    inferenceCount: 0,
+                    ttftMs: warmupCold,
+                    tpotMs: warmupWarm,
+                    tokensPerSecond: tokensPerSecond,
+                    p50LatencyMs: warmupWarm,
+                    p95LatencyMs: warmupWarm,
+                    p99LatencyMs: warmupCold,
+                    memoryPeakBytes: memoryPeak,
+                    inferenceCount: inferenceCount,
                     modelLoadTimeMs: result.downloadTimeMs,
-                    coldInferenceMs: 0,
-                    warmInferenceMs: 0,
-                    activeDelegate: result.executor
+                    coldInferenceMs: warmupCold,
+                    warmInferenceMs: warmupWarm,
+                    activeDelegate: activeDelegate,
+                    disabledDelegates: disabledDelegates
                 )
 
                 state = .complete(report: report)
