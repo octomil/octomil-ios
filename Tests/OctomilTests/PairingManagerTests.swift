@@ -840,39 +840,35 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertEqual(session.deviceClass, "iphone_15_pro")
     }
 
-    // MARK: - PairingManager submitBenchmark Tests
+    // MARK: - DeploymentResult Tests
 
-    func testSubmitBenchmarkSendsToCorrectEndpoint() async throws {
-        let manager = makePairingManager()
-
-        SharedMockURLProtocol.responses = [
-            .success(statusCode: 200, json: [:]),
-        ]
-
-        let report = BenchmarkReport(
-            modelName: "bench-model",
-            deviceName: "iPhone 15 Pro",
-            chipFamily: "A17 Pro",
-            ramGB: 8.0,
-            osVersion: "17.4",
-            ttftMs: 40.0,
-            tpotMs: 8.0,
-            tokensPerSecond: 125.0,
-            p50LatencyMs: 7.5,
-            p95LatencyMs: 12.0,
-            p99LatencyMs: 18.0,
-            memoryPeakBytes: 400_000_000,
-            inferenceCount: 53,
-            modelLoadTimeMs: 900.0,
-            coldInferenceMs: 55.0,
-            warmInferenceMs: 7.0
+    func testDeploymentResultInit() {
+        let url = URL(fileURLWithPath: "/tmp/test-model/v1")
+        let result = DeploymentResult(
+            modelName: "test-model",
+            modelVersion: "v1",
+            persistedModelURL: url,
+            downloadTimeMs: 1234.5,
+            executor: "coreml"
         )
 
-        try await manager.submitBenchmark(code: "CODE42", report: report)
+        XCTAssertEqual(result.modelName, "test-model")
+        XCTAssertEqual(result.modelVersion, "v1")
+        XCTAssertEqual(result.persistedModelURL, url)
+        XCTAssertEqual(result.downloadTimeMs, 1234.5, accuracy: 0.01)
+        XCTAssertEqual(result.executor, "coreml")
+    }
 
-        let request = try XCTUnwrap(SharedMockURLProtocol.requests.first)
-        XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertTrue(request.url?.path.contains("api/v1/deploy/pair/CODE42/benchmark") == true)
+    func testDeploymentResultOptionalExecutor() {
+        let url = URL(fileURLWithPath: "/tmp/test-model/v1")
+        let result = DeploymentResult(
+            modelName: "test-model",
+            modelVersion: "v1",
+            persistedModelURL: url,
+            downloadTimeMs: 500.0
+        )
+
+        XCTAssertNil(result.executor)
     }
 
     // MARK: - PairingManager WaitForDeployment Timeout Tests

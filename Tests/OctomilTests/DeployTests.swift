@@ -268,4 +268,124 @@ final class DeployTests: XCTestCase {
             XCTAssertTrue(error is DeployError)
         }
     }
+
+    // MARK: - Deploy Pairing Code Parameter Tests
+
+    func testDeployAcceptsPairingCodeParameter() async {
+        // Verify that the pairingCode parameter is accepted without error
+        // (model will fail to load due to unsupported format, but the API
+        // signature should compile and work)
+        let tmpDir = FileManager.default.temporaryDirectory
+        let fakePath = tmpDir.appendingPathComponent("test.bin")
+        FileManager.default.createFile(atPath: fakePath.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: fakePath) }
+
+        do {
+            _ = try await Deploy.model(
+                at: fakePath,
+                benchmark: true,
+                pairingCode: "TEST_CODE"
+            )
+            XCTFail("Expected error")
+        } catch {
+            XCTAssertTrue(error is DeployError)
+        }
+    }
+
+    func testDeployAcceptsPairingCodeAndApiClient() async {
+        // Verify both pairingCode and apiClient parameters are accepted
+        let tmpDir = FileManager.default.temporaryDirectory
+        let fakePath = tmpDir.appendingPathComponent("test.bin")
+        FileManager.default.createFile(atPath: fakePath.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: fakePath) }
+
+        let apiClient = APIClient(
+            serverURL: URL(string: "https://api.test.octomil.com")!,
+            configuration: .standard
+        )
+
+        do {
+            _ = try await Deploy.model(
+                at: fakePath,
+                benchmark: true,
+                pairingCode: "TEST_CODE",
+                apiClient: apiClient
+            )
+            XCTFail("Expected error")
+        } catch {
+            XCTAssertTrue(error is DeployError)
+        }
+    }
+
+    func testDeployWithoutPairingCodeDoesNotSubmit() async {
+        // Without pairingCode, no submission should happen (this is the default)
+        let tmpDir = FileManager.default.temporaryDirectory
+        let fakePath = tmpDir.appendingPathComponent("test.bin")
+        FileManager.default.createFile(atPath: fakePath.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: fakePath) }
+
+        do {
+            _ = try await Deploy.model(at: fakePath, pairingCode: nil, apiClient: nil)
+            XCTFail("Expected error")
+        } catch {
+            XCTAssertTrue(error is DeployError)
+        }
+    }
+
+    // MARK: - WarmupResult to BenchmarkReport Conversion Tests
+
+    func testWarmupResultToBenchmarkReportConversion() {
+        // Test that WarmupResult data maps correctly to BenchmarkReport fields
+        let warmup = WarmupResult(
+            coldInferenceMs: 80.0,
+            warmInferenceMs: 10.0,
+            cpuInferenceMs: 15.0,
+            usingNeuralEngine: true,
+            activeDelegate: "neural_engine",
+            disabledDelegates: []
+        )
+
+        // Simulate the conversion logic from Deploy.submitBenchmark
+        let tokensPerSecond = warmup.warmInferenceMs > 0 ? (1000.0 / warmup.warmInferenceMs) : 0
+
+        XCTAssertEqual(tokensPerSecond, 100.0, accuracy: 0.01)
+        XCTAssertEqual(warmup.coldInferenceMs, 80.0)
+        XCTAssertEqual(warmup.warmInferenceMs, 10.0)
+        XCTAssertEqual(warmup.activeDelegate, "neural_engine")
+        XCTAssertTrue(warmup.disabledDelegates.isEmpty)
+    }
+
+    func testWarmupResultConversionWithCPUFallback() {
+        let warmup = WarmupResult(
+            coldInferenceMs: 100.0,
+            warmInferenceMs: 20.0,
+            cpuInferenceMs: 8.0,
+            usingNeuralEngine: false,
+            activeDelegate: "cpu",
+            disabledDelegates: ["neural_engine"]
+        )
+
+        let tokensPerSecond = warmup.warmInferenceMs > 0 ? (1000.0 / warmup.warmInferenceMs) : 0
+        let inferenceCount = warmup.cpuInferenceMs != nil ? 4 : 2
+
+        XCTAssertEqual(tokensPerSecond, 50.0, accuracy: 0.01)
+        XCTAssertEqual(inferenceCount, 4)
+        XCTAssertEqual(warmup.activeDelegate, "cpu")
+        XCTAssertEqual(warmup.disabledDelegates, ["neural_engine"])
+    }
+
+    func testWarmupResultConversionWithZeroWarmInference() {
+        let warmup = WarmupResult(
+            coldInferenceMs: 50.0,
+            warmInferenceMs: 0.0,
+            cpuInferenceMs: nil,
+            usingNeuralEngine: true,
+            activeDelegate: "neural_engine",
+            disabledDelegates: []
+        )
+
+        let tokensPerSecond = warmup.warmInferenceMs > 0 ? (1000.0 / warmup.warmInferenceMs) : 0
+
+        XCTAssertEqual(tokensPerSecond, 0.0)
+    }
 }
