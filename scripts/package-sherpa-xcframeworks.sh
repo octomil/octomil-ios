@@ -70,7 +70,9 @@ echo "=== Building sherpa_onnx.xcframework ==="
 
 SHERPA_LIBS="libkaldi-native-fbank-core.a libkissfft-float.a libsherpa-onnx-c-api.a
              libsherpa-onnx-core.a libsherpa-onnx-fst.a libsherpa-onnx-fstfar.a
-             libsherpa-onnx-kaldifst-core.a libkaldi-decoder-core.a libssentencepiece_core.a"
+             libsherpa-onnx-kaldifst-core.a libkaldi-decoder-core.a libssentencepiece_core.a
+             libespeak-ng.a libpiper_phonemize.a libucd.a libcargs.a
+             libsherpa-onnx-cxx-api.a"
 
 # Create fat simulator library (arm64 + x86_64)
 echo "  Creating fat simulator library..."

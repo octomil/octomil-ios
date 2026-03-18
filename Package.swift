@@ -115,12 +115,12 @@ let package = Package(
         .binaryTarget(
             name: "sherpa_onnx",
             url: "https://github.com/octomil/octomil-ios/releases/download/engines-v1/sherpa_onnx.xcframework.zip",
-            checksum: "b0e7b387e37a91b89bebb05ec6319f9e8a622119ba4d4e5ac45e0e09d8b1d2ce"
+            checksum: "9e5c00ca3558052b1ebc2de9ffb802edd09e6d962de16f7554e7246be5a4530d"
         ),
         .binaryTarget(
             name: "onnxruntime",
             url: "https://github.com/octomil/octomil-ios/releases/download/engines-v1/onnxruntime.xcframework.zip",
-            checksum: "b2224978056da02371545f0cdd2610c9a97cd9a8fbe72d08e89b0f4bece55d7c"
+            checksum: "a279301ca03a7070f2588144105ccc0e058523e2b25c70e1e8f4dea16fa08901"
         ),
         .binaryTarget(
             name: "whisper",
