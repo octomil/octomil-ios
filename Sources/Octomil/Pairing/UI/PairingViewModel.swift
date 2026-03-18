@@ -172,7 +172,7 @@ public final class PairingViewModel: ObservableObject {
 
             // Step 4: Execute deployment with real progress callback
             let modelName = deployment.modelName
-            let report = try await manager.executeDeployment(deployment) { [weak self] downloaded, total in
+            let result = try await manager.executeDeployment(deployment) { [weak self] downloaded, total in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     let fraction = total > 0 ? Double(downloaded) / Double(total) : 0
@@ -187,10 +187,9 @@ public final class PairingViewModel: ObservableObject {
 
             if Task.isCancelled { return }
 
-            // Step 5: Submit benchmark
-            try? await manager.submitBenchmark(code: token, report: report)
-
-            // Step 6: Show success
+            // Step 5: Show success
+            // Benchmark submission now happens in the Deploy layer when the model
+            // is loaded for inference, not here.
             let sizeString = DownloadProgressInfo.formatBytes(Int64(deployment.sizeBytes ?? 0))
             let runtime = deployment.executor ?? deployment.format
 
@@ -199,8 +198,8 @@ public final class PairingViewModel: ObservableObject {
                 version: deployment.modelVersion,
                 sizeString: sizeString,
                 runtime: runtime,
-                tokensPerSecond: report.tokensPerSecond,
-                compiledModelURL: report.persistedModelURL
+                tokensPerSecond: nil,
+                compiledModelURL: result.persistedModelURL
             ))
 
         } catch is CancellationError {

@@ -4,7 +4,7 @@ import os.log
 /// Handles the end-to-end pairing flow triggered by an `octomil://pair` deep link.
 ///
 /// This actor bridges ``DeepLinkHandler`` (URL parsing) with ``PairingManager``
-/// (server communication and benchmarking). It provides a single-call API for
+/// (server communication and model download). It provides a single-call API for
 /// consuming apps to handle the deep link pairing flow.
 ///
 /// ## Usage
@@ -18,8 +18,8 @@ import os.log
 /// if let action = DeepLinkHandler.parse(url: url) {
 ///     let result = await handler.handle(action: action)
 ///     switch result {
-///     case .success(let report):
-///         print("Paired! Tokens/sec: \(report.tokensPerSecond)")
+///     case .success(let deployResult):
+///         print("Paired! Model at: \(deployResult.persistedModelURL)")
 ///     case .failure(let error):
 ///         print("Pairing failed: \(error)")
 ///     }
@@ -54,14 +54,14 @@ public actor DeepLinkPairingHandler {
     /// Handles a ``DeepLinkAction`` and executes the appropriate flow.
     ///
     /// For `.pair` actions, this runs the full pairing flow: connect, wait for
-    /// deployment, download, benchmark, and submit results.
+    /// deployment, and download the model.
     ///
     /// For `.unknown` actions, returns a failure with ``DeepLinkError/unrecognizedAction``.
     ///
     /// - Parameter action: The parsed deep link action.
-    /// - Returns: A `Result` containing the ``BenchmarkReport`` on success,
+    /// - Returns: A `Result` containing the ``DeploymentResult`` on success,
     ///   or a ``DeepLinkError`` on failure.
-    public func handle(action: DeepLinkAction) async -> Result<BenchmarkReport, DeepLinkError> {
+    public func handle(action: DeepLinkAction) async -> Result<DeploymentResult, DeepLinkError> {
         switch action {
         case .pair(let token, let host):
             return await executePairing(token: token, host: host)
@@ -80,7 +80,7 @@ public actor DeepLinkPairingHandler {
     ///
     /// - Parameter url: The incoming URL.
     /// - Returns: A `Result` if the URL was an `octomil://` deep link, or `nil`.
-    public func handleURL(_ url: URL) async -> Result<BenchmarkReport, DeepLinkError>? {
+    public func handleURL(_ url: URL) async -> Result<DeploymentResult, DeepLinkError>? {
         guard let action = DeepLinkHandler.parse(url: url) else {
             return nil
         }
@@ -89,7 +89,7 @@ public actor DeepLinkPairingHandler {
 
     // MARK: - Private
 
-    private func executePairing(token: String, host: String?) async -> Result<BenchmarkReport, DeepLinkError> {
+    private func executePairing(token: String, host: String?) async -> Result<DeploymentResult, DeepLinkError> {
         let serverURL: URL
         if let host, let parsed = URL(string: host) {
             serverURL = parsed
@@ -104,14 +104,13 @@ public actor DeepLinkPairingHandler {
         let manager = PairingManager(serverURL: serverURL, configuration: configuration)
 
         do {
-            let report = try await manager.pair(code: token)
+            let result = try await manager.pair(code: token)
 
             if configuration.enableLogging {
-                let tps = String(format: "%.1f", report.tokensPerSecond)
-                logger.info("Deep link pairing complete: \(tps) tokens/sec")
+                logger.info("Deep link pairing complete: model at \(result.persistedModelURL.path)")
             }
 
-            return .success(report)
+            return .success(result)
         } catch let error as PairingError {
             return .failure(.pairingFailed(underlying: error))
         } catch {

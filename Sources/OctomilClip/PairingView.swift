@@ -544,12 +544,35 @@ final class PairingViewModel: ObservableObject {
                 let deployment = try await manager.waitForDeployment(code: code)
                 state = .downloading(progress: 0.5)
 
-                // Step 3: Download model and run benchmarks
+                // Step 3: Download model
                 state = .benchmarking(metrics: LiveMetrics())
-                let report = try await manager.executeDeployment(deployment)
+                let result = try await manager.executeDeployment(deployment)
 
-                // Step 4: Submit benchmark results
-                try? await manager.submitBenchmark(code: code, report: report)
+                // Benchmark submission now happens in the Deploy layer when the
+                // model is loaded for inference, not here.
+                compiledModelURL = result.persistedModelURL
+
+                // Create a minimal report for the complete view using deployment metadata
+                let caps = PairingDeviceCapabilities.current()
+                let report = BenchmarkReport(
+                    modelName: result.modelName,
+                    deviceName: caps.deviceName,
+                    chipFamily: caps.chipFamily,
+                    ramGB: caps.ramGB,
+                    osVersion: caps.osVersion,
+                    ttftMs: 0,
+                    tpotMs: 0,
+                    tokensPerSecond: 0,
+                    p50LatencyMs: 0,
+                    p95LatencyMs: 0,
+                    p99LatencyMs: 0,
+                    memoryPeakBytes: 0,
+                    inferenceCount: 0,
+                    modelLoadTimeMs: result.downloadTimeMs,
+                    coldInferenceMs: 0,
+                    warmInferenceMs: 0,
+                    activeDelegate: result.executor
+                )
 
                 state = .complete(report: report)
             } catch {

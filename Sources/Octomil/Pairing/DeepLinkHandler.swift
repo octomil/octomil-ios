@@ -104,7 +104,7 @@ public enum DeepLinkAction: Sendable, Equatable {
 ///         let serverURL = host.flatMap(URL.init(string:))
 ///             ?? URL(string: "https://api.octomil.com")!
 ///         let manager = PairingManager(serverURL: serverURL)
-///         let report = try await manager.pair(code: token)
+///         let result = try await manager.pair(code: token)
 ///
 ///     case .unknown(let url):
 ///         print("Unrecognized deep link: \(url)")
