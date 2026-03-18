@@ -464,6 +464,30 @@ public struct ModelResolveRequest: Codable, Sendable {
     public let supportedRuntimes: [String]
     public let computeUnits: String?
 
+    public init(
+        platform: String,
+        model: String?,
+        manufacturer: String?,
+        cpuArchitecture: String?,
+        osVersion: String?,
+        totalMemoryMb: Int?,
+        gpuAvailable: Bool,
+        npuAvailable: Bool,
+        supportedRuntimes: [String],
+        computeUnits: String?
+    ) {
+        self.platform = platform
+        self.model = model
+        self.manufacturer = manufacturer
+        self.cpuArchitecture = cpuArchitecture
+        self.osVersion = osVersion
+        self.totalMemoryMb = totalMemoryMb
+        self.gpuAvailable = gpuAvailable
+        self.npuAvailable = npuAvailable
+        self.supportedRuntimes = supportedRuntimes
+        self.computeUnits = computeUnits
+    }
+
     enum CodingKeys: String, CodingKey {
         case platform
         case model

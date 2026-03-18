@@ -109,14 +109,19 @@ public actor MLXModelManager {
 
     /// Extract a zip archive to a destination directory.
     private func extractArchive(at archiveURL: URL, to destination: URL) throws {
+        #if os(macOS)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-xk", archiveURL.path, destination.path]
         try process.run()
         process.waitUntilExit()
-
         guard process.terminationStatus == 0 else {
             throw OctomilError.modelCompilationFailed(reason: "Failed to extract MLX model archive")
         }
+        #else
+        throw OctomilError.modelCompilationFailed(
+            reason: "MLX model archive extraction requires macOS (Process is unavailable on iOS)"
+        )
+        #endif
     }
 }

@@ -30,6 +30,8 @@ import CoreTelephony
 /// ```
 public class DeviceMetadata {
 
+    public init() {}
+
     // MARK: - Properties
 
     /// Stable device identifier (IDFV - Identifier For Vendor)
