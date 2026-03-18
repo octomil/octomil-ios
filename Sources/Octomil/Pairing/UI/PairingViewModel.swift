@@ -187,9 +187,25 @@ public final class PairingViewModel: ObservableObject {
 
             if Task.isCancelled { return }
 
-            // Step 5: Show success
-            // Benchmark submission now happens in the Deploy layer when the model
-            // is loaded for inference, not here.
+            // Step 5: Trigger Deploy.model() to run warmup benchmark and submit results.
+            // Non-fatal: pairing succeeds even if deploy/benchmark fails.
+            var tokensPerSecond: Double?
+            do {
+                let deployed = try await Deploy.model(
+                    at: result.persistedModelURL,
+                    pairingCode: token,
+                    submitBenchmark: true
+                )
+                if let warmup = deployed.warmupResult {
+                    tokensPerSecond = warmup.warmInferenceMs > 0
+                        ? 1000.0 / warmup.warmInferenceMs
+                        : nil
+                }
+            } catch {
+                logger.warning("Deploy.model() failed after pairing (non-fatal): \(error.localizedDescription)")
+            }
+
+            // Step 6: Show success
             let sizeString = DownloadProgressInfo.formatBytes(Int64(deployment.sizeBytes ?? 0))
             let runtime = deployment.executor ?? deployment.format
 
@@ -198,7 +214,7 @@ public final class PairingViewModel: ObservableObject {
                 version: deployment.modelVersion,
                 sizeString: sizeString,
                 runtime: runtime,
-                tokensPerSecond: nil,
+                tokensPerSecond: tokensPerSecond,
                 compiledModelURL: result.persistedModelURL
             ))
 
