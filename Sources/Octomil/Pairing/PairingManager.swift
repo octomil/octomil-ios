@@ -7,14 +7,17 @@ import os.log
 /// 1. User scans a QR code on the Octomil dashboard
 /// 2. Device connects to the pairing session with its capabilities
 /// 3. Server prepares an optimized model variant for this device
-/// 4. Device downloads the model, runs benchmarks, and reports results
+/// 4. Device downloads and persists the model
+///
+/// Real performance benchmarks are collected later by the Deploy (engine routing)
+/// layer when the model is loaded for inference.
 ///
 /// # Example Usage
 ///
 /// ```swift
 /// let manager = PairingManager(serverURL: URL(string: "https://api.octomil.com")!)
-/// let report = try await manager.pair(code: "ABC123")
-/// print("Tokens/sec: \(report.tokensPerSecond)")
+/// let result = try await manager.pair(code: "ABC123")
+/// print("Model at: \(result.persistedModelURL)")
 /// ```
 public actor PairingManager {
 
@@ -186,12 +189,12 @@ public actor PairingManager {
     /// - Parameters:
     ///   - deployment: Deployment info from ``waitForDeployment(code:timeout:)``.
     ///   - progress: Called as data arrives with `(bytesDownloaded, totalBytes)`.
-    /// - Returns: Benchmark report with download timing and persisted model URL.
+    /// - Returns: A ``DeploymentResult`` with the persisted model URL and metadata.
     /// - Throws: ``PairingError`` if download fails.
     public func executeDeployment(
         _ deployment: DeploymentInfo,
         progress: @Sendable @escaping (Int64, Int64) -> Void = { _, _ in }
-    ) async throws -> BenchmarkReport {
+    ) async throws -> DeploymentResult {
         guard let resources = deployment.resources, !resources.isEmpty else {
             throw PairingError.invalidDeployment(reason: "No resources in deployment")
         }
@@ -211,7 +214,7 @@ public actor PairingManager {
         _ deployment: DeploymentInfo,
         resources: [DownloadResource],
         progress: @Sendable @escaping (Int64, Int64) -> Void = { _, _ in }
-    ) async throws -> BenchmarkReport {
+    ) async throws -> DeploymentResult {
         let downloadStart = Date()
         let fm = FileManager.default
         let modelDir = fm.temporaryDirectory
@@ -276,59 +279,37 @@ public actor PairingManager {
         )
 
         let downloadTimeMs = Date().timeIntervalSince(downloadStart) * 1000
-        let caps = PairingDeviceCapabilities.current()
 
         if configuration.enableLogging {
             logger.info("Model persisted to: \(persistedURL.path) (\(String(format: "%.0f", downloadTimeMs))ms)")
         }
 
-        var report = BenchmarkReport(
+        return DeploymentResult(
             modelName: deployment.modelName,
-            deviceName: caps.deviceName,
-            chipFamily: caps.chipFamily,
-            ramGB: caps.ramGB,
-            osVersion: caps.osVersion,
-            ttftMs: 0,
-            tpotMs: 0,
-            tokensPerSecond: 0,
-            p50LatencyMs: 0,
-            p95LatencyMs: 0,
-            p99LatencyMs: 0,
-            memoryPeakBytes: 0,
-            inferenceCount: 0,
-            modelLoadTimeMs: downloadTimeMs,
-            coldInferenceMs: 0,
-            warmInferenceMs: 0,
-            activeDelegate: deployment.executor
+            modelVersion: deployment.modelVersion,
+            persistedModelURL: persistedURL,
+            downloadTimeMs: downloadTimeMs,
+            executor: deployment.executor
         )
-        report.persistedModelURL = persistedURL
-        return report
     }
 
-    /// Submit benchmark results to the server.
-    ///
-    /// - Parameters:
-    ///   - code: Pairing code.
-    ///   - report: Benchmark report to submit.
-    public func submitBenchmark(code: String, report: BenchmarkReport) async throws {
-        try await apiClient.submitPairingBenchmark(code: code, report: report)
-    }
-
-    /// Full pairing flow: connect, wait for deployment, download, benchmark, and report.
+    /// Full pairing flow: connect, wait for deployment, and download.
     ///
     /// This is the recommended single-call API for the pairing flow.
+    /// Real performance benchmarks are submitted later by the Deploy layer
+    /// when the model is loaded for inference.
     ///
     /// - Parameters:
     ///   - code: Pairing code from QR scan.
     ///   - deviceCapabilities: Device hardware info. Defaults to auto-detected.
     ///   - timeout: Maximum time to wait for deployment in seconds.
-    /// - Returns: Benchmark report with full performance metrics.
+    /// - Returns: A ``DeploymentResult`` with the persisted model URL and metadata.
     /// - Throws: ``PairingError`` or ``OctomilError``.
     public func pair(
         code: String,
         deviceCapabilities: PairingDeviceCapabilities = .current(),
         timeout: TimeInterval = 300
-    ) async throws -> BenchmarkReport {
+    ) async throws -> DeploymentResult {
         if configuration.enableLogging {
             logger.info("Starting full pairing flow for code: \(code)")
         }
@@ -339,17 +320,14 @@ public actor PairingManager {
         // Step 2: Wait for deployment
         let deployment = try await waitForDeployment(code: code, timeout: timeout)
 
-        // Step 3: Download, benchmark
-        let report = try await executeDeployment(deployment)
-
-        // Step 4: Submit results
-        try await apiClient.submitPairingBenchmark(code: code, report: report)
+        // Step 3: Download and persist
+        let result = try await executeDeployment(deployment)
 
         if configuration.enableLogging {
             logger.info("Pairing flow complete for code: \(code)")
         }
 
-        return report
+        return result
     }
 
     // MARK: - Model Persistence

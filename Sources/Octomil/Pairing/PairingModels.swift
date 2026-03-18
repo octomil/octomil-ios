@@ -295,6 +295,41 @@ public struct BenchmarkReport: Codable, Sendable {
     }
 }
 
+// MARK: - Deployment Result
+
+/// Result of executing a model deployment (download + persistence).
+///
+/// Returned by ``PairingManager/executeDeployment(_:progress:)`` after
+/// the model has been downloaded and persisted to the cache directory.
+/// Unlike ``BenchmarkReport``, this does not contain performance metrics --
+/// real benchmarks are collected later by the Deploy (engine routing) layer.
+public struct DeploymentResult: Sendable {
+    /// Name of the deployed model.
+    public let modelName: String
+    /// Resolved model version.
+    public let modelVersion: String
+    /// URL of the persisted model directory on disk.
+    public let persistedModelURL: URL
+    /// Time to download the model in milliseconds.
+    public let downloadTimeMs: Double
+    /// Inference executor specified by the server, if any (e.g. "coreml", "mnn").
+    public let executor: String?
+
+    public init(
+        modelName: String,
+        modelVersion: String,
+        persistedModelURL: URL,
+        downloadTimeMs: Double,
+        executor: String? = nil
+    ) {
+        self.modelName = modelName
+        self.modelVersion = modelVersion
+        self.persistedModelURL = persistedModelURL
+        self.downloadTimeMs = downloadTimeMs
+        self.executor = executor
+    }
+}
+
 // MARK: - Pairing Device Capabilities
 
 /// Hardware and software capabilities of the device, collected during pairing.
