@@ -332,16 +332,16 @@ public actor PairingManager {
 
     // MARK: - Model Persistence
 
-    /// Moves a model directory to the persistent cache.
+    /// Moves a model directory to persistent storage.
     ///
-    /// Path: `~/Library/Caches/ai.octomil.models/{name}/{version}/`
+    /// Path: `~/Library/Application Support/ai.octomil.models/{name}/{version}/`
     private static func persistModelDirectory(
         sourceDir: URL,
         modelName: String,
         version: String
     ) throws -> URL {
         let fm = FileManager.default
-        let cacheDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let cacheDir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let targetDir = cacheDir
             .appendingPathComponent("ai.octomil.models", isDirectory: true)
             .appendingPathComponent(modelName, isDirectory: true)
