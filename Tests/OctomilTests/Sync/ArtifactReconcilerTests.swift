@@ -27,22 +27,17 @@ final class ArtifactReconcilerTests: XCTestCase {
     // MARK: - planActions
 
     func testPlanActionsNewModel() {
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
-            models: [
-                DesiredModelEntry(
-                    modelId: "m1",
-                    modelVersion: "1.0.0",
-                    artifactVersion: "1.0.0",
-                    artifactId: "a1",
-                    downloadUrl: "https://example.com/a1.bin",
-                    checksum: "abc",
-                    fileSize: 1024
-                ),
-            ]
-        )
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                modelVersion: "1.0.0",
+                artifactVersion: "1.0.0",
+                artifactId: "a1",
+                downloadUrl: "https://example.com/a1.bin",
+                checksum: "abc",
+                fileSize: 1024
+            ),
+        ])
 
         let reconciler = makeReconciler()
         let actions = reconciler.planActionsSync(desired: desired)
@@ -65,22 +60,17 @@ final class ArtifactReconcilerTests: XCTestCase {
             filePath: "/tmp/test/a1"
         ))
 
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
-            models: [
-                DesiredModelEntry(
-                    modelId: "m1",
-                    modelVersion: "1.0.0",
-                    artifactVersion: "1.0.0",
-                    artifactId: "a1",
-                    downloadUrl: "https://example.com/a1.bin",
-                    checksum: "abc",
-                    fileSize: 1024
-                ),
-            ]
-        )
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                modelVersion: "1.0.0",
+                artifactVersion: "1.0.0",
+                artifactId: "a1",
+                downloadUrl: "https://example.com/a1.bin",
+                checksum: "abc",
+                fileSize: 1024
+            ),
+        ])
 
         let reconciler = makeReconciler()
         let actions = reconciler.planActionsSync(desired: desired)
@@ -103,22 +93,17 @@ final class ArtifactReconcilerTests: XCTestCase {
             filePath: "/tmp/test/a1"
         ))
 
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
-            models: [
-                DesiredModelEntry(
-                    modelId: "m1",
-                    modelVersion: "2.0.0",
-                    artifactVersion: "2.0.0",
-                    artifactId: "a2",
-                    downloadUrl: "https://example.com/a2.bin",
-                    checksum: "def",
-                    fileSize: 2048
-                ),
-            ]
-        )
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                modelVersion: "2.0.0",
+                artifactVersion: "2.0.0",
+                artifactId: "a2",
+                downloadUrl: "https://example.com/a2.bin",
+                checksum: "def",
+                fileSize: 2048
+            ),
+        ])
 
         let reconciler = makeReconciler()
         let actions = reconciler.planActionsSync(desired: desired)
@@ -141,23 +126,18 @@ final class ArtifactReconcilerTests: XCTestCase {
             filePath: "/tmp/test/a1"
         ))
 
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
-            models: [
-                DesiredModelEntry(
-                    modelId: "m1",
-                    modelVersion: "1.0.0",
-                    artifactVersion: "1.0.0",
-                    artifactId: "a1",
-                    downloadUrl: "https://example.com/a1.bin",
-                    checksum: "abc",
-                    fileSize: 1024,
-                    activationPolicy: .immediate
-                ),
-            ]
-        )
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                modelVersion: "1.0.0",
+                artifactVersion: "1.0.0",
+                artifactId: "a1",
+                downloadUrl: "https://example.com/a1.bin",
+                checksum: "abc",
+                fileSize: 1024,
+                activationPolicy: .immediate
+            ),
+        ])
 
         let reconciler = makeReconciler()
         let actions = reconciler.planActionsSync(desired: desired)
@@ -181,28 +161,22 @@ final class ArtifactReconcilerTests: XCTestCase {
             filePath: "/tmp/test/a1"
         ))
 
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
-            models: [
-                DesiredModelEntry(
-                    modelId: "m1",
-                    modelVersion: "1.0.0",
-                    artifactVersion: "1.0.0",
-                    artifactId: "a1",
-                    downloadUrl: "https://example.com/a1.bin",
-                    checksum: "abc",
-                    fileSize: 1024,
-                    activationPolicy: .nextLaunch
-                ),
-            ]
-        )
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                modelVersion: "1.0.0",
+                artifactVersion: "1.0.0",
+                artifactId: "a1",
+                downloadUrl: "https://example.com/a1.bin",
+                checksum: "abc",
+                fileSize: 1024,
+                activationPolicy: .nextLaunch
+            ),
+        ])
 
         let reconciler = makeReconciler()
         let actions = reconciler.planActionsSync(desired: desired)
 
-        // Should be upToDate since it's staged and waiting for next_launch
         XCTAssertEqual(actions.count, 1)
         if case .upToDate(let modelId) = actions[0] {
             XCTAssertEqual(modelId, "m1")
@@ -221,22 +195,17 @@ final class ArtifactReconcilerTests: XCTestCase {
             filePath: "/tmp/test/a1"
         ))
 
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
-            models: [
-                DesiredModelEntry(
-                    modelId: "m1",
-                    modelVersion: "1.0.0",
-                    artifactVersion: "1.0.0",
-                    artifactId: "a1",
-                    downloadUrl: "https://example.com/a1.bin",
-                    checksum: "abc",
-                    fileSize: 1024
-                ),
-            ]
-        )
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                modelVersion: "1.0.0",
+                artifactVersion: "1.0.0",
+                artifactId: "a1",
+                downloadUrl: "https://example.com/a1.bin",
+                checksum: "abc",
+                fileSize: 1024
+            ),
+        ])
 
         let reconciler = makeReconciler()
         let actions = reconciler.planActionsSync(desired: desired)
@@ -259,10 +228,7 @@ final class ArtifactReconcilerTests: XCTestCase {
             filePath: "/tmp/test/old"
         ))
 
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
+        let desired = makeDesiredResponse(
             models: [],
             gcEligibleArtifactIds: ["old-artifact"]
         )
@@ -279,10 +245,7 @@ final class ArtifactReconcilerTests: XCTestCase {
     }
 
     func testPlanActionsGarbageCollectionSkipsMissing() {
-        let desired = ParsedDesiredState(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
+        let desired = makeDesiredResponse(
             models: [],
             gcEligibleArtifactIds: ["nonexistent"]
         )
@@ -314,7 +277,6 @@ final class ArtifactReconcilerTests: XCTestCase {
             status: .active,
             filePath: "/tmp/test/a1-new"
         )
-        // Set crash count to threshold
         activeRecord.crashCount = ModelMetadataStore.crashLoopThreshold
         store.upsert(activeRecord)
 
@@ -323,11 +285,9 @@ final class ArtifactReconcilerTests: XCTestCase {
 
         XCTAssertTrue(rolledBack)
 
-        // Old version should now be active
         let active = store.activeRecord(forModelId: "m1")
         XCTAssertEqual(active?.artifactId, "a1-old")
 
-        // New version should be rolled back
         let rolled = store.record(forArtifactId: "a1-new")
         XCTAssertEqual(rolled?.status, .rolledBack)
     }
@@ -386,6 +346,68 @@ final class ArtifactReconcilerTests: XCTestCase {
         XCTAssertEqual(entry.fileSize, 1024)
     }
 
+    func testDesiredStateResponseDecoding() throws {
+        let json = """
+        {
+            "schema_version": "1.4.0",
+            "device_id": "dev1",
+            "generated_at": "2026-03-18T00:00:00Z",
+            "models": [
+                {
+                    "model_id": "m1",
+                    "model_version": "1.0.0",
+                    "artifact_version": "1.0.0",
+                    "artifact_id": "a1",
+                    "download_url": "https://example.com/a1.bin",
+                    "checksum": "abc123",
+                    "file_size": 1024,
+                    "activation_policy": "immediate"
+                }
+            ],
+            "gc_eligible_artifact_ids": ["old-1"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try JSONDecoder().decode(DesiredStateResponse.self, from: json)
+        XCTAssertEqual(response.schemaVersion, "1.4.0")
+        XCTAssertEqual(response.deviceId, "dev1")
+        XCTAssertEqual(response.models.count, 1)
+        XCTAssertEqual(response.models[0].modelId, "m1")
+        XCTAssertEqual(response.models[0].activationPolicy, .immediate)
+        XCTAssertEqual(response.gcEligibleArtifactIds, ["old-1"])
+    }
+
+    func testObservedModelEntryCoding() throws {
+        let entry = ObservedModelEntry(
+            modelId: "m1",
+            artifactId: "a1",
+            artifactVersion: "1.0.0",
+            status: "active",
+            errorCode: nil
+        )
+
+        let data = try JSONEncoder().encode(entry)
+        let decoded = try JSONDecoder().decode(ObservedModelEntry.self, from: data)
+        XCTAssertEqual(decoded.modelId, "m1")
+        XCTAssertEqual(decoded.artifactId, "a1")
+        XCTAssertEqual(decoded.status, "active")
+        XCTAssertNil(decoded.errorCode)
+    }
+
+    func testObservedModelEntryWithError() throws {
+        let entry = ObservedModelEntry(
+            modelId: "m1",
+            artifactId: "a1",
+            artifactVersion: "1.0.0",
+            status: "failed",
+            errorCode: "activation_failed"
+        )
+
+        let data = try JSONEncoder().encode(entry)
+        let decoded = try JSONDecoder().decode(ObservedModelEntry.self, from: data)
+        XCTAssertEqual(decoded.errorCode, "activation_failed")
+    }
+
     func testInstalledModelRecordCoding() throws {
         let record = InstalledModelRecord(
             modelId: "m1",
@@ -416,52 +438,7 @@ final class ArtifactReconcilerTests: XCTestCase {
         XCTAssertEqual(InstalledModelStatus.rolledBack.rawValue, "rolled_back")
     }
 
-    // MARK: - parseDesiredState
-
-    func testParseDesiredStateWithArtifacts() async {
-        let config = TestConfiguration.fast()
-        let apiClient = APIClient(serverURL: URL(string: "https://test.octomil.com")!, configuration: config)
-        let controlSync = ControlSync(apiClient: apiClient)
-        let reconciler = ArtifactReconciler(
-            controlSync: controlSync,
-            metadataStore: store,
-            artifactDirectory: artifactDir
-        )
-
-        // Create a DesiredStateResponse with AnyCodable artifacts
-        let artifactJSON: [String: Any] = [
-            "model_id": "m1",
-            "model_version": "1.0.0",
-            "artifact_version": "1.0.0",
-            "artifact_id": "a1",
-            "download_url": "https://example.com/a1.bin",
-            "checksum": "abc123",
-            "file_size": 1024,
-            "activation_policy": "immediate",
-        ]
-
-        // Encode and decode to get AnyCodable
-        let data = try! JSONSerialization.data(withJSONObject: artifactJSON)
-        let anyCodable = try! JSONDecoder().decode(AnyCodable.self, from: data)
-
-        let response = DesiredStateResponse(
-            schemaVersion: "1.4.0",
-            deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
-            activeBinding: nil,
-            artifacts: [anyCodable],
-            policyConfig: nil,
-            gcEligibleArtifactIds: ["old-1"]
-        )
-
-        let parsed = await reconciler.parseDesiredState(response)
-        XCTAssertEqual(parsed.models.count, 1)
-        XCTAssertEqual(parsed.models[0].modelId, "m1")
-        XCTAssertEqual(parsed.models[0].activationPolicy, .immediate)
-        XCTAssertEqual(parsed.gcEligibleArtifactIds, ["old-1"])
-    }
-
-    // MARK: - ReconcileAction equatable helpers
+    // MARK: - ReconcileAction
 
     func testReconcileActionDownload() {
         let entry = DesiredModelEntry(
@@ -512,17 +489,30 @@ final class ArtifactReconcilerTests: XCTestCase {
     private func makeReconciler() -> TestableReconciler {
         TestableReconciler(store: store, artifactDir: artifactDir)
     }
+
+    private func makeDesiredResponse(
+        models: [DesiredModelEntry],
+        gcEligibleArtifactIds: [String] = []
+    ) -> DesiredStateResponse {
+        DesiredStateResponse(
+            schemaVersion: "1.4.0",
+            deviceId: "dev1",
+            generatedAt: "2026-03-18T00:00:00Z",
+            models: models,
+            gcEligibleArtifactIds: gcEligibleArtifactIds
+        )
+    }
 }
 
 // MARK: - TestableReconciler
 
-/// Exposes internal methods synchronously for unit testing without needing
-/// to set up a real ControlSync / APIClient.
+/// Mirrors the planActions logic from ArtifactReconciler for synchronous
+/// unit testing without needing a real ControlSync / APIClient.
 private struct TestableReconciler {
     let store: ModelMetadataStore
     let artifactDir: URL
 
-    func planActionsSync(desired: ParsedDesiredState) -> [ReconcileAction] {
+    func planActionsSync(desired: DesiredStateResponse) -> [ReconcileAction] {
         var actions: [ReconcileAction] = []
 
         for entry in desired.models {

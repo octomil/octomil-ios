@@ -70,11 +70,10 @@ public actor ArtifactReconciler {
     @discardableResult
     public func reconcile(deviceId: String) async throws -> [ReconcileAction] {
         // 1. Fetch desired state
-        let desiredResponse = try await controlSync.fetchDesiredState(deviceId: deviceId)
-        let desiredState = parseDesiredState(desiredResponse)
+        let desired = try await controlSync.fetchDesiredState(deviceId: deviceId)
 
         // 2. Determine actions
-        let actions = planActions(desired: desiredState)
+        let actions = planActions(desired: desired)
 
         // 3. Execute actions
         var completedActions: [ReconcileAction] = []
@@ -138,8 +137,6 @@ public actor ArtifactReconciler {
     public func activateNextLaunchArtifacts() {
         let staged = metadataStore.stagedRecords()
         for record in staged {
-            // We don't have the activation policy stored on the record, but
-            // staged records waiting for next_launch should be activated now.
             do {
                 try activateArtifact(artifactId: record.artifactId)
                 logger.info("Activated next-launch artifact: \(record.artifactId)")
@@ -197,35 +194,8 @@ public actor ArtifactReconciler {
 
     // MARK: - Internal
 
-    /// Parses a ``DesiredStateResponse`` into typed ``ParsedDesiredState``.
-    internal func parseDesiredState(_ response: DesiredStateResponse) -> ParsedDesiredState {
-        var models: [DesiredModelEntry] = []
-
-        if let artifacts = response.artifacts {
-            let encoder = JSONEncoder()
-            let decoder = JSONDecoder()
-            for artifact in artifacts {
-                do {
-                    let data = try encoder.encode(artifact)
-                    let entry = try decoder.decode(DesiredModelEntry.self, from: data)
-                    models.append(entry)
-                } catch {
-                    logger.debug("Skipping unparseable artifact: \(error.localizedDescription)")
-                }
-            }
-        }
-
-        return ParsedDesiredState(
-            schemaVersion: response.schemaVersion,
-            deviceId: response.deviceId,
-            generatedAt: response.generatedAt,
-            models: models,
-            gcEligibleArtifactIds: response.gcEligibleArtifactIds ?? []
-        )
-    }
-
     /// Compares desired state against local metadata and returns planned actions.
-    internal func planActions(desired: ParsedDesiredState) -> [ReconcileAction] {
+    internal func planActions(desired: DesiredStateResponse) -> [ReconcileAction] {
         var actions: [ReconcileAction] = []
 
         for entry in desired.models {
@@ -236,7 +206,6 @@ public actor ArtifactReconciler {
                     if existing.status == .active {
                         actions.append(.upToDate(modelId: entry.modelId))
                     } else if existing.status == .staged {
-                        // Staged but not yet activated
                         if entry.activationPolicy == .immediate {
                             actions.append(.activate(
                                 modelId: entry.modelId,
@@ -367,12 +336,12 @@ public actor ArtifactReconciler {
     public func reportCurrentState(deviceId: String) async {
         let allRecords = metadataStore.allRecords()
 
-        let statuses = allRecords.map { record in
-            ArtifactStatusEntry(
+        let models = allRecords.map { record in
+            ObservedModelEntry(
+                modelId: record.modelId,
                 artifactId: record.artifactId,
+                artifactVersion: record.artifactVersion,
                 status: record.status.rawValue,
-                bytesDownloaded: nil,
-                totalBytes: nil,
                 errorCode: record.status == .failed ? "activation_failed" : nil
             )
         }
@@ -380,7 +349,7 @@ public actor ArtifactReconciler {
         do {
             try await controlSync.reportObservedState(
                 deviceId: deviceId,
-                artifactStatuses: statuses
+                models: models
             )
         } catch {
             logger.warning("Failed to report observed state: \(error.localizedDescription)")
