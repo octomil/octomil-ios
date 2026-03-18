@@ -8,12 +8,15 @@ import os.log
 /// a `DeployedModel` ready for inference. By default runs a warmup benchmark
 /// comparing Neural Engine vs CPU to select the best delegate.
 ///
-/// When a `pairingCode` and `apiClient` are provided, real benchmark results
-/// are submitted to the server after warmup completes. This replaces the
-/// previous approach of submitting zeroed-out benchmarks during pairing.
+/// When a `pairingCode` is provided and `submitBenchmark` is `true` (the default),
+/// benchmark results are submitted to the server via a lightweight `URLSession`
+/// POST -- no `APIClient` required. The endpoint is unauthenticated.
 public enum Deploy {
 
     private static let logger = Logger(subsystem: "ai.octomil.sdk", category: "Deploy")
+
+    /// Default server URL used when none is supplied.
+    private static let defaultServerURL = URL(string: "https://api.octomil.com")!
 
     /// Deploy a model from a local file URL.
     ///
@@ -24,11 +27,13 @@ public enum Deploy {
     ///   - benchmark: When `true` (default), runs warmup benchmarks comparing
     ///     Neural Engine vs CPU and selects the fastest delegate. Results are
     ///     stored in ``DeployedModel/warmupResult``.
-    ///   - pairingCode: Optional pairing code. When provided along with `apiClient`,
-    ///     submits real benchmark results to the server after warmup. Submission
-    ///     failures are logged but do not cause the method to throw.
-    ///   - apiClient: Optional API client for submitting benchmark results.
-    ///     Required together with `pairingCode` for server submission.
+    ///   - pairingCode: Optional pairing code. When provided, benchmark results
+    ///     are submitted to the server after warmup (unless `submitBenchmark` is
+    ///     set to `false`). Submission failures are logged but never thrown.
+    ///   - submitBenchmark: When `true` (default) and a `pairingCode` is present,
+    ///     submits warmup results to the server. Set to `false` to opt out.
+    ///   - serverURL: Base URL for benchmark submission. Defaults to
+    ///     `https://api.octomil.com`.
     /// - Returns: A `DeployedModel` ready for inference.
     /// - Throws: If the model cannot be loaded.
     public static func model(
@@ -37,7 +42,8 @@ public enum Deploy {
         name: String? = nil,
         benchmark: Bool = true,
         pairingCode: String? = nil,
-        apiClient: APIClient? = nil
+        submitBenchmark: Bool = true,
+        serverURL: URL? = nil
     ) async throws -> DeployedModel {
         let resolvedName = name ?? url.deletingPathExtension().lastPathComponent
         let resolvedEngine = resolveEngine(engine: engine)
@@ -109,15 +115,15 @@ public enum Deploy {
             modelId: resolvedName
         )
 
-        // Submit real benchmark results to the server if pairing context is provided
-        if let code = pairingCode, let client = apiClient, let warmup = deployed.warmupResult {
+        // Submit benchmark results to the server (opt-out: on by default)
+        if submitBenchmark, let code = pairingCode, let warmup = deployed.warmupResult {
             await submitBenchmark(
                 warmup: warmup,
                 modelName: resolvedName,
                 modelLoadTimeMs: deployDurationMs,
                 activeDelegate: warmup.activeDelegate,
                 code: code,
-                apiClient: client
+                serverURL: serverURL ?? defaultServerURL
             )
         }
 
@@ -195,15 +201,17 @@ public enum Deploy {
 
     // MARK: - Benchmark Submission
 
-    /// Converts warmup results to a BenchmarkReport and submits to the server.
-    /// Non-fatal: logs a warning on failure but does not propagate errors.
+    /// Converts warmup results to a BenchmarkReport and POSTs it directly
+    /// via `URLSession`. No `APIClient` dependency -- the endpoint is
+    /// unauthenticated. Non-fatal: logs a warning on failure but does not
+    /// propagate errors.
     private static func submitBenchmark(
         warmup: WarmupResult,
         modelName: String,
         modelLoadTimeMs: Double,
         activeDelegate: String,
         code: String,
-        apiClient: APIClient
+        serverURL: URL
     ) async {
         let caps = PairingDeviceCapabilities.current()
         let tokensPerSecond = warmup.warmInferenceMs > 0 ? (1000.0 / warmup.warmInferenceMs) : 0
@@ -230,8 +238,20 @@ public enum Deploy {
         )
 
         do {
-            try await apiClient.submitPairingBenchmark(code: code, report: report)
-            logger.info("Benchmark submitted for pairing code: \(code)")
+            let url = serverURL.appendingPathComponent("api/v1/deploy/pair/\(code)/benchmark")
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("octomil-ios/1.0", forHTTPHeaderField: "User-Agent")
+
+            request.httpBody = try JSONEncoder().encode(report)
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                logger.warning("Benchmark submission returned HTTP \(httpResponse.statusCode) for pairing code: \(code)")
+            } else {
+                logger.info("Benchmark submitted for pairing code: \(code)")
+            }
         } catch {
             logger.warning("Failed to submit benchmark for pairing code \(code): \(error.localizedDescription)")
         }
