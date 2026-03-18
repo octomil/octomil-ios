@@ -30,6 +30,11 @@ public final class BackgroundSync: @unchecked Sendable {
     private var isConfigured = false
     private let lock = NSLock()
 
+    /// The artifact reconciler for desired-state sync.
+    private var reconciler: ArtifactReconciler?
+    /// The device ID used for desired-state operations.
+    private var deviceId: String?
+
     // MARK: - Initialization
 
     private init() {
@@ -82,6 +87,21 @@ public final class BackgroundSync: @unchecked Sendable {
         self.constraints = constraints
         self.client = client
         self.isConfigured = true
+    }
+
+    /// Configures the reconciler for desired-state sync.
+    ///
+    /// - Parameters:
+    ///   - reconciler: The artifact reconciler to use.
+    ///   - deviceId: The server-assigned device ID.
+    internal func configureReconciler(
+        reconciler: ArtifactReconciler,
+        deviceId: String
+    ) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.reconciler = reconciler
+        self.deviceId = deviceId
     }
 
     // MARK: - Scheduling
@@ -180,25 +200,21 @@ public final class BackgroundSync: @unchecked Sendable {
 
         // Snapshot state under the lock before entering async context
         lock.lock()
-        guard let modelId = modelId,
-              let client = client else {
-            lock.unlock()
+        let reconciler = self.reconciler
+        let deviceId = self.deviceId
+        lock.unlock()
+
+        guard let reconciler = reconciler, let deviceId = deviceId else {
+            logger.warning("Reconciler not configured, skipping sync")
             task.setTaskCompleted(success: false)
             return
         }
-        lock.unlock()
 
         let syncTask = Task {
             do {
-                // Check for model updates
-                if try await client.checkForUpdates(modelId: modelId) != nil {
-                    // Download update
-                    _ = try await client.downloadModel(modelId: modelId)
-                    logger.info("Downloaded model update in background")
-                }
-
+                let actions = try await reconciler.reconcile(deviceId: deviceId)
+                logger.info("Background reconcile completed: \(actions.count) actions")
                 task.setTaskCompleted(success: true)
-
             } catch {
                 logger.error("Background sync failed: \(error.localizedDescription)")
                 task.setTaskCompleted(success: false)
@@ -219,6 +235,13 @@ public final class BackgroundSync: @unchecked Sendable {
         return isConfigured && modelId != nil
     }
 
+    /// Checks if background reconcile sync is configured.
+    public var isReconcileEnabled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return reconciler != nil && deviceId != nil
+    }
+
     /// Gets the configured model ID.
     public var configuredModelId: String? {
         lock.lock()
@@ -235,6 +258,8 @@ extension BackgroundSync {
     public func applicationDidEnterBackground() {
         if isBackgroundTrainingEnabled {
             scheduleNextTraining()
+        }
+        if isBackgroundTrainingEnabled || isReconcileEnabled {
             scheduleSync()
         }
     }
