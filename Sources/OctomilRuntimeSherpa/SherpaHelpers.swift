@@ -58,6 +58,9 @@ func sherpaOnnxOnlineRecognizerConfig(
         ctc_fst_decoder_config: SherpaOnnxOnlineCtcFstDecoderConfig(graph: empty, max_active: 0),
         rule_fsts: empty,
         rule_fars: empty,
-        blank_penalty: 0.0
+        blank_penalty: 0.0,
+        hotwords_buf: empty,
+        hotwords_buf_size: 0,
+        hr: SherpaOnnxHomophoneReplacerConfig(dict_dir: empty, lexicon: empty, rule_fsts: empty)
     )
 }
