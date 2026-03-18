@@ -282,7 +282,7 @@ public actor PairingManager {
             logger.info("Model persisted to: \(persistedURL.path) (\(String(format: "%.0f", downloadTimeMs))ms)")
         }
 
-        return BenchmarkReport(
+        var report = BenchmarkReport(
             modelName: deployment.modelName,
             deviceName: caps.deviceName,
             chipFamily: caps.chipFamily,
@@ -299,9 +299,10 @@ public actor PairingManager {
             modelLoadTimeMs: downloadTimeMs,
             coldInferenceMs: 0,
             warmInferenceMs: 0,
-            activeDelegate: deployment.executor,
-            persistedModelURL: persistedURL
+            activeDelegate: deployment.executor
         )
+        report.persistedModelURL = persistedURL
+        return report
     }
 
     /// Submit benchmark results to the server.

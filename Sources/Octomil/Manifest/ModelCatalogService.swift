@@ -110,7 +110,7 @@ public actor ModelCatalogService {
             throw OctomilError.modelNotFound(modelId: "\(entry.id) (bundled path: \(bundledPath))")
         }
 
-        let runtime = LocalFileModelRuntime(modelId: entry.id, fileURL: url)
+        let runtime = makeRuntime(for: entry, primaryURL: url)
         capabilityRuntimes[entry.capability] = runtime
         runtimeRegistry.register(family: entry.id) { _ in runtime }
         logger.info("Bundled model '\(entry.id)' registered for capability '\(entry.capability.rawValue)'")
@@ -120,7 +120,7 @@ public actor ModelCatalogService {
         // Check if a cached version is already available
         if let cached = modelManager.getCachedModel(modelId: entry.id) {
             let compiledURL = cached.compiledModelURL
-            let runtime = LocalFileModelRuntime(modelId: entry.id, fileURL: compiledURL)
+            let runtime = makeRuntime(for: entry, primaryURL: compiledURL)
             capabilityRuntimes[entry.capability] = runtime
             runtimeRegistry.register(family: entry.id) { _ in runtime }
             logger.info("Managed model '\(entry.id)' loaded from cache")
@@ -144,9 +144,66 @@ public actor ModelCatalogService {
 
     /// Called by ``ModelReadinessManager`` when a managed download completes.
     public func onModelReady(entry: AppModelEntry, fileURL: URL) {
-        let runtime = LocalFileModelRuntime(modelId: entry.id, fileURL: fileURL)
+        let runtime = makeRuntime(for: entry, primaryURL: fileURL)
         capabilityRuntimes[entry.capability] = runtime
         runtimeRegistry.register(family: entry.id) { _ in runtime }
         logger.info("Managed model '\(entry.id)' now ready")
+    }
+
+    // MARK: - Runtime Factory
+
+    /// Creates a ``LocalFileModelRuntime`` from a manifest entry, resolving
+    /// resource bindings and multimodal capabilities when present.
+    private func makeRuntime(for entry: AppModelEntry, primaryURL: URL) -> LocalFileModelRuntime {
+        let resolvedBindings = resolveBindings(entry: entry, primaryURL: primaryURL)
+        let caps = runtimeCapabilities(for: entry)
+
+        if resolvedBindings.isEmpty {
+            return LocalFileModelRuntime(
+                modelId: entry.id,
+                fileURL: primaryURL,
+                capabilities: caps
+            )
+        }
+
+        return LocalFileModelRuntime(
+            modelId: entry.id,
+            fileURL: primaryURL,
+            resourceBindings: resolvedBindings,
+            engineConfig: entry.engineConfig,
+            capabilities: caps
+        )
+    }
+
+    /// Resolve ``ResourceBinding`` entries against a base URL to produce
+    /// a concrete `[ArtifactResourceKind: URL]` mapping.
+    private func resolveBindings(
+        entry: AppModelEntry,
+        primaryURL: URL
+    ) -> [ArtifactResourceKind: URL] {
+        guard let bindings = entry.resourceBindings, !bindings.isEmpty else {
+            return [:]
+        }
+
+        let baseURL = primaryURL.deletingLastPathComponent()
+        var resolved: [ArtifactResourceKind: URL] = [:]
+
+        for binding in bindings {
+            let url = entry.resolvedURL(for: binding.kind, relativeTo: baseURL)
+                ?? baseURL.appendingPathComponent(binding.path)
+            resolved[binding.kind] = url
+        }
+
+        return resolved
+    }
+
+    /// Derive ``RuntimeCapabilities`` from a manifest entry, setting
+    /// multimodal input support based on declared input modalities.
+    private func runtimeCapabilities(for entry: AppModelEntry) -> RuntimeCapabilities {
+        let supportsMultimodal = entry.isMultimodal
+        return RuntimeCapabilities(
+            supportsMultimodalInput: supportsMultimodal,
+            supportsStreaming: true
+        )
     }
 }
