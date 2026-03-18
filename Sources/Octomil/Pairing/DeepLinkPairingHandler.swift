@@ -110,6 +110,18 @@ public actor DeepLinkPairingHandler {
                 logger.info("Deep link pairing complete: model at \(result.persistedModelURL.path)")
             }
 
+            // Trigger Deploy.model() to run warmup benchmark and submit results.
+            // Non-fatal: pairing succeeds even if deploy/benchmark fails.
+            do {
+                _ = try await Deploy.model(
+                    at: result.persistedModelURL,
+                    pairingCode: token,
+                    submitBenchmark: true
+                )
+            } catch {
+                logger.warning("Deploy.model() failed after deep link pairing (non-fatal): \(error.localizedDescription)")
+            }
+
             return .success(result)
         } catch let error as PairingError {
             return .failure(.pairingFailed(underlying: error))
