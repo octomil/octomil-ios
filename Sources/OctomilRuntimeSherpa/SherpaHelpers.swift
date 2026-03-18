@@ -14,7 +14,8 @@ func sherpaOnnxOnlineModelConfig(
     config.tokens = UnsafePointer(strdup(tokens))
     config.num_threads = Int32(numThreads)
     config.provider = UnsafePointer(strdup("cpu"))
-    config.debug = 0
+    config.model_type = UnsafePointer(strdup("zipformer2"))
+    config.debug = 1
     return config
 }
 

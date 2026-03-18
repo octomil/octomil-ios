@@ -22,14 +22,19 @@ final class SherpaStreamingEngine: StreamingInferenceEngine, @unchecked Sendable
             let task = Task {
                 do {
                     let samples = try Self.extractSamples(from: input)
+                    let maxAmp = samples.map { abs($0) }.max() ?? 0
+                    NSLog("[Sherpa] samples=%d maxAmp=%.4f duration=%.1fs", samples.count, maxAmp, Float(samples.count) / 16000.0)
 
                     // Discover model files in the model directory
                     let config = try Self.buildRecognizerConfig(modelDir: modelDir)
 
                     var configCopy = config
+                    NSLog("[Sherpa] Creating recognizer...")
                     guard let recognizer = SherpaOnnxCreateOnlineRecognizer(&configCopy) else {
+                        NSLog("[Sherpa] ERROR: recognizer init failed")
                         throw SherpaError.recognizerInitFailed
                     }
+                    NSLog("[Sherpa] Recognizer created OK")
                     defer { SherpaOnnxDestroyOnlineRecognizer(recognizer) }
 
                     guard let stream = SherpaOnnxCreateOnlineStream(recognizer) else {
@@ -87,9 +92,12 @@ final class SherpaStreamingEngine: StreamingInferenceEngine, @unchecked Sendable
 
                     // Signal end of input and decode remaining
                     SherpaOnnxOnlineStreamInputFinished(stream)
+                    var finalDecodes = 0
                     while SherpaOnnxIsOnlineStreamReady(recognizer, stream) != 0 {
                         SherpaOnnxDecodeOnlineStream(recognizer, stream)
+                        finalDecodes += 1
                     }
+                    NSLog("[Sherpa] Final decodes=%d lastText='%@'", finalDecodes, lastText)
 
                     // Final result
                     if let resultPtr = SherpaOnnxGetOnlineStreamResult(recognizer, stream) {
