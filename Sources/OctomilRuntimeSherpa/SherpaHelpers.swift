@@ -22,7 +22,7 @@ func sherpaOnnxOnlineModelConfig(
         num_threads: Int32(numThreads),
         provider: UnsafePointer(strdup("cpu")),
         debug: 1,
-        model_type: UnsafePointer(strdup("zipformer2")),
+        model_type: empty,
         modeling_unit: empty,
         bpe_vocab: empty,
         tokens_buf: empty,
