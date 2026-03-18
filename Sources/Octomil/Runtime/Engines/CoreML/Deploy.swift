@@ -1,12 +1,19 @@
 import Foundation
 import CoreML
+import os.log
 
 /// Unified model deployment API.
 ///
 /// Loads a model from a local URL, auto-detects the engine, and returns
 /// a `DeployedModel` ready for inference. By default runs a warmup benchmark
 /// comparing Neural Engine vs CPU to select the best delegate.
+///
+/// When a `pairingCode` and `apiClient` are provided, real benchmark results
+/// are submitted to the server after warmup completes. This replaces the
+/// previous approach of submitting zeroed-out benchmarks during pairing.
 public enum Deploy {
+
+    private static let logger = Logger(subsystem: "ai.octomil.sdk", category: "Deploy")
 
     /// Deploy a model from a local file URL.
     ///
@@ -17,13 +24,20 @@ public enum Deploy {
     ///   - benchmark: When `true` (default), runs warmup benchmarks comparing
     ///     Neural Engine vs CPU and selects the fastest delegate. Results are
     ///     stored in ``DeployedModel/warmupResult``.
+    ///   - pairingCode: Optional pairing code. When provided along with `apiClient`,
+    ///     submits real benchmark results to the server after warmup. Submission
+    ///     failures are logged but do not cause the method to throw.
+    ///   - apiClient: Optional API client for submitting benchmark results.
+    ///     Required together with `pairingCode` for server submission.
     /// - Returns: A `DeployedModel` ready for inference.
     /// - Throws: If the model cannot be loaded.
     public static func model(
         at url: URL,
         engine: Engine = .auto,
         name: String? = nil,
-        benchmark: Bool = true
+        benchmark: Bool = true,
+        pairingCode: String? = nil,
+        apiClient: APIClient? = nil
     ) async throws -> DeployedModel {
         let resolvedName = name ?? url.deletingPathExtension().lastPathComponent
         let resolvedEngine = resolveEngine(engine: engine)
@@ -94,6 +108,18 @@ public enum Deploy {
             success: true,
             modelId: resolvedName
         )
+
+        // Submit real benchmark results to the server if pairing context is provided
+        if let code = pairingCode, let client = apiClient, let warmup = deployed.warmupResult {
+            await submitBenchmark(
+                warmup: warmup,
+                modelName: resolvedName,
+                modelLoadTimeMs: deployDurationMs,
+                activeDelegate: warmup.activeDelegate,
+                code: code,
+                apiClient: client
+            )
+        }
 
         return deployed
     }
@@ -166,6 +192,52 @@ public enum Deploy {
 
         return try MLDictionaryFeatureProvider(dictionary: dict as! [String: Any])
     }
+
+    // MARK: - Benchmark Submission
+
+    /// Converts warmup results to a BenchmarkReport and submits to the server.
+    /// Non-fatal: logs a warning on failure but does not propagate errors.
+    private static func submitBenchmark(
+        warmup: WarmupResult,
+        modelName: String,
+        modelLoadTimeMs: Double,
+        activeDelegate: String,
+        code: String,
+        apiClient: APIClient
+    ) async {
+        let caps = PairingDeviceCapabilities.current()
+        let tokensPerSecond = warmup.warmInferenceMs > 0 ? (1000.0 / warmup.warmInferenceMs) : 0
+
+        let report = BenchmarkReport(
+            modelName: modelName,
+            deviceName: caps.deviceName,
+            chipFamily: caps.chipFamily,
+            ramGB: caps.ramGB,
+            osVersion: caps.osVersion,
+            ttftMs: warmup.coldInferenceMs,
+            tpotMs: warmup.warmInferenceMs,
+            tokensPerSecond: tokensPerSecond,
+            p50LatencyMs: warmup.warmInferenceMs,
+            p95LatencyMs: warmup.warmInferenceMs,
+            p99LatencyMs: warmup.coldInferenceMs,
+            memoryPeakBytes: 0,
+            inferenceCount: warmup.cpuInferenceMs != nil ? 4 : 2,
+            modelLoadTimeMs: modelLoadTimeMs,
+            coldInferenceMs: warmup.coldInferenceMs,
+            warmInferenceMs: warmup.warmInferenceMs,
+            activeDelegate: activeDelegate,
+            disabledDelegates: warmup.disabledDelegates
+        )
+
+        do {
+            try await apiClient.submitPairingBenchmark(code: code, report: report)
+            logger.info("Benchmark submitted for pairing code: \(code)")
+        } catch {
+            logger.warning("Failed to submit benchmark for pairing code \(code): \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Engine Resolution
 
     private static func resolveEngine(engine: Engine, url: URL? = nil) -> Engine {
         if engine != .auto { return engine }
