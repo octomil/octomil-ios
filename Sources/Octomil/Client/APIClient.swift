@@ -251,7 +251,7 @@ public actor APIClient {
     /// Gets the device-specific MNN runtime config for optimized inference.
     /// - Parameters:
     ///   - modelId: Model identifier.
-    ///   - deviceType: Device profile key (e.g. "REDACTED_DEVICE").
+    ///   - deviceType: Device profile key (e.g. "iphone_15_pro").
     /// - Returns: MNN config dictionary.
     public func getDeviceConfig(modelId: String, deviceType: String) async throws -> [String: Any] {
         let url = serverURL.appendingPathComponent("api/v1/models/\(modelId)/optimized-config/\(deviceType)")

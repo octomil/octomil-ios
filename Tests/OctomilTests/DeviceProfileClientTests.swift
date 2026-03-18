@@ -31,8 +31,8 @@ final class DeviceProfileClientTests: XCTestCase {
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "profiles": [
-                    "REDACTED_MACHINE_ID": "REDACTED_DEVICE",
-                    "REDACTED_MACHINE_ID": "REDACTED_DEVICE",
+                    "iPhone16,1": "iphone_15_pro",
+                    "iPhone16,2": "iphone_15_pro_max",
                     "iPhone17,1": "iphone_16_pro",
                 ],
                 "ttl_seconds": 300,
@@ -44,15 +44,15 @@ final class DeviceProfileClientTests: XCTestCase {
         let client = makeClient()
         await client.clearCache()
 
-        let profile = await client.resolveProfile(machineId: "REDACTED_MACHINE_ID", totalMemoryMB: 8192)
-        XCTAssertEqual(profile, "REDACTED_DEVICE")
+        let profile = await client.resolveProfile(machineId: "iPhone16,1", totalMemoryMB: 8192)
+        XCTAssertEqual(profile, "iphone_15_pro")
     }
 
     func testResolveProfileCaseInsensitive() async {
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "profiles": [
-                    "REDACTED_MACHINE_ID": "REDACTED_DEVICE",
+                    "iPhone16,1": "iphone_15_pro",
                 ],
                 "ttl_seconds": 300,
                 "fetched_at": 0,
@@ -65,14 +65,14 @@ final class DeviceProfileClientTests: XCTestCase {
 
         // Machine ID from uname is lowercase
         let profile = await client.resolveProfile(machineId: "iphone16,1", totalMemoryMB: 8192)
-        XCTAssertEqual(profile, "REDACTED_DEVICE")
+        XCTAssertEqual(profile, "iphone_15_pro")
     }
 
     func testResolveProfileUnknownDeviceFallsBackToRAM() async {
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "profiles": [
-                    "REDACTED_MACHINE_ID": "REDACTED_DEVICE",
+                    "iPhone16,1": "iphone_15_pro",
                 ],
                 "ttl_seconds": 300,
                 "fetched_at": 0,
@@ -129,7 +129,7 @@ final class DeviceProfileClientTests: XCTestCase {
         let client = makeClient()
         await client.clearCache()
 
-        let profile = await client.resolveProfile(machineId: "REDACTED_MACHINE_ID", totalMemoryMB: 8192)
+        let profile = await client.resolveProfile(machineId: "iPhone16,1", totalMemoryMB: 8192)
         // No server data -> RAM-based fallback
         XCTAssertEqual(profile, "high")
     }
@@ -142,7 +142,7 @@ final class DeviceProfileClientTests: XCTestCase {
         let client = makeClient()
         await client.clearCache()
 
-        let profile = await client.resolveProfile(machineId: "REDACTED_MACHINE_ID", totalMemoryMB: 6000)
+        let profile = await client.resolveProfile(machineId: "iPhone16,1", totalMemoryMB: 6000)
         // Server error -> RAM-based fallback
         XCTAssertEqual(profile, "mid")
     }
@@ -153,7 +153,7 @@ final class DeviceProfileClientTests: XCTestCase {
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "profiles": [
-                    "REDACTED_MACHINE_ID": "REDACTED_DEVICE",
+                    "iPhone16,1": "iphone_15_pro",
                 ],
                 "ttl_seconds": 300,
                 "fetched_at": 0,
@@ -165,12 +165,12 @@ final class DeviceProfileClientTests: XCTestCase {
         await client.clearCache()
 
         // First call fetches from server
-        let first = await client.resolveProfile(machineId: "REDACTED_MACHINE_ID", totalMemoryMB: 8192)
-        XCTAssertEqual(first, "REDACTED_DEVICE")
+        let first = await client.resolveProfile(machineId: "iPhone16,1", totalMemoryMB: 8192)
+        XCTAssertEqual(first, "iphone_15_pro")
 
         // Second call should use in-memory cache (no more server responses queued)
-        let second = await client.resolveProfile(machineId: "REDACTED_MACHINE_ID", totalMemoryMB: 8192)
-        XCTAssertEqual(second, "REDACTED_DEVICE")
+        let second = await client.resolveProfile(machineId: "iPhone16,1", totalMemoryMB: 8192)
+        XCTAssertEqual(second, "iphone_15_pro")
 
         // Only one request should have been made
         XCTAssertEqual(SharedMockURLProtocol.requests.count, 1)
@@ -223,13 +223,13 @@ final class DeviceProfileClientTests: XCTestCase {
     func testClearCacheForcesFetch() async {
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
-                "profiles": ["REDACTED_MACHINE_ID": "REDACTED_DEVICE"],
+                "profiles": ["iPhone16,1": "iphone_15_pro"],
                 "ttl_seconds": 300,
                 "fetched_at": 0,
                 "etag": "",
             ]),
             .success(statusCode: 200, json: [
-                "profiles": ["REDACTED_MACHINE_ID": "iphone_16_pro"],
+                "profiles": ["iPhone16,1": "iphone_16_pro"],
                 "ttl_seconds": 300,
                 "fetched_at": 0,
                 "etag": "",
@@ -239,12 +239,12 @@ final class DeviceProfileClientTests: XCTestCase {
         let client = makeClient()
         await client.clearCache()
 
-        let first = await client.resolveProfile(machineId: "REDACTED_MACHINE_ID", totalMemoryMB: 8192)
-        XCTAssertEqual(first, "REDACTED_DEVICE")
+        let first = await client.resolveProfile(machineId: "iPhone16,1", totalMemoryMB: 8192)
+        XCTAssertEqual(first, "iphone_15_pro")
 
         await client.clearCache()
 
-        let second = await client.resolveProfile(machineId: "REDACTED_MACHINE_ID", totalMemoryMB: 8192)
+        let second = await client.resolveProfile(machineId: "iPhone16,1", totalMemoryMB: 8192)
         XCTAssertEqual(second, "iphone_16_pro")
     }
 
@@ -252,7 +252,7 @@ final class DeviceProfileClientTests: XCTestCase {
 
     func testDeviceProfileMappingCodableRoundTrip() throws {
         let mapping = DeviceProfileMapping(
-            profiles: ["REDACTED_MACHINE_ID": "REDACTED_DEVICE", "iPhone17,1": "iphone_16_pro"],
+            profiles: ["iPhone16,1": "iphone_15_pro", "iPhone17,1": "iphone_16_pro"],
             ttlSeconds: 300,
             fetchedAt: 1000.0,
             etag: "\"abc123\""
@@ -264,7 +264,7 @@ final class DeviceProfileClientTests: XCTestCase {
         let decoded = try decoder.decode(DeviceProfileMapping.self, from: data)
 
         XCTAssertEqual(decoded.profiles.count, 2)
-        XCTAssertEqual(decoded.profiles["REDACTED_MACHINE_ID"], "REDACTED_DEVICE")
+        XCTAssertEqual(decoded.profiles["iPhone16,1"], "iphone_15_pro")
         XCTAssertEqual(decoded.profiles["iPhone17,1"], "iphone_16_pro")
         XCTAssertEqual(decoded.ttlSeconds, 300)
         XCTAssertEqual(decoded.fetchedAt, 1000.0)
@@ -305,14 +305,14 @@ final class DeviceProfileClientTests: XCTestCase {
         SharedMockURLProtocol.responses = [
             // First response -- will expire immediately (ttl=0)
             .success(statusCode: 200, json: [
-                "profiles": ["REDACTED_MACHINE_ID": "REDACTED_DEVICE"],
+                "profiles": ["iPhone16,1": "iphone_15_pro"],
                 "ttl_seconds": 0,
                 "fetched_at": 0,
                 "etag": "",
             ]),
             // Second response
             .success(statusCode: 200, json: [
-                "profiles": ["REDACTED_MACHINE_ID": "REDACTED_DEVICE"],
+                "profiles": ["iPhone16,1": "iphone_15_pro"],
                 "ttl_seconds": 300,
                 "fetched_at": 0,
                 "etag": "",

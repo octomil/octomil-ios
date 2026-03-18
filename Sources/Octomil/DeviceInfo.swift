@@ -72,7 +72,7 @@ public class DeviceMetadata {
     /// tier classification (high/mid/low) with no hardcoded device IDs.
     ///
     /// - Parameter profileClient: The client that fetches and caches server profiles.
-    /// - Returns: Device profile key (e.g. "REDACTED_DEVICE", "high", "mid").
+    /// - Returns: Device profile key (e.g. "iphone_15_pro", "high", "mid").
     public func resolveDeviceProfile(using profileClient: DeviceProfileClient) async -> String {
         let memoryMB = totalMemoryMB ?? 4096 // Conservative default if unknown
         return await profileClient.resolveProfile(machineId: model, totalMemoryMB: memoryMB)

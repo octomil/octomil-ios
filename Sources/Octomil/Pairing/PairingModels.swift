@@ -348,20 +348,20 @@ public struct PairingDeviceCapabilities: Sendable {
         // iPhone mappings
         let mapping: [String: String] = [
             // iPhone 13
-            "REDACTED_MACHINE_ID": "iPhone 13 mini",
-            "REDACTED_MACHINE_ID": "iPhone 13",
-            "REDACTED_MACHINE_ID": "iPhone 13 Pro",
-            "REDACTED_MACHINE_ID": "iPhone 13 Pro Max",
+            "iPhone14,4": "iPhone 13 mini",
+            "iPhone14,5": "iPhone 13",
+            "iPhone14,2": "iPhone 13 Pro",
+            "iPhone14,3": "iPhone 13 Pro Max",
             // iPhone 14
-            "REDACTED_MACHINE_ID": "iPhone 14",
-            "REDACTED_MACHINE_ID": "iPhone 14 Plus",
-            "REDACTED_MACHINE_ID": "iPhone 14 Pro",
-            "REDACTED_MACHINE_ID": "iPhone 14 Pro Max",
+            "iPhone14,7": "iPhone 14",
+            "iPhone14,8": "iPhone 14 Plus",
+            "iPhone15,2": "iPhone 14 Pro",
+            "iPhone15,3": "iPhone 14 Pro Max",
             // iPhone 15
-            "REDACTED_MACHINE_ID": "iPhone 15",
-            "REDACTED_MACHINE_ID": "iPhone 15 Plus",
-            "REDACTED_MACHINE_ID": "iPhone 15 Pro",
-            "REDACTED_MACHINE_ID": "iPhone 15 Pro Max",
+            "iPhone15,4": "iPhone 15",
+            "iPhone15,5": "iPhone 15 Plus",
+            "iPhone16,1": "iPhone 15 Pro",
+            "iPhone16,2": "iPhone 15 Pro Max",
             // iPhone 16
             "iPhone17,3": "iPhone 16",
             "iPhone17,4": "iPhone 16 Plus",
@@ -396,7 +396,7 @@ public struct PairingDeviceCapabilities: Sendable {
         let machine = machineIdentifier()
 
         // A17 Pro: iPhone 15 Pro / Pro Max
-        if machine.hasPrefix("REDACTED_MACHINE_ID") || machine.hasPrefix("REDACTED_MACHINE_ID") {
+        if machine.hasPrefix("iPhone16,1") || machine.hasPrefix("iPhone16,2") {
             return "A17 Pro"
         }
         // A18 Pro: iPhone 16 Pro / Pro Max
@@ -408,12 +408,12 @@ public struct PairingDeviceCapabilities: Sendable {
             return "A18"
         }
         // A16: iPhone 15 / 15 Plus, iPhone 14 Pro / Pro Max
-        if machine.hasPrefix("REDACTED_MACHINE_ID") || machine.hasPrefix("REDACTED_MACHINE_ID") ||
-           machine.hasPrefix("REDACTED_MACHINE_ID") || machine.hasPrefix("REDACTED_MACHINE_ID") {
+        if machine.hasPrefix("iPhone15,2") || machine.hasPrefix("iPhone15,3") ||
+           machine.hasPrefix("iPhone15,4") || machine.hasPrefix("iPhone15,5") {
             return "A16 Bionic"
         }
         // A15: iPhone 14 / 14 Plus, iPhone 13 family
-        if machine.hasPrefix("REDACTED_MACHINE_ID") {
+        if machine.hasPrefix("iPhone14,") {
             return "A15 Bionic"
         }
 

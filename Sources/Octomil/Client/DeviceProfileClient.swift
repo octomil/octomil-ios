@@ -8,7 +8,7 @@ import os.log
 /// Fetched from `GET /api/v1/devices/profiles` and cached both in-memory
 /// and on disk with ETag-based conditional requests.
 public struct DeviceProfileMapping: Codable, Sendable {
-    /// Map of machine identifier (e.g. "REDACTED_MACHINE_ID") to profile tier (e.g. "REDACTED_DEVICE").
+    /// Map of machine identifier (e.g. "iPhone16,1") to profile tier (e.g. "iphone_15_pro").
     public let profiles: [String: String]
     /// Time-to-live in seconds before the mapping should be refreshed.
     public let ttlSeconds: Int
@@ -121,7 +121,7 @@ public actor DeviceProfileClient {
     /// 4. RAM-based fallback tier (no hardcoded device IDs)
     ///
     /// - Parameters:
-    ///   - machineId: The machine identifier (e.g. "REDACTED_MACHINE_ID").
+    ///   - machineId: The machine identifier (e.g. "iPhone16,1").
     ///   - totalMemoryMB: Total physical memory in megabytes for RAM-based fallback.
     /// - Returns: A device profile key string.
     public func resolveProfile(machineId: String, totalMemoryMB: Int) async -> String {
