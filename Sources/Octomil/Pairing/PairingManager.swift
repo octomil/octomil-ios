@@ -284,6 +284,12 @@ public actor PairingManager {
         let finalTotal = totalSize > 0 ? totalSize : completedBytes
         progress(finalTotal, finalTotal)
 
+        // Build resource bindings from downloaded resources (kind → filename)
+        var bindings: [String: String] = [:]
+        for resource in sortedResources {
+            bindings[resource.kind] = resource.filename
+        }
+
         // Persist downloaded files to model cache
         let persistedURL = try Self.persistModelDirectory(
             sourceDir: modelDir,
@@ -302,7 +308,8 @@ public actor PairingManager {
             modelVersion: deployment.modelVersion,
             persistedModelURL: persistedURL,
             downloadTimeMs: downloadTimeMs,
-            executor: deployment.executor
+            executor: deployment.executor,
+            resourceBindings: bindings
         )
     }
 

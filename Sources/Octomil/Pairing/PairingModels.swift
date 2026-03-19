@@ -314,19 +314,26 @@ public struct DeploymentResult: Sendable {
     public let downloadTimeMs: Double
     /// Inference executor specified by the server, if any (e.g. "coreml", "mnn").
     public let executor: String?
+    /// Resource kind → filename mapping built from ``DownloadResource`` entries.
+    ///
+    /// Consumers use this to resolve individual files (weights, tokenizer, etc.)
+    /// within the persisted model directory.
+    public let resourceBindings: [String: String]
 
     public init(
         modelName: String,
         modelVersion: String,
         persistedModelURL: URL,
         downloadTimeMs: Double,
-        executor: String? = nil
+        executor: String? = nil,
+        resourceBindings: [String: String] = [:]
     ) {
         self.modelName = modelName
         self.modelVersion = modelVersion
         self.persistedModelURL = persistedModelURL
         self.downloadTimeMs = downloadTimeMs
         self.executor = executor
+        self.resourceBindings = resourceBindings
     }
 }
 
