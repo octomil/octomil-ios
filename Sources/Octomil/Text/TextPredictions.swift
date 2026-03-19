@@ -39,9 +39,8 @@ public final class TextPredictions: @unchecked Sendable {
         let start = ContinuousClock.now
 
         let request = RuntimeRequest(
-            prompt: input,
-            maxTokens: 32,
-            temperature: 0.3
+            messages: [RuntimeMessage(role: .user, parts: [.text(input)])],
+            generationConfig: GenerationConfig(maxTokens: 32, temperature: 0.3)
         )
 
         let response = try await runtime.run(request: request)

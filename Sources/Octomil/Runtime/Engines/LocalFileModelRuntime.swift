@@ -110,7 +110,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     // MARK: - ModelRuntime
 
     public func run(request: RuntimeRequest) async throws -> RuntimeResponse {
-        // Determine modality from the request's mediaType.
+        // Determine modality from the request's message parts.
         let modality = Self.modality(for: request)
         let input: Any = Self.engineInput(for: request)
         let eng = try resolveEngine(modality: modality)
@@ -122,14 +122,15 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
             }
         }
 
+        let prompt = ChatMLRenderer.render(request)
         let text = tokens.joined()
         return RuntimeResponse(
             text: text,
             finishReason: "stop",
             usage: RuntimeUsage(
-                promptTokens: estimateTokens(request.prompt),
+                promptTokens: estimateTokens(prompt),
                 completionTokens: tokens.count,
-                totalTokens: estimateTokens(request.prompt) + tokens.count
+                totalTokens: estimateTokens(prompt) + tokens.count
             )
         )
     }
@@ -171,28 +172,40 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     // MARK: - Private
 
-    /// Determine the ``Modality`` from a ``RuntimeRequest``.
+    /// Determine the ``Modality`` from a ``RuntimeRequest`` by inspecting message parts.
     ///
-    /// Checks `mediaType` first; defaults to `.text` when absent.
+    /// Checks for non-text content parts; defaults to `.text` when all parts are text.
     private static func modality(for request: RuntimeRequest) -> Modality {
-        guard let mediaType = request.mediaType?.lowercased() else { return .text }
-        switch mediaType {
-        case "audio":  return .audio
-        case "image":  return .image
-        case "video":  return .video
-        default:       return .text
+        for msg in request.messages {
+            for part in msg.parts {
+                switch part {
+                case .audio: return .audio
+                case .image: return .image
+                case .video: return .video
+                case .text: continue
+                }
+            }
         }
+        return .text
     }
 
     /// Extract the appropriate engine input from a ``RuntimeRequest``.
     ///
-    /// For audio/image/video requests that carry `mediaData`, the raw `Data` is
-    /// passed to the engine. For text requests, the prompt string is used.
+    /// For audio/image/video requests that carry media data in message parts,
+    /// the raw `Data` is passed to the engine. For text requests, the rendered
+    /// prompt string is used.
     private static func engineInput(for request: RuntimeRequest) -> Any {
-        if let mediaData = request.mediaData, request.mediaType != nil {
-            return mediaData
+        for msg in request.messages {
+            for part in msg.parts {
+                switch part {
+                case .image(let data, _), .audio(let data, _), .video(let data, _):
+                    return data
+                case .text:
+                    continue
+                }
+            }
         }
-        return request.prompt
+        return ChatMLRenderer.render(request)
     }
 
     private func resolveEngine(modality: Modality) throws -> StreamingInferenceEngine {

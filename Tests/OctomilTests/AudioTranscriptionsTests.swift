@@ -131,8 +131,13 @@ final class AudioTranscriptionsTests: XCTestCase {
         XCTAssertEqual(mockRuntime.runCallCount, 1, "create() should call runtime.run() exactly once")
         let capturedRequest = mockRuntime.lastRequest
         XCTAssertNotNil(capturedRequest)
-        XCTAssertEqual(capturedRequest?.mediaData, audioData, "Audio data should be passed to runtime")
-        XCTAssertEqual(capturedRequest?.mediaType, "audio", "Media type should be 'audio'")
+        // Audio data should be in the first message's first part
+        if case .audio(let data, let mediaType) = capturedRequest?.messages.first?.parts.first {
+            XCTAssertEqual(data, audioData, "Audio data should be passed to runtime")
+            XCTAssertEqual(mediaType, "audio", "Media type should be 'audio'")
+        } else {
+            XCTFail("Expected audio content part in first message")
+        }
     }
 
     func testCreateDoesNotUsePromptForAudioContent() async throws {
@@ -142,9 +147,15 @@ final class AudioTranscriptionsTests: XCTestCase {
         let audioData = Data(repeating: 0xAB, count: 100)
         _ = try await transcriptions.create(audio: audioData, model: "whisper-small")
 
-        // The prompt should be empty — audio content travels via mediaData, not prompt
+        // Audio content travels via message parts, not as text
         let capturedRequest = mockRuntime.lastRequest
-        XCTAssertEqual(capturedRequest?.prompt, "", "Audio should not be passed via prompt")
+        XCTAssertNotNil(capturedRequest)
+        // The message should contain an audio part, not a text part
+        if case .audio = capturedRequest?.messages.first?.parts.first {
+            // expected — audio content is in the parts
+        } else {
+            XCTFail("Audio should be passed via message parts, not as text")
+        }
     }
 
     func testCreateResolvesRuntimeByModelId() async throws {
@@ -226,9 +237,7 @@ final class AudioTranscriptionsTests: XCTestCase {
         )
 
         let request = RuntimeRequest(
-            prompt: "",
-            mediaData: Data([0x01, 0x02]),
-            mediaType: "audio"
+            messages: [RuntimeMessage(role: .user, parts: [.audio(data: Data([0x01, 0x02]), mediaType: "audio")])]
         )
 
         let response = try await runtime.run(request: request)
@@ -251,7 +260,9 @@ final class AudioTranscriptionsTests: XCTestCase {
             fileURL: URL(fileURLWithPath: "/tmp/fake-model")
         )
 
-        let request = RuntimeRequest(prompt: "Hello")
+        let request = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("Hello")])]
+        )
         let response = try await runtime.run(request: request)
 
         XCTAssertEqual(response.text, "text output")

@@ -227,7 +227,51 @@ public final class OctomilResponses: @unchecked Sendable {
     }
 
     private static func buildRuntimeRequest(_ request: ResponseRequest) -> RuntimeRequest {
-        let prompt = PromptFormatter.format(input: request.input, tools: request.tools, toolChoice: request.toolChoice)
+        var messages: [RuntimeMessage] = []
+
+        for item in request.input {
+            switch item {
+            case .system(let content):
+                messages.append(RuntimeMessage(role: .system, parts: [.text(content)]))
+            case .user(let parts):
+                let runtimeParts = parts.map { part -> RuntimeContentPart in
+                    switch part {
+                    case .text(let text): return .text(text)
+                    case .image(let data, _, let mediaType, _):
+                        let decoded = data.flatMap { Data(base64Encoded: $0) } ?? Data()
+                        return .image(data: decoded, mediaType: mediaType ?? "image/png")
+                    case .audio(let data, let mediaType):
+                        let decoded = Data(base64Encoded: data) ?? Data()
+                        return .audio(data: decoded, mediaType: mediaType)
+                    case .file(let data, let mediaType, _):
+                        let decoded = Data(base64Encoded: data) ?? Data()
+                        let mt = mediaType.lowercased()
+                        if mt.hasPrefix("image/") { return .image(data: decoded, mediaType: mediaType) }
+                        if mt.hasPrefix("audio/") { return .audio(data: decoded, mediaType: mediaType) }
+                        if mt.hasPrefix("video/") { return .video(data: decoded, mediaType: mediaType) }
+                        return .text("[file: unsupported type \(mediaType)]")
+                    }
+                }
+                messages.append(RuntimeMessage(role: .user, parts: runtimeParts))
+            case .assistant(let content, let toolCalls):
+                var parts: [RuntimeContentPart] = []
+                if let content = content {
+                    for p in content {
+                        if case .text(let text) = p { parts.append(.text(text)) }
+                    }
+                }
+                if let calls = toolCalls {
+                    for call in calls {
+                        parts.append(.text("{\"tool_call\": {\"name\": \"\(call.name)\", \"arguments\": \(call.arguments)}}"))
+                    }
+                }
+                if parts.isEmpty { parts.append(.text("")) }
+                messages.append(RuntimeMessage(role: .assistant, parts: parts))
+            case .toolResult(_, let content):
+                messages.append(RuntimeMessage(role: .tool, parts: [.text(content)]))
+            }
+        }
+
         let toolDefs: [RuntimeToolDef]? = request.tools.isEmpty ? nil : request.tools.map { tool in
             RuntimeToolDef(
                 name: tool.function.name,
@@ -244,11 +288,13 @@ public final class OctomilResponses: @unchecked Sendable {
         }
 
         return RuntimeRequest(
-            prompt: prompt,
-            maxTokens: request.maxOutputTokens ?? 512,
-            temperature: request.temperature ?? 0.7,
-            topP: request.topP ?? 1.0,
-            stop: request.stop,
+            messages: messages,
+            generationConfig: GenerationConfig(
+                maxTokens: request.maxOutputTokens ?? 512,
+                temperature: request.temperature ?? 0.7,
+                topP: request.topP ?? 1.0,
+                stop: request.stop
+            ),
             toolDefinitions: toolDefs,
             jsonSchema: jsonSchema
         )

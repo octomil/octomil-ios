@@ -1,95 +1,121 @@
 import XCTest
 @testable import Octomil
 
-final class PromptFormatterTests: XCTestCase {
+final class ChatMLRendererTests: XCTestCase {
 
-    func testFormatsSimpleTextInput() {
-        let result = PromptFormatter.format(input: [.text("Hello")])
+    func testRendersSimpleTextInput() {
+        let request = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("Hello")])]
+        )
+        let result = ChatMLRenderer.render(request)
         XCTAssertTrue(result.contains("<|user|>\nHello\n"))
         XCTAssertTrue(result.hasSuffix("<|assistant|>\n"))
     }
 
-    func testFormatsSystemMessage() {
-        let result = PromptFormatter.format(input: [
-            .system("You are helpful"),
-            .text("Hi"),
-        ])
+    func testRendersSystemMessage() {
+        let request = RuntimeRequest(
+            messages: [
+                RuntimeMessage(role: .system, parts: [.text("You are helpful")]),
+                RuntimeMessage(role: .user, parts: [.text("Hi")]),
+            ]
+        )
+        let result = ChatMLRenderer.render(request)
         XCTAssertTrue(result.contains("<|system|>\nYou are helpful\n"))
         XCTAssertTrue(result.contains("<|user|>\nHi\n"))
     }
 
-    func testFormatsToolResult() {
-        let result = PromptFormatter.format(input: [
-            .toolResult(toolCallId: "call_1", content: "72\u{00B0}F"),
-        ])
+    func testRendersToolResult() {
+        let request = RuntimeRequest(
+            messages: [
+                RuntimeMessage(role: .tool, parts: [.text("72\u{00B0}F")]),
+            ]
+        )
+        let result = ChatMLRenderer.render(request)
         XCTAssertTrue(result.contains("<|tool|>\n72\u{00B0}F\n"))
     }
 
-    func testFormatsAssistantWithToolCalls() {
-        let result = PromptFormatter.format(input: [
-            .assistant(
-                content: nil,
-                toolCalls: [ResponseToolCall(id: "call_1", name: "get_weather", arguments: "{\"city\":\"NYC\"}")]
-            ),
-        ])
+    func testRendersAssistantWithToolCalls() {
+        let request = RuntimeRequest(
+            messages: [
+                RuntimeMessage(role: .assistant, parts: [
+                    .text("{\"tool_call\": {\"name\": \"get_weather\", \"arguments\": {\"city\":\"NYC\"}}}")
+                ]),
+            ]
+        )
+        let result = ChatMLRenderer.render(request)
         XCTAssertTrue(result.contains("<|assistant|>\n"))
         XCTAssertTrue(result.contains("get_weather"))
     }
 
     func testIncludesToolDefinitions() {
-        let result = PromptFormatter.format(
-            input: [.text("What's the weather?")],
-            tools: [Tool.function(name: "get_weather", description: "Get weather for a city")]
+        let request = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("What's the weather?")])],
+            toolDefinitions: [
+                RuntimeToolDef(name: "get_weather", description: "Get weather for a city"),
+            ]
         )
+        let result = ChatMLRenderer.render(request)
         XCTAssertTrue(result.contains("Function: get_weather"))
         XCTAssertTrue(result.contains("Description: Get weather for a city"))
     }
 
     func testSkipsToolsWhenToolChoiceIsNone() {
-        let result = PromptFormatter.format(
-            input: [.text("Hello")],
-            tools: [Tool.function(name: "get_weather", description: "Get weather")],
-            toolChoice: .none
+        let request = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("Hello")])],
+            toolDefinitions: [
+                RuntimeToolDef(name: "get_weather", description: "Get weather"),
+            ]
         )
+        let result = ChatMLRenderer.render(request, toolChoice: "none")
         XCTAssertFalse(result.contains("Function: get_weather"))
     }
 
     func testAddsRequiredInstruction() {
-        let result = PromptFormatter.format(
-            input: [.text("Hello")],
-            tools: [Tool.function(name: "get_weather", description: "Get weather")],
-            toolChoice: .required
+        let request = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("Hello")])],
+            toolDefinitions: [
+                RuntimeToolDef(name: "get_weather", description: "Get weather"),
+            ]
         )
+        let result = ChatMLRenderer.render(request, toolChoice: "required")
         XCTAssertTrue(result.contains("MUST use one of the available tools"))
     }
 
     func testAddsSpecificToolInstruction() {
-        let result = PromptFormatter.format(
-            input: [.text("Hello")],
-            tools: [Tool.function(name: "get_weather", description: "Get weather")],
-            toolChoice: .specific("get_weather")
+        let request = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("Hello")])],
+            toolDefinitions: [
+                RuntimeToolDef(name: "get_weather", description: "Get weather"),
+            ]
         )
+        let result = ChatMLRenderer.render(request, toolChoice: "specific", specificToolName: "get_weather")
         XCTAssertTrue(result.contains("MUST use the tool: get_weather"))
     }
 
-    func testFormatsImagePlaceholder() {
-        let result = PromptFormatter.format(input: [
-            .user([
-                .text("What is this?"),
-                .imageData("base64data", mediaType: "image/png"),
-            ]),
-        ])
+    func testRendersImagePlaceholder() {
+        let request = RuntimeRequest(
+            messages: [
+                RuntimeMessage(role: .user, parts: [
+                    .text("What is this?"),
+                    .image(data: Data(), mediaType: "image/png"),
+                ]),
+            ]
+        )
+        let result = ChatMLRenderer.render(request)
         XCTAssertTrue(result.contains("What is this?"))
         XCTAssertTrue(result.contains("[image]"))
     }
 
-    func testFormatsMultiTurnConversation() {
-        let result = PromptFormatter.format(input: [
-            .system("You are a helpful assistant"),
-            .text("Hello"),
-            .assistant(content: [.text("Hi! How can I help?")], toolCalls: nil),
-            .text("What is 2+2?"),
-        ])
+    func testRendersMultiTurnConversation() {
+        let request = RuntimeRequest(
+            messages: [
+                RuntimeMessage(role: .system, parts: [.text("You are a helpful assistant")]),
+                RuntimeMessage(role: .user, parts: [.text("Hello")]),
+                RuntimeMessage(role: .assistant, parts: [.text("Hi! How can I help?")]),
+                RuntimeMessage(role: .user, parts: [.text("What is 2+2?")]),
+            ]
+        )
+        let result = ChatMLRenderer.render(request)
         XCTAssertTrue(result.contains("<|system|>\nYou are a helpful assistant\n"))
         XCTAssertTrue(result.contains("<|user|>\nHello\n"))
         XCTAssertTrue(result.contains("<|assistant|>\nHi! How can I help?\n"))

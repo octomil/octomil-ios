@@ -135,7 +135,7 @@ private final class WorkflowMockRuntime: ModelRuntime, @unchecked Sendable {
     init(responses: [RuntimeResponse]) { self.responses = responses }
 
     func run(request: RuntimeRequest) async throws -> RuntimeResponse {
-        capturedPrompts.append(request.prompt)
+        capturedPrompts.append(ChatMLRenderer.render(request))
         guard index < responses.count else { return RuntimeResponse(text: "") }
         let response = responses[index]
         index += 1

@@ -66,9 +66,7 @@ public final class AudioTranscriptions: @unchecked Sendable {
         }
 
         let request = RuntimeRequest(
-            prompt: "",
-            mediaData: audio,
-            mediaType: "audio"
+            messages: [RuntimeMessage(role: .user, parts: [.audio(data: audio, mediaType: "audio")])]
         )
 
         let response = try await runtime.run(request: request)

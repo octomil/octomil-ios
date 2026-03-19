@@ -72,9 +72,10 @@ final class ResponsesIntegrationTests: XCTestCase {
             ResponseRequest(model: "test", input: "Hello world")
         )
 
-        // The string shorthand should produce a prompt containing "Hello world"
+        // The string shorthand should produce messages containing "Hello world"
         XCTAssertNotNil(runtime.capturedRequest)
-        XCTAssertTrue(runtime.capturedRequest!.prompt.contains("Hello world"))
+        let rendered = ChatMLRenderer.render(runtime.capturedRequest!)
+        XCTAssertTrue(rendered.contains("Hello world"))
     }
 
     // MARK: - Instructions
@@ -92,7 +93,7 @@ final class ResponsesIntegrationTests: XCTestCase {
         )
 
         XCTAssertNotNil(runtime.capturedRequest)
-        let prompt = runtime.capturedRequest!.prompt
+        let prompt = ChatMLRenderer.render(runtime.capturedRequest!)
 
         // The system message should appear before the user message
         let systemRange = prompt.range(of: "You are a math tutor.")
@@ -132,9 +133,9 @@ final class ResponsesIntegrationTests: XCTestCase {
             XCTFail("Expected text output")
         }
 
-        // Verify the runtime received a prompt that includes the previous assistant output
-        XCTAssertNotNil(runtime.capturedPrompts.last)
-        XCTAssertTrue(runtime.capturedPrompts.last!.contains("I am a helpful assistant."))
+        // Verify the runtime received messages that include the previous assistant output
+        XCTAssertNotNil(runtime.capturedRendered.last)
+        XCTAssertTrue(runtime.capturedRendered.last!.contains("I am a helpful assistant."))
     }
 }
 
@@ -188,12 +189,12 @@ private final class IntegrationSequentialRuntime: ModelRuntime, @unchecked Senda
     let capabilities = RuntimeCapabilities()
     private var responses: [RuntimeResponse]
     private var index = 0
-    var capturedPrompts: [String] = []
+    var capturedRendered: [String] = []
 
     init(responses: [RuntimeResponse]) { self.responses = responses }
 
     func run(request: RuntimeRequest) async throws -> RuntimeResponse {
-        capturedPrompts.append(request.prompt)
+        capturedRendered.append(ChatMLRenderer.render(request))
         guard index < responses.count else { return RuntimeResponse(text: "") }
         let response = responses[index]
         index += 1

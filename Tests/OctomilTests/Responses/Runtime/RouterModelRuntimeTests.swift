@@ -13,7 +13,7 @@ final class RouterModelRuntimeTests: XCTestCase {
             defaultPolicy: .auto()
         )
 
-        let response = try await router.run(request: RuntimeRequest(prompt: "test"))
+        let response = try await router.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
         XCTAssertEqual(response.text, "local result")
     }
 
@@ -26,7 +26,7 @@ final class RouterModelRuntimeTests: XCTestCase {
             defaultPolicy: .auto(fallback: "cloud")
         )
 
-        let response = try await router.run(request: RuntimeRequest(prompt: "test"))
+        let response = try await router.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
         XCTAssertEqual(response.text, "cloud result")
     }
 
@@ -38,7 +38,7 @@ final class RouterModelRuntimeTests: XCTestCase {
         )
 
         do {
-            _ = try await router.run(request: RuntimeRequest(prompt: "test"))
+            _ = try await router.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
             XCTFail("Should have thrown")
         } catch {
             XCTAssertTrue(error is OctomilResponsesError)
@@ -55,7 +55,7 @@ final class RouterModelRuntimeTests: XCTestCase {
             defaultPolicy: .cloudOnly
         )
 
-        let response = try await router.run(request: RuntimeRequest(prompt: "test"))
+        let response = try await router.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
         XCTAssertEqual(response.text, "cloud result")
     }
 
@@ -108,7 +108,7 @@ final class RouterModelRuntimeTests: XCTestCase {
         )
 
         do {
-            _ = try await router.run(request: RuntimeRequest(prompt: "test"))
+            _ = try await router.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
             XCTFail("Should have thrown")
         } catch {
             XCTAssertTrue(error is OctomilResponsesError)
@@ -126,7 +126,7 @@ final class RouterModelRuntimeTests: XCTestCase {
         )
 
         var texts: [String] = []
-        for try await chunk in router.stream(request: RuntimeRequest(prompt: "test")) {
+        for try await chunk in router.stream(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])])) {
             if let text = chunk.text { texts.append(text) }
         }
         XCTAssertEqual(texts, ["streamed"])

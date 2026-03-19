@@ -7,7 +7,7 @@ final class LLMRuntimeAdapterTests: XCTestCase {
         let llm = MockLLMRuntime(tokens: ["Hello", " world"])
         let adapter = LLMRuntimeAdapter(llmRuntime: llm)
 
-        let response = try await adapter.run(request: RuntimeRequest(prompt: "test"))
+        let response = try await adapter.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
 
         XCTAssertEqual(response.text, "Hello world")
         XCTAssertEqual(response.finishReason, "stop")
@@ -20,7 +20,7 @@ final class LLMRuntimeAdapterTests: XCTestCase {
         let adapter = LLMRuntimeAdapter(llmRuntime: llm)
 
         var chunks: [RuntimeChunk] = []
-        for try await chunk in adapter.stream(request: RuntimeRequest(prompt: "test")) {
+        for try await chunk in adapter.stream(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])])) {
             chunks.append(chunk)
         }
 
@@ -35,7 +35,8 @@ final class LLMRuntimeAdapterTests: XCTestCase {
         let adapter = LLMRuntimeAdapter(llmRuntime: llm)
 
         _ = try await adapter.run(request: RuntimeRequest(
-            prompt: "test", maxTokens: 100, temperature: 0.5, topP: 0.9, stop: ["END"]
+            messages: [RuntimeMessage(role: .user, parts: [.text("test")])],
+            generationConfig: GenerationConfig(maxTokens: 100, temperature: 0.5, topP: 0.9, stop: ["END"])
         ))
 
         XCTAssertEqual(llm.capturedConfig?.maxTokens, 100)

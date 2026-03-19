@@ -132,15 +132,16 @@ public final class CloudModelRuntime: ModelRuntime, @unchecked Sendable {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
+        let prompt = ChatMLRenderer.render(request)
         var body: [String: Any] = [
             "model": model,
-            "messages": [["role": "user", "content": request.prompt]],
-            "max_tokens": request.maxTokens,
-            "temperature": request.temperature,
+            "messages": [["role": "user", "content": prompt]],
+            "max_tokens": request.generationConfig.maxTokens,
+            "temperature": request.generationConfig.temperature,
             "stream": stream,
         ]
 
-        if let stop = request.stop, !stop.isEmpty {
+        if let stop = request.generationConfig.stop, !stop.isEmpty {
             body["stop"] = stop
         }
 

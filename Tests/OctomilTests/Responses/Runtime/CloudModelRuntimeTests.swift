@@ -59,7 +59,8 @@ final class CloudModelRuntimeTests: XCTestCase {
 
         let runtime = makeRuntime()
         let response = try await runtime.run(request: RuntimeRequest(
-            prompt: "Hello", maxTokens: 100, temperature: 0.5
+            messages: [RuntimeMessage(role: .user, parts: [.text("Hello")])],
+            generationConfig: GenerationConfig(maxTokens: 100, temperature: 0.5)
         ))
 
         XCTAssertEqual(response.text, "Hi there")
@@ -91,7 +92,9 @@ final class CloudModelRuntimeTests: XCTestCase {
         }
 
         let runtime = makeRuntime()
-        let response = try await runtime.run(request: RuntimeRequest(prompt: "What's the weather?"))
+        let response = try await runtime.run(request: RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("What's the weather?")])]
+        ))
 
         XCTAssertEqual(response.text, "")
         XCTAssertEqual(response.finishReason, "tool_calls")
@@ -108,7 +111,7 @@ final class CloudModelRuntimeTests: XCTestCase {
 
         let runtime = makeRuntime()
         do {
-            _ = try await runtime.run(request: RuntimeRequest(prompt: "test"))
+            _ = try await runtime.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
             XCTFail("Expected error to be thrown")
         } catch let error as CloudRuntimeError {
             if case .httpError(let code) = error {
@@ -128,7 +131,7 @@ final class CloudModelRuntimeTests: XCTestCase {
 
         let runtime = makeRuntime()
         do {
-            _ = try await runtime.run(request: RuntimeRequest(prompt: "test"))
+            _ = try await runtime.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
             XCTFail("Expected error to be thrown")
         } catch let error as CloudRuntimeError {
             if case .invalidResponse = error {
@@ -152,7 +155,8 @@ final class CloudModelRuntimeTests: XCTestCase {
 
         let runtime = makeRuntime()
         _ = try await runtime.run(request: RuntimeRequest(
-            prompt: "test", stop: ["END", "STOP"]
+            messages: [RuntimeMessage(role: .user, parts: [.text("test")])],
+            generationConfig: GenerationConfig(stop: ["END", "STOP"])
         ))
     }
 
@@ -181,7 +185,7 @@ final class CloudModelRuntimeTests: XCTestCase {
         var lastFinishReason: String?
         var lastUsage: RuntimeUsage?
 
-        for try await chunk in runtime.stream(request: RuntimeRequest(prompt: "Hi")) {
+        for try await chunk in runtime.stream(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("Hi")])])) {
             if let text = chunk.text { texts.append(text) }
             if let reason = chunk.finishReason { lastFinishReason = reason }
             if let usage = chunk.usage { lastUsage = usage }
@@ -216,7 +220,7 @@ final class CloudModelRuntimeTests: XCTestCase {
         var toolCallDeltas: [RuntimeToolCallDelta] = []
         var lastFinishReason: String?
 
-        for try await chunk in runtime.stream(request: RuntimeRequest(prompt: "search")) {
+        for try await chunk in runtime.stream(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("search")])])) {
             if let delta = chunk.toolCallDelta { toolCallDeltas.append(delta) }
             if let reason = chunk.finishReason { lastFinishReason = reason }
         }
@@ -236,7 +240,7 @@ final class CloudModelRuntimeTests: XCTestCase {
 
         let runtime = makeRuntime()
         do {
-            for try await _ in runtime.stream(request: RuntimeRequest(prompt: "test")) {
+            for try await _ in runtime.stream(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])])) {
                 XCTFail("Should not yield any chunks")
             }
             XCTFail("Expected error")
@@ -282,7 +286,8 @@ final class CloudModelRuntimeTests: XCTestCase {
             parametersSchema: "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}"
         )]
         _ = try await runtime.run(request: RuntimeRequest(
-            prompt: "weather?", toolDefinitions: toolDefs
+            messages: [RuntimeMessage(role: .user, parts: [.text("weather?")])],
+            toolDefinitions: toolDefs
         ))
     }
 

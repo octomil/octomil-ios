@@ -27,9 +27,8 @@ public final class OctomilPredictor: @unchecked Sendable {
     /// - Returns: An array of completion suggestions.
     public func predict(prefix: String, maxSuggestions: Int = 3) async throws -> [String] {
         let request = RuntimeRequest(
-            prompt: prefix,
-            maxTokens: 32,
-            temperature: 0.3
+            messages: [RuntimeMessage(role: .user, parts: [.text(prefix)])],
+            generationConfig: GenerationConfig(maxTokens: 32, temperature: 0.3)
         )
 
         let response = try await runtime.run(request: request)
