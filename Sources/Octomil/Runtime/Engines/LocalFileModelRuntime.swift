@@ -146,7 +146,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func stream(request: RuntimeRequest) -> AsyncThrowingStream<RuntimeChunk, Error> {
-        let fileURL = self.fileURL
+        let modelURL = resolvedResource(.weights) ?? fileURL
         let engine = self.engine
         let modality = Self.modality(for: request)
         let input: Any = Self.engineInput(for: request)
@@ -154,11 +154,11 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let engineToUse = engine ?? EngineRegistry.engineFromURL(fileURL)
+                    let engineToUse = engine ?? EngineRegistry.engineFromURL(modelURL)
                     let eng = try EngineRegistry.shared.resolve(
                         modality: modality,
                         engine: engineToUse,
-                        modelURL: fileURL
+                        modelURL: modelURL
                     )
 
                     for try await chunk in eng.generate(input: input, modality: modality) {
@@ -226,10 +226,11 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
         if let existing = resolvedEngine { return existing }
 
         let engineToUse = engine ?? EngineRegistry.engineFromURL(fileURL)
+        let modelURL = resolvedResource(.weights) ?? fileURL
         let resolved = try EngineRegistry.shared.resolve(
             modality: modality,
             engine: engineToUse,
-            modelURL: fileURL
+            modelURL: modelURL
         )
         resolvedEngine = resolved
         return resolved

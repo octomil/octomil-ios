@@ -64,6 +64,11 @@ public struct PairedModelInfo: Sendable {
     public let modality: String?
     /// URL of the compiled CoreML model on disk, for on-device inference.
     public let compiledModelURL: URL?
+    /// Resource kind → filename mapping for multi-resource models.
+    ///
+    /// Consumers resolve individual files by appending the filename to
+    /// ``compiledModelURL`` (which points to the model directory).
+    public let resourceBindings: [String: String]
 
     public init(
         name: String,
@@ -72,7 +77,8 @@ public struct PairedModelInfo: Sendable {
         runtime: String,
         tokensPerSecond: Double?,
         modality: String? = nil,
-        compiledModelURL: URL? = nil
+        compiledModelURL: URL? = nil,
+        resourceBindings: [String: String] = [:]
     ) {
         self.name = name
         self.version = version
@@ -81,6 +87,7 @@ public struct PairedModelInfo: Sendable {
         self.tokensPerSecond = tokensPerSecond
         self.modality = modality
         self.compiledModelURL = compiledModelURL
+        self.resourceBindings = resourceBindings
     }
 }
 
@@ -222,7 +229,8 @@ public final class PairingViewModel: ObservableObject {
                 sizeString: sizeString,
                 runtime: runtime,
                 tokensPerSecond: tokensPerSecond,
-                compiledModelURL: result.persistedModelURL
+                compiledModelURL: result.persistedModelURL,
+                resourceBindings: result.resourceBindings
             ))
 
         } catch is CancellationError {
