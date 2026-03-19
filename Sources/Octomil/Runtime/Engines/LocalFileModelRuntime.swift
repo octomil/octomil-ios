@@ -34,8 +34,12 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     /// Executor-specific configuration hints.
     public let engineConfig: EngineConfig?
 
-    /// Resolved engine, lazily created on first use.
-    private var engine: StreamingInferenceEngine?
+    /// The engine this model requires. When set, used directly for engine
+    /// resolution. When nil, inferred from the file extension as a fallback.
+    public let engine: Engine?
+
+    /// Resolved engine instance, lazily created on first use.
+    private var resolvedEngine: StreamingInferenceEngine?
     private let lock = NSLock()
 
     public let capabilities: RuntimeCapabilities
@@ -45,16 +49,20 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     /// - Parameters:
     ///   - modelId: Catalog model identifier.
     ///   - fileURL: File URL pointing to the local model artifact.
+    ///   - engine: The engine this model requires. Falls back to file-extension
+    ///     inference when nil.
     ///   - capabilities: Override capabilities. Defaults to streaming-only.
     public init(
         modelId: String,
         fileURL: URL,
+        engine: Engine? = nil,
         capabilities: RuntimeCapabilities = RuntimeCapabilities(supportsStreaming: true)
     ) {
         self.modelId = modelId
         self.fileURL = fileURL
         self.resourceBindings = [:]
         self.engineConfig = nil
+        self.engine = engine
         self.capabilities = capabilities
     }
 
@@ -71,12 +79,14 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
         fileURL: URL,
         resourceBindings: [ArtifactResourceKind: URL],
         engineConfig: EngineConfig? = nil,
+        engine: Engine? = nil,
         capabilities: RuntimeCapabilities = RuntimeCapabilities(supportsStreaming: true)
     ) {
         self.modelId = modelId
         self.fileURL = fileURL
         self.resourceBindings = resourceBindings
         self.engineConfig = engineConfig
+        self.engine = engine
         self.capabilities = capabilities
     }
 
@@ -137,16 +147,17 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public func stream(request: RuntimeRequest) -> AsyncThrowingStream<RuntimeChunk, Error> {
         let fileURL = self.fileURL
+        let engine = self.engine
         let modality = Self.modality(for: request)
         let input: Any = Self.engineInput(for: request)
 
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let inferredEngine = EngineRegistry.engineFromURL(fileURL)
+                    let engineToUse = engine ?? EngineRegistry.engineFromURL(fileURL)
                     let eng = try EngineRegistry.shared.resolve(
                         modality: modality,
-                        engine: inferredEngine,
+                        engine: engineToUse,
                         modelURL: fileURL
                     )
 
@@ -166,7 +177,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public func close() {
         lock.lock()
-        engine = nil
+        resolvedEngine = nil
         lock.unlock()
     }
 
@@ -212,15 +223,15 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        if let existing = engine { return existing }
+        if let existing = resolvedEngine { return existing }
 
-        let inferredEngine = EngineRegistry.engineFromURL(fileURL)
+        let engineToUse = engine ?? EngineRegistry.engineFromURL(fileURL)
         let resolved = try EngineRegistry.shared.resolve(
             modality: modality,
-            engine: inferredEngine,
+            engine: engineToUse,
             modelURL: fileURL
         )
-        engine = resolved
+        resolvedEngine = resolved
         return resolved
     }
 

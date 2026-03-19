@@ -144,7 +144,14 @@ public final class PairingViewModel: ObservableObject {
     // MARK: - Flow
 
     private func runPairingFlow() async {
-        guard let serverURL = URL(string: host.hasPrefix("http") ? host : "https://\(host)") else {
+        // Strip /api/v1 suffix — APIClient appends its own path prefix.
+        var cleanHost = host
+        if cleanHost.hasSuffix("/api/v1") {
+            cleanHost = String(cleanHost.dropLast("/api/v1".count))
+        } else if cleanHost.hasSuffix("/api/v1/") {
+            cleanHost = String(cleanHost.dropLast("/api/v1/".count))
+        }
+        guard let serverURL = URL(string: cleanHost.hasPrefix("http") ? cleanHost : "https://\(cleanHost)") else {
             state = .error(message: "Invalid server URL: \(host)")
             return
         }
