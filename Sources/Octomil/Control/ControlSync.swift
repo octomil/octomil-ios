@@ -40,20 +40,20 @@ public actor ControlSync {
 
     /// Reports the device's observed state to the server.
     ///
-    /// Posts artifact download progress, active model pointer, and runtime
-    /// metadata so the server can reconcile desired vs observed state.
+    /// Posts per-model status (active version, staged versions, errors) and
+    /// runtime metadata so the server can reconcile desired vs observed state.
     ///
     /// - Parameter deviceId: The server-assigned device identifier.
-    /// - Parameter artifactStatuses: Per-artifact status entries.
+    /// - Parameter models: Per-model observed state entries.
     public func reportObservedState(
         deviceId: String,
-        artifactStatuses: [ArtifactStatusEntry] = []
+        models: [ObservedModelEntry] = []
     ) async throws {
         let payload = ObservedStatePayload(
             schemaVersion: "1.4.0",
             deviceId: deviceId,
             reportedAt: ISO8601DateFormatter().string(from: Date()),
-            artifactStatuses: artifactStatuses,
+            models: models,
             sdkVersion: OctomilVersion.current,
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString
         )
@@ -146,26 +146,34 @@ private struct EmptyResponse: Decodable, Sendable {}
 
 // MARK: - Observed State types (GAP-05)
 
-/// Per-artifact status entry in an observed state report.
-public struct ArtifactStatusEntry: Codable, Sendable {
+/// Per-model observed state entry in an observed state report.
+public struct ObservedModelEntry: Codable, Sendable {
+    public let modelId: String
     public let artifactId: String
+    public let artifactVersion: String
     public let status: String
-    public let bytesDownloaded: Int?
-    public let totalBytes: Int?
     public let errorCode: String?
 
     public init(
+        modelId: String,
         artifactId: String,
+        artifactVersion: String,
         status: String,
-        bytesDownloaded: Int? = nil,
-        totalBytes: Int? = nil,
         errorCode: String? = nil
     ) {
+        self.modelId = modelId
         self.artifactId = artifactId
+        self.artifactVersion = artifactVersion
         self.status = status
-        self.bytesDownloaded = bytesDownloaded
-        self.totalBytes = totalBytes
         self.errorCode = errorCode
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case modelId = "model_id"
+        case artifactId = "artifact_id"
+        case artifactVersion = "artifact_version"
+        case status
+        case errorCode = "error_code"
     }
 }
 
@@ -174,9 +182,18 @@ struct ObservedStatePayload: Encodable, Sendable {
     let schemaVersion: String
     let deviceId: String
     let reportedAt: String
-    let artifactStatuses: [ArtifactStatusEntry]
+    let models: [ObservedModelEntry]
     let sdkVersion: String
     let osVersion: String
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case deviceId = "device_id"
+        case reportedAt = "reported_at"
+        case models
+        case sdkVersion = "sdk_version"
+        case osVersion = "os_version"
+    }
 }
 
 // MARK: - Desired State types (GAP-13)
@@ -186,20 +203,14 @@ public struct DesiredStateResponse: Decodable, Sendable {
     public let schemaVersion: String
     public let deviceId: String
     public let generatedAt: String
-    public let activeBinding: AnyCodable?
-    public let artifacts: [AnyCodable]?
-    public let policyConfig: AnyCodable?
-    public let gcEligibleArtifactIds: [String]?
+    public let models: [DesiredModelEntry]
+    public let gcEligibleArtifactIds: [String]
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case deviceId = "device_id"
         case generatedAt = "generated_at"
-        case activeBinding = "active_binding"
-        case artifacts
-        case policyConfig = "policy_config"
+        case models
         case gcEligibleArtifactIds = "gc_eligible_artifact_ids"
     }
 }
-
-// AnyCodable is defined in Chat/Tool.swift

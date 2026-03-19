@@ -57,29 +57,6 @@ public struct DesiredModelEntry: Codable, Sendable {
     }
 }
 
-/// Parsed desired state containing typed model entries.
-public struct ParsedDesiredState: Sendable {
-    public let schemaVersion: String
-    public let deviceId: String
-    public let generatedAt: String
-    public let models: [DesiredModelEntry]
-    public let gcEligibleArtifactIds: [String]
-
-    public init(
-        schemaVersion: String,
-        deviceId: String,
-        generatedAt: String,
-        models: [DesiredModelEntry],
-        gcEligibleArtifactIds: [String] = []
-    ) {
-        self.schemaVersion = schemaVersion
-        self.deviceId = deviceId
-        self.generatedAt = generatedAt
-        self.models = models
-        self.gcEligibleArtifactIds = gcEligibleArtifactIds
-    }
-}
-
 // MARK: - Reconcile Action
 
 /// An action determined by comparing desired state to local state.
