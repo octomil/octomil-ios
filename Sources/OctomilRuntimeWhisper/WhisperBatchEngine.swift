@@ -19,7 +19,7 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
     }
 
     func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
-        let path = modelPath.path
+        let path = Self.resolveModelFile(modelPath).path
 
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -95,6 +95,24 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
     }
 
     // MARK: - Private
+
+    /// If `url` is a directory, find the first ggml model file inside it.
+    /// Returns the original URL if it's already a file.
+    private static func resolveModelFile(_ url: URL) -> URL {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+              isDir.boolValue else {
+            return url
+        }
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+        // Look for ggml model files: .bin, .gguf, or files starting with "ggml-"
+        if let model = contents.first(where: {
+            $0.hasSuffix(".bin") || $0.hasSuffix(".gguf") || $0.hasPrefix("ggml-")
+        }) {
+            return url.appendingPathComponent(model)
+        }
+        return url
+    }
 
     private static func extractSamples(from input: Any) throws -> [Float] {
         if let samples = input as? [Float] {
