@@ -1042,7 +1042,7 @@ public actor APIClient {
         case 403:
             return .forbidden(reason: message)
         case 404:
-            return .modelNotFound(modelId: message)
+            return .serverError(statusCode: 404, message: message)
         case 429:
             return .rateLimited(retryAfter: nil)
         case 500...599:
