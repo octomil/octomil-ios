@@ -178,7 +178,7 @@ struct TryItOutScreen_Previews: PreviewProvider {
                 sizeString: "2.7 GB",
                 runtime: "CoreML",
                 tokensPerSecond: 85.3,
-                modality: "text"
+                modalities: ["text"]
             )
         )
     }

@@ -38,6 +38,20 @@ public enum TryItOutModality: String, Sendable, CaseIterable {
             return .text
         }
     }
+
+    /// Determines the primary modality from an array of input modalities.
+    ///
+    /// Returns the highest-priority non-text modality found. If the array
+    /// contains only text (or is nil/empty), returns ``text``.
+    public static func from(_ modalities: [String]?) -> TryItOutModality {
+        guard let modalities, !modalities.isEmpty else { return .text }
+        // Return the first non-text modality we recognise.
+        for raw in modalities {
+            let parsed = from(raw)
+            if parsed != .text { return parsed }
+        }
+        return .text
+    }
 }
 
 /// State of an inference request in the Try It Out flow.
@@ -138,7 +152,7 @@ public final class TryItOutViewModel: ObservableObject {
     /// - Parameter modelInfo: Model information from the completed pairing flow.
     public init(modelInfo: PairedModelInfo) {
         self.modelInfo = modelInfo
-        self.modality = TryItOutModality.from(modelInfo.modality)
+        self.modality = TryItOutModality.from(modelInfo.modalities)
     }
 
     deinit {

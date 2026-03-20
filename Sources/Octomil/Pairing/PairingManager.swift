@@ -171,7 +171,8 @@ public actor PairingManager {
                     quantization: session.quantization,
                     executor: session.executor,
                     sizeBytes: session.downloadSizeBytes,
-                    resources: session.resources
+                    resources: session.resources,
+                    inputModalities: session.inputModalities
                 )
 
                 if configuration.enableLogging {
