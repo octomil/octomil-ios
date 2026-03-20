@@ -30,17 +30,31 @@ final class PredictionViewModel: ObservableObject {
     @Published var input = "The weather today is"
     @Published var suggestions: [String] = []
     @Published var isPredicting = false
+    @Published var isConfiguring = false
     @Published var error: String?
 
     private var client: OctomilClient?
 
     func configure() async {
         guard client == nil else { return }
+        isConfiguring = true
+        error = nil
+
         let c = OctomilClient(auth: auth)
-        try? await c.configure(manifest: AppManifest(models: [
-            .init(id: modelName, capability: .keyboardPrediction, delivery: .managed),
-        ]))
-        client = c
+        do {
+            try await c.configure(
+                manifest: AppManifest(models: [
+                    .init(id: modelName, capability: .keyboardPrediction, delivery: .managed),
+                ]),
+                auth: auth
+            )
+            client = c
+        } catch {
+            client = nil
+            self.error = "Setup failed: \(error.localizedDescription)"
+        }
+
+        isConfiguring = false
     }
 
     func predict() {
@@ -117,7 +131,12 @@ struct PredictionView: View {
                         )
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(vm.isPredicting || vm.input.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(
+                        vm.isPredicting ||
+                        vm.isConfiguring ||
+                        vm.input.trimmingCharacters(in: .whitespaces).isEmpty ||
+                        (vm.error != nil && vm.suggestions.isEmpty)
+                    )
 
                     Button("Clear") {
                         vm.input = ""

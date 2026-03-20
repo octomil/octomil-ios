@@ -29,18 +29,33 @@ final class ChatViewModel: ObservableObject {
 
     @Published var messages: [(role: String, text: String)] = []
     @Published var input = ""
+    @Published var error: String?
     @Published var isGenerating = false
+    @Published var isConfiguring = false
 
     private var client: OctomilClient?
     private var task: Task<Void, Never>?
 
     func configure() async {
         guard client == nil else { return }
+        isConfiguring = true
+        error = nil
+
         let c = OctomilClient(auth: auth)
-        try? await c.configure(manifest: AppManifest(models: [
-            .init(id: modelName, capability: .chat, delivery: .managed),
-        ]))
-        client = c
+        do {
+            try await c.configure(
+                manifest: AppManifest(models: [
+                    .init(id: modelName, capability: .chat, delivery: .managed),
+                ]),
+                auth: auth
+            )
+            client = c
+        } catch {
+            client = nil
+            self.error = "Setup failed: \(error.localizedDescription)"
+        }
+
+        isConfiguring = false
     }
 
     func send() {
@@ -68,6 +83,7 @@ final class ChatViewModel: ObservableObject {
                 messages[idx] = (role: "assistant", text: accumulated + " [cancelled]")
             } catch {
                 messages[idx] = (role: "assistant", text: "Error: \(error.localizedDescription)")
+                self.error = error.localizedDescription
             }
             isGenerating = false
         }
@@ -112,7 +128,7 @@ struct ChatView: View {
                 HStack {
                     TextField("Message", text: $vm.input)
                         .textFieldStyle(.roundedBorder)
-                        .disabled(vm.isGenerating)
+                        .disabled(vm.isGenerating || vm.isConfiguring || vm.error != nil && vm.messages.isEmpty)
                         .onSubmit { vm.send() }
 
                     if vm.isGenerating {
@@ -120,10 +136,21 @@ struct ChatView: View {
                             .foregroundStyle(.red)
                     } else {
                         Button("Send", action: vm.send)
-                            .disabled(vm.input.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .disabled(
+                                vm.isConfiguring ||
+                                vm.input.trimmingCharacters(in: .whitespaces).isEmpty ||
+                                (vm.error != nil && vm.messages.isEmpty)
+                            )
                     }
                 }
                 .padding()
+
+                if let error = vm.error {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.footnote)
+                        .padding([.horizontal, .bottom])
+                }
             }
             .navigationTitle("Chat Sample")
             .task { await vm.configure() }

@@ -221,7 +221,7 @@ The iOS SDK reads `octomil.yaml` via `AppManifest` and `ModelCatalogService` to 
 
 ## Samples
 
-Minimal, copyable examples for the main SDK capabilities:
+Minimal examples for the three main mobile SDK capabilities:
 
 | Sample | Capability | Key API |
 |--------|-----------|---------|
@@ -229,11 +229,11 @@ Minimal, copyable examples for the main SDK capabilities:
 | [TranscriptionSample](Examples/TranscriptionSample/) | Speech-to-text | `client.audio.transcriptions.create()` |
 | [PredictionSample](Examples/PredictionSample/) | Next-word prediction | `client.text.predictions.create()` |
 
-Each sample is a standalone SwiftUI app (~100 lines) that shows the shortest integration path for one capability. Open `Package.swift` in Xcode and run on a simulator or device.
+Each sample is a standalone SwiftUI app focused on one capability. Open `Package.swift` in Xcode and run it on a real device. A simulator is fine for UI smoke testing, but deployed-model flows should be validated on hardware.
 
-**Prerequisites:** An Octomil account, API credentials, and at least one deployed model per capability. See [Examples/README.md](Examples/README.md) for details.
+**Prerequisites:** Org API credentials, one deployed model per capability, and a bundled `test_audio.wav` for the transcription sample. See [Examples/README.md](Examples/README.md) for setup.
 
-> **Looking for the companion app?** The [Octomil iOS App](https://github.com/octomil/octomil-app-ios) is a broader evaluation and dogfood app covering all capabilities, device pairing, discovery, and golden tests. These SDK samples are intentionally minimal — use them as a starting point for your own integration.
+> **Need the full device app?** The [Octomil iOS App](https://github.com/octomil/octomil-app-ios) is the broader evaluation app for model testing, pairing, recovery, and golden-path automation. These samples are intentionally narrower: one feature, minimal setup, copyable code.
 
 ## Contributing
 

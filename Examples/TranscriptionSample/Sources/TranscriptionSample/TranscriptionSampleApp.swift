@@ -7,8 +7,7 @@ import OctomilClient
 //   1. Replace the auth credentials below with your own.
 //   2. Deploy a transcription model (e.g. whisper-small) via `octomil deploy --phone`
 //      or configure managed delivery in the manifest.
-//   3. Add a test audio file named "test_audio.wav" to the app bundle,
-//      or use the built-in recording feature.
+//   3. Add a test audio file named "test_audio.wav" to the app bundle.
 
 @main
 struct TranscriptionSampleApp: App {
@@ -31,17 +30,31 @@ final class TranscriptionViewModel: ObservableObject {
 
     @Published var transcription = ""
     @Published var isTranscribing = false
+    @Published var isConfiguring = false
     @Published var error: String?
 
     private var client: OctomilClient?
 
     func configure() async {
         guard client == nil else { return }
+        isConfiguring = true
+        error = nil
+
         let c = OctomilClient(auth: auth)
-        try? await c.configure(manifest: AppManifest(models: [
-            .init(id: modelName, capability: .transcription, delivery: .managed),
-        ]))
-        client = c
+        do {
+            try await c.configure(
+                manifest: AppManifest(models: [
+                    .init(id: modelName, capability: .transcription, delivery: .managed),
+                ]),
+                auth: auth
+            )
+            client = c
+        } catch {
+            client = nil
+            self.error = "Setup failed: \(error.localizedDescription)"
+        }
+
+        isConfiguring = false
     }
 
     func transcribe() {
@@ -113,7 +126,7 @@ struct TranscriptionView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(vm.isTranscribing)
+                .disabled(vm.isTranscribing || vm.isConfiguring || vm.error != nil && vm.transcription.isEmpty)
                 .padding(.horizontal)
 
                 Spacer()
