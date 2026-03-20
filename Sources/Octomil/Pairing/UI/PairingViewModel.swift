@@ -120,6 +120,7 @@ public final class PairingViewModel: ObservableObject {
     private let token: String
     private let host: String
     private var pairingTask: Task<Void, Never>?
+    private var hasStarted = false
     private let logger = Logger(subsystem: "ai.octomil.sdk", category: "PairingViewModel")
 
     // MARK: - Initialization
@@ -140,9 +141,10 @@ public final class PairingViewModel: ObservableObject {
 
     // MARK: - Public API
 
-    /// Starts or restarts the pairing flow.
+    /// Starts the pairing flow. Subsequent calls are ignored unless ``retry()`` is used.
     public func startPairing() {
-        pairingTask?.cancel()
+        guard !hasStarted else { return }
+        hasStarted = true
         state = .connecting(host: host)
 
         pairingTask = Task { [weak self] in
@@ -153,6 +155,8 @@ public final class PairingViewModel: ObservableObject {
 
     /// Retries after an error.
     public func retry() {
+        pairingTask?.cancel()
+        hasStarted = false
         startPairing()
     }
 
