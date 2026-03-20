@@ -134,6 +134,9 @@ public final class OctomilClient: @unchecked Sendable {
     private var heartbeatTask: Task<Void, Never>?
     private let heartbeatInterval: TimeInterval
 
+    /// Artifact reconciler for desired-state sync and auto-recovery.
+    private var artifactReconciler: ArtifactReconciler?
+
     /// Whether the client has been closed via ``close()``.
     public private(set) var isClosed: Bool = false
 
@@ -407,6 +410,12 @@ public final class OctomilClient: @unchecked Sendable {
             registrationTask = Task { [weak self] in
                 await self?.silentRegister()
             }
+        } else if let existingDeviceId = self.deviceId {
+            // Device already registered from a previous session — set up reconciler
+            // immediately without re-registering.
+            Task { [weak self] in
+                await self?.setupArtifactReconciler(deviceId: existingDeviceId)
+            }
         }
 
         // 6. Start heartbeat if monitoring is enabled
@@ -560,6 +569,9 @@ public final class OctomilClient: @unchecked Sendable {
             if configuration.enableLogging {
                 logger.info("Silent registration succeeded: \(registration.id)")
             }
+
+            // Set up artifact reconciler for auto-recovery and background sync
+            await setupArtifactReconciler(deviceId: registration.id)
         } catch {
             if configuration.enableLogging {
                 logger.warning("Silent registration failed: \(error.localizedDescription)")
@@ -607,6 +619,53 @@ public final class OctomilClient: @unchecked Sendable {
                 self.scheduleRegistrationRetry(attempt: attempt + 1)
             }
         }
+    }
+
+    // MARK: - Artifact Reconciliation
+
+    /// Sets up artifact reconciliation for automatic model recovery and desired-state sync.
+    ///
+    /// Creates an ``ArtifactReconciler``, configures ``BackgroundSync`` for ongoing
+    /// background sync (iOS only), and runs an immediate foreground reconcile to
+    /// recover any model files that were purged from disk.
+    private func setupArtifactReconciler(deviceId: String) async {
+        let controlSync = self.control
+        let metadataStore = ModelMetadataStore()
+        let reconciler = ArtifactReconciler(
+            controlSync: controlSync,
+            metadataStore: metadataStore
+        )
+        self.artifactReconciler = reconciler
+
+        #if os(iOS)
+        // Configure background sync for ongoing reconciliation
+        BackgroundSync.shared.configureReconciler(
+            reconciler: reconciler,
+            deviceId: deviceId
+        )
+        #endif
+
+        // Trigger immediate foreground reconcile to recover any missing models
+        do {
+            let actions = try await reconciler.reconcile(deviceId: deviceId)
+            let meaningful = actions.filter {
+                if case .upToDate = $0 { return false }
+                return true
+            }
+            if !meaningful.isEmpty {
+                logger.info("Auto-recovery reconcile: \(meaningful.count) action(s)")
+            }
+        } catch {
+            logger.warning("Auto-recovery reconcile failed: \(error.localizedDescription)")
+        }
+
+        // Activate any staged next-launch artifacts
+        await reconciler.activateNextLaunchArtifacts()
+
+        #if os(iOS)
+        // Schedule periodic background sync
+        BackgroundSync.shared.scheduleSync()
+        #endif
     }
 
     // MARK: - Heartbeat

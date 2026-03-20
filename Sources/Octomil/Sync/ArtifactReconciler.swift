@@ -203,7 +203,11 @@ public actor ArtifactReconciler {
 
             if let existing = existing {
                 if existing.artifactVersion == entry.artifactVersion {
-                    if existing.status == .active {
+                    // Re-download if the file was purged from disk
+                    let fileExists = FileManager.default.fileExists(atPath: existing.filePath)
+                    if !fileExists {
+                        actions.append(.download(entry))
+                    } else if existing.status == .active {
                         actions.append(.upToDate(modelId: entry.modelId))
                     } else if existing.status == .staged {
                         if entry.activationPolicy == .immediate {
