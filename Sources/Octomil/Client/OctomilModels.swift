@@ -150,8 +150,8 @@ public final class OctomilModels: @unchecked Sendable {
     public func list() -> [CachedModel] {
         let cacheDir: URL
         let fm = FileManager.default
-        let cachesDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        cacheDir = cachesDir.appendingPathComponent("ai.octomil.models", isDirectory: true)
+        let appSupportDir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        cacheDir = appSupportDir.appendingPathComponent("ai.octomil.models", isDirectory: true)
 
         guard fm.fileExists(atPath: cacheDir.path) else {
             return []

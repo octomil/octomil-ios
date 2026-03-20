@@ -38,12 +38,42 @@ public final class ModelCache: ModelCaching, @unchecked Sendable {
         self.maxSize = maxSize
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "ModelCache")
 
-        // Get cache directory
-        let cacheDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        self.cacheDirectory = cacheDir.appendingPathComponent("ai.octomil.models", isDirectory: true)
+        // Store models in Application Support (non-purgeable) instead of Caches
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        self.cacheDirectory = appSupport.appendingPathComponent("ai.octomil.models", isDirectory: true)
 
-        // Create cache directory if needed
+        // Create directory if needed
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+
+        // Migrate models from old Caches location (purgeable) to Application Support
+        let oldDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("ai.octomil.models", isDirectory: true)
+        migrateFromOldCacheDir(oldDir)
+    }
+
+    /// Moves models from the old `Library/Caches/` location to `Library/Application Support/`.
+    private func migrateFromOldCacheDir(_ oldDir: URL) {
+        guard fileManager.fileExists(atPath: oldDir.path) else { return }
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: oldDir.path)
+            guard !contents.isEmpty else {
+                try? fileManager.removeItem(at: oldDir)
+                return
+            }
+            for item in contents {
+                let source = oldDir.appendingPathComponent(item)
+                let destination = cacheDirectory.appendingPathComponent(item)
+                if fileManager.fileExists(atPath: destination.path) {
+                    try? fileManager.removeItem(at: source)
+                    continue
+                }
+                try fileManager.moveItem(at: source, to: destination)
+            }
+            try? fileManager.removeItem(at: oldDir)
+            logger.info("Migrated models from Caches to Application Support")
+        } catch {
+            logger.error("Model migration failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Cache Operations
