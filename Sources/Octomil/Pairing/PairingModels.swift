@@ -32,6 +32,10 @@ public struct PairingSession: Codable, Sendable {
     public let executor: String?
     /// Multi-file resources for this deployment, if any.
     public let resources: [DownloadResource]?
+    /// Organization ID that owns this pairing session.
+    public let orgId: String?
+    /// Device access token issued during pairing connect (for subsequent API calls).
+    public let accessToken: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -46,6 +50,8 @@ public struct PairingSession: Codable, Sendable {
         case quantization
         case executor
         case resources
+        case orgId = "org_id"
+        case accessToken = "access_token"
     }
 }
 
@@ -356,6 +362,12 @@ public struct PairingDeviceCapabilities: Sendable {
     public let npuAvailable: Bool
     /// Whether the GPU is available for ML workloads.
     public let gpuAvailable: Bool
+    /// Device locale (e.g. "en_US").
+    public let locale: String?
+    /// Device region/country code (e.g. "US").
+    public let region: String?
+    /// Device timezone identifier (e.g. "America/New_York").
+    public let timezone: String?
 
     public init(
         deviceName: String,
@@ -363,7 +375,10 @@ public struct PairingDeviceCapabilities: Sendable {
         ramGB: Double,
         osVersion: String,
         npuAvailable: Bool,
-        gpuAvailable: Bool
+        gpuAvailable: Bool,
+        locale: String? = nil,
+        region: String? = nil,
+        timezone: String? = nil
     ) {
         self.deviceName = deviceName
         self.chipFamily = chipFamily
@@ -371,6 +386,9 @@ public struct PairingDeviceCapabilities: Sendable {
         self.osVersion = osVersion
         self.npuAvailable = npuAvailable
         self.gpuAvailable = gpuAvailable
+        self.locale = locale
+        self.region = region
+        self.timezone = timezone
     }
 
     /// Auto-detect capabilities from the current device hardware.
@@ -382,13 +400,21 @@ public struct PairingDeviceCapabilities: Sendable {
         let deviceName = currentDeviceName()
         let chipFamily = detectChipFamily()
 
+        let currentLocale = Locale.current
+        let localeId = currentLocale.identifier
+        let regionCode = currentLocale.region?.identifier
+        let timezoneId = TimeZone.current.identifier
+
         return PairingDeviceCapabilities(
             deviceName: deviceName,
             chipFamily: chipFamily,
             ramGB: ramGB,
             osVersion: osVersion,
             npuAvailable: detectNPU(),
-            gpuAvailable: true
+            gpuAvailable: true,
+            locale: localeId,
+            region: regionCode,
+            timezone: timezoneId
         )
     }
 

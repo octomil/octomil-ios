@@ -69,6 +69,10 @@ public struct PairedModelInfo: Sendable {
     /// Consumers resolve individual files by appending the filename to
     /// ``compiledModelURL`` (which points to the model directory).
     public let resourceBindings: [String: String]
+    /// Device access token issued during pairing (for initializing ``OctomilClient``).
+    public let accessToken: String?
+    /// Organization ID from the pairing session.
+    public let orgId: String?
 
     public init(
         name: String,
@@ -78,7 +82,9 @@ public struct PairedModelInfo: Sendable {
         tokensPerSecond: Double?,
         modality: String? = nil,
         compiledModelURL: URL? = nil,
-        resourceBindings: [String: String] = [:]
+        resourceBindings: [String: String] = [:],
+        accessToken: String? = nil,
+        orgId: String? = nil
     ) {
         self.name = name
         self.version = version
@@ -88,6 +94,8 @@ public struct PairedModelInfo: Sendable {
         self.modality = modality
         self.compiledModelURL = compiledModelURL
         self.resourceBindings = resourceBindings
+        self.accessToken = accessToken
+        self.orgId = orgId
     }
 }
 
@@ -230,7 +238,9 @@ public final class PairingViewModel: ObservableObject {
                 runtime: runtime,
                 tokensPerSecond: tokensPerSecond,
                 compiledModelURL: result.persistedModelURL,
-                resourceBindings: result.resourceBindings
+                resourceBindings: result.resourceBindings,
+                accessToken: session.accessToken,
+                orgId: session.orgId
             ))
 
         } catch is CancellationError {

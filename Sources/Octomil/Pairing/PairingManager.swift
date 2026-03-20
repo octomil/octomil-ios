@@ -98,7 +98,10 @@ public actor PairingManager {
                 ramGB: deviceCapabilities.ramGB,
                 osVersion: deviceCapabilities.osVersion,
                 npuAvailable: deviceCapabilities.npuAvailable,
-                gpuAvailable: deviceCapabilities.gpuAvailable
+                gpuAvailable: deviceCapabilities.gpuAvailable,
+                locale: deviceCapabilities.locale,
+                region: deviceCapabilities.region,
+                timezone: deviceCapabilities.timezone
             )
         } catch let error as OctomilError {
             // Map server errors that indicate "session already used" to a typed pairing error.

@@ -865,7 +865,10 @@ public actor APIClient {
         ramGB: Double?,
         osVersion: String?,
         npuAvailable: Bool?,
-        gpuAvailable: Bool?
+        gpuAvailable: Bool?,
+        locale: String? = nil,
+        region: String? = nil,
+        timezone: String? = nil
     ) async throws -> PairingSession {
         let url = serverURL.appendingPathComponent("api/v1/deploy/pair/\(code)/connect")
 
@@ -879,6 +882,9 @@ public actor APIClient {
         if let osVersion = osVersion { body["os_version"] = osVersion }
         if let npuAvailable = npuAvailable { body["npu_available"] = npuAvailable }
         if let gpuAvailable = gpuAvailable { body["gpu_available"] = gpuAvailable }
+        if let locale = locale { body["locale"] = locale }
+        if let region = region { body["region"] = region }
+        if let timezone = timezone { body["timezone"] = timezone }
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"

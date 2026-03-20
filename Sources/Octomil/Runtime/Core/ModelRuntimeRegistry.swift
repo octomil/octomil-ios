@@ -47,6 +47,40 @@ public final class ModelRuntimeRegistry: @unchecked Sendable {
         return defaultFac?(modelId)
     }
 
+    /// Convenience: register a ``LocalFileModelRuntime`` for a model on disk.
+    ///
+    /// Handles `Engine` resolution, `ArtifactResourceKind` mapping, and factory
+    /// wrapping internally so callers don't need to touch those types.
+    ///
+    /// - Parameters:
+    ///   - name: Model family name used for registry lookup.
+    ///   - fileURL: Directory (or file) URL of the primary model artifact.
+    ///   - engine: Explicit engine; `nil` lets the runtime infer from file extension.
+    ///   - resourceBindings: String-keyed resource kind → filename dictionary
+    ///     (e.g. `["tokenizer": "tokenizer.json"]`). Filenames are resolved
+    ///     relative to `fileURL`.
+    public func registerModel(
+        name: String,
+        fileURL: URL,
+        engine: Engine? = nil,
+        resourceBindings: [String: String] = [:]
+    ) {
+        var resolved: [ArtifactResourceKind: URL] = [:]
+        for (kindString, filename) in resourceBindings {
+            if let kind = ArtifactResourceKind(rawValue: kindString) {
+                resolved[kind] = fileURL.appendingPathComponent(filename)
+            }
+        }
+        register(family: name) { _ in
+            LocalFileModelRuntime(
+                modelId: name,
+                fileURL: fileURL,
+                resourceBindings: resolved,
+                engine: engine
+            )
+        }
+    }
+
     /// Remove all registrations. Primarily for testing.
     public func clear() {
         lock.lock()

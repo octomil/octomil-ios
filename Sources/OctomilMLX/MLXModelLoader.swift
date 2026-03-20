@@ -11,10 +11,10 @@ import Octomil
 @available(iOS 17.0, macOS 14.0, *)
 public actor MLXModelLoader {
 
-    /// Cache directory for MLX models.
+    /// Cache directory for MLX models (Application Support — non-purgeable).
     public static let cacheDirectory: URL = {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        return caches.appendingPathComponent("ai.octomil.mlx-models", isDirectory: true)
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport.appendingPathComponent("ai.octomil.mlx-models", isDirectory: true)
     }()
 
     /// GPU memory cache limit in bytes. Default: 2 GB.
@@ -71,12 +71,27 @@ public actor MLXModelLoader {
         loadedContainers.removeAll()
     }
 
-    /// Ensure the cache directory exists on disk.
+    /// Ensure the cache directory exists on disk, migrating from old Caches location if needed.
     public static func ensureCacheDirectory() throws {
-        try FileManager.default.createDirectory(
-            at: cacheDirectory,
-            withIntermediateDirectories: true
-        )
+        let fm = FileManager.default
+        try fm.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+
+        // Migrate from old Caches location
+        let oldDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("ai.octomil.mlx-models", isDirectory: true)
+        guard fm.fileExists(atPath: oldDir.path),
+              let contents = try? fm.contentsOfDirectory(atPath: oldDir.path),
+              !contents.isEmpty else { return }
+        for item in contents {
+            let source = oldDir.appendingPathComponent(item)
+            let dest = cacheDirectory.appendingPathComponent(item)
+            if !fm.fileExists(atPath: dest.path) {
+                try? fm.moveItem(at: source, to: dest)
+            } else {
+                try? fm.removeItem(at: source)
+            }
+        }
+        try? fm.removeItem(at: oldDir)
     }
 
     /// Get the cache path for a given model ID and version.
