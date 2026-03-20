@@ -59,9 +59,9 @@ public struct PairedModelInfo: Sendable {
     public let runtime: String
     /// Tokens per second from the benchmark, if available.
     public let tokensPerSecond: Double?
-    /// The model's modality (e.g. "text", "vision", "audio", "classification").
+    /// Input modalities accepted by the model (e.g. ["text"], ["text", "image"]).
     /// Used by ``TryItOutScreen`` to present the appropriate input UI.
-    public let modality: String?
+    public let modalities: [String]?
     /// URL of the compiled CoreML model on disk, for on-device inference.
     public let compiledModelURL: URL?
     /// Resource kind → filename mapping for multi-resource models.
@@ -80,7 +80,7 @@ public struct PairedModelInfo: Sendable {
         sizeString: String,
         runtime: String,
         tokensPerSecond: Double?,
-        modality: String? = nil,
+        modalities: [String]? = nil,
         compiledModelURL: URL? = nil,
         resourceBindings: [String: String] = [:],
         accessToken: String? = nil,
@@ -91,7 +91,7 @@ public struct PairedModelInfo: Sendable {
         self.sizeString = sizeString
         self.runtime = runtime
         self.tokensPerSecond = tokensPerSecond
-        self.modality = modality
+        self.modalities = modalities
         self.compiledModelURL = compiledModelURL
         self.resourceBindings = resourceBindings
         self.accessToken = accessToken
@@ -241,6 +241,7 @@ public final class PairingViewModel: ObservableObject {
                 sizeString: sizeString,
                 runtime: runtime,
                 tokensPerSecond: tokensPerSecond,
+                modalities: deployment.inputModalities,
                 compiledModelURL: result.persistedModelURL,
                 resourceBindings: result.resourceBindings,
                 accessToken: session.accessToken,

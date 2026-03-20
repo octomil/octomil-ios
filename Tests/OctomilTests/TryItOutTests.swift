@@ -212,14 +212,14 @@ final class ClassificationResultTests: XCTestCase {
 @MainActor
 final class TryItOutViewModelTests: XCTestCase {
 
-    private func makeModelInfo(modality: String? = nil) -> PairedModelInfo {
+    private func makeModelInfo(modalities: [String]? = nil) -> PairedModelInfo {
         PairedModelInfo(
             name: "test-model",
             version: "v1.0",
             sizeString: "100 MB",
             runtime: "CoreML",
             tokensPerSecond: 50.0,
-            modality: modality
+            modalities: modalities
         )
     }
 
@@ -231,42 +231,52 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testTextModality() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
         XCTAssertEqual(vm.modality, .text)
     }
 
     func testVisionModality() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "vision"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["vision"]))
         XCTAssertEqual(vm.modality, .vision)
     }
 
     func testAudioModality() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "audio"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["audio"]))
         XCTAssertEqual(vm.modality, .audio)
     }
 
     func testClassificationModality() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classification"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["classification"]))
         XCTAssertEqual(vm.modality, .classification)
     }
 
     func testLLMAlias() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "llm"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["llm"]))
         XCTAssertEqual(vm.modality, .text)
     }
 
     func testImageAlias() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "image"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["image"]))
         XCTAssertEqual(vm.modality, .vision)
     }
 
     func testSpeechAlias() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "speech"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["speech"]))
+        XCTAssertEqual(vm.modality, .audio)
+    }
+
+    func testMultimodalTextAndImage() {
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text", "image"]))
+        XCTAssertEqual(vm.modality, .vision)
+    }
+
+    func testMultimodalTextAndAudio() {
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text", "audio"]))
         XCTAssertEqual(vm.modality, .audio)
     }
 
     func testClassifierAlias() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classifier"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["classifier"]))
         XCTAssertEqual(vm.modality, .classification)
     }
 
@@ -596,19 +606,19 @@ final class TryItOutViewModelTests: XCTestCase {
 @available(iOS 15.0, macOS 12.0, *)
 final class PairedModelInfoModalityTests: XCTestCase {
 
-    func testModalityFieldPresent() {
+    func testModalitiesFieldPresent() {
         let info = PairedModelInfo(
             name: "test",
             version: "v1",
             sizeString: "50 MB",
             runtime: "CoreML",
             tokensPerSecond: nil,
-            modality: "text"
+            modalities: ["text"]
         )
-        XCTAssertEqual(info.modality, "text")
+        XCTAssertEqual(info.modalities, ["text"])
     }
 
-    func testModalityFieldNil() {
+    func testModalitiesFieldNil() {
         let info = PairedModelInfo(
             name: "test",
             version: "v1",
@@ -616,12 +626,24 @@ final class PairedModelInfoModalityTests: XCTestCase {
             runtime: "CoreML",
             tokensPerSecond: nil
         )
-        XCTAssertNil(info.modality)
+        XCTAssertNil(info.modalities)
+    }
+
+    func testModalitiesMultipleValues() {
+        let info = PairedModelInfo(
+            name: "test",
+            version: "v1",
+            sizeString: "50 MB",
+            runtime: "CoreML",
+            tokensPerSecond: nil,
+            modalities: ["text", "image"]
+        )
+        XCTAssertEqual(info.modalities, ["text", "image"])
     }
 
     func testBackwardsCompatibleInit() {
         // Ensure the default parameter works for callers that
-        // don't pass modality (backwards compatibility).
+        // don't pass modalities (backwards compatibility).
         let info = PairedModelInfo(
             name: "test",
             version: "v1",
@@ -631,7 +653,7 @@ final class PairedModelInfoModalityTests: XCTestCase {
         )
         XCTAssertEqual(info.name, "test")
         XCTAssertEqual(info.tokensPerSecond ?? -1, 42.0, accuracy: 0.01)
-        XCTAssertNil(info.modality)
+        XCTAssertNil(info.modalities)
     }
 }
 #endif

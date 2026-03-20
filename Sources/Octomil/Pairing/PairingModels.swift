@@ -36,6 +36,10 @@ public struct PairingSession: Codable, Sendable {
     public let orgId: String?
     /// Device access token issued during pairing connect (for subsequent API calls).
     public let accessToken: String?
+    /// Input modalities accepted by the model (e.g. ["text"], ["text", "image"]).
+    public let inputModalities: [String]?
+    /// Output modalities produced by the model (e.g. ["text"]).
+    public let outputModalities: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -52,6 +56,8 @@ public struct PairingSession: Codable, Sendable {
         case resources
         case orgId = "org_id"
         case accessToken = "access_token"
+        case inputModalities = "input_modalities"
+        case outputModalities = "output_modalities"
     }
 }
 
@@ -125,6 +131,8 @@ public struct DeploymentInfo: Sendable {
     public let sizeBytes: Int?
     /// Multi-file resources for this deployment, if any.
     public let resources: [DownloadResource]?
+    /// Input modalities accepted by the model (e.g. ["text"], ["text", "image"]).
+    public let inputModalities: [String]?
 
     public init(
         modelName: String,
@@ -134,7 +142,8 @@ public struct DeploymentInfo: Sendable {
         quantization: String? = nil,
         executor: String? = nil,
         sizeBytes: Int? = nil,
-        resources: [DownloadResource]? = nil
+        resources: [DownloadResource]? = nil,
+        inputModalities: [String]? = nil
     ) {
         self.modelName = modelName
         self.modelVersion = modelVersion
@@ -144,6 +153,7 @@ public struct DeploymentInfo: Sendable {
         self.executor = executor
         self.sizeBytes = sizeBytes
         self.resources = resources
+        self.inputModalities = inputModalities
     }
 }
 
