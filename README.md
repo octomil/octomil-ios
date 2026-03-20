@@ -219,6 +219,22 @@ octomil manifest init
 
 The iOS SDK reads `octomil.yaml` via `AppManifest` and `ModelCatalogService` to handle model downloads and runtime resolution automatically.
 
+## Samples
+
+Minimal, copyable examples for the main SDK capabilities:
+
+| Sample | Capability | Key API |
+|--------|-----------|---------|
+| [ChatSample](Examples/ChatSample/) | Text generation | `OctomilChat.stream()` |
+| [TranscriptionSample](Examples/TranscriptionSample/) | Speech-to-text | `client.audio.transcriptions.create()` |
+| [PredictionSample](Examples/PredictionSample/) | Next-word prediction | `client.text.predictions.create()` |
+
+Each sample is a standalone SwiftUI app (~100 lines) that shows the shortest integration path for one capability. Open `Package.swift` in Xcode and run on a simulator or device.
+
+**Prerequisites:** An Octomil account, API credentials, and at least one deployed model per capability. See [Examples/README.md](Examples/README.md) for details.
+
+> **Looking for the companion app?** The [Octomil iOS App](https://github.com/octomil/octomil-app-ios) is a broader evaluation and dogfood app covering all capabilities, device pairing, discovery, and golden tests. These SDK samples are intentionally minimal — use them as a starting point for your own integration.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
