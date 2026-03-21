@@ -8,4 +8,5 @@ public enum ArtifactFormat: String, Codable, Sendable {
     case mlx = "mlx"
     case mnn = "mnn"
     case transformersjs = "transformersjs"
+    case cloud = "cloud"
 }
