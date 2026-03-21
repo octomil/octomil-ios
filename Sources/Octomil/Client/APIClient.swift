@@ -26,12 +26,15 @@ public actor APIClient {
     /// - Parameters:
     ///   - serverURL: The base URL of the Octomil server.
     ///   - configuration: SDK configuration.
+    ///   - initialToken: Optional device token set synchronously at construction to avoid race conditions.
     public init(
         serverURL: URL,
-        configuration: OctomilConfiguration
+        configuration: OctomilConfiguration,
+        initialToken: String? = nil
     ) {
         self.serverURL = serverURL
         self.configuration = configuration
+        self.deviceToken = initialToken
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "APIClient")
 
         // Configure URL session
