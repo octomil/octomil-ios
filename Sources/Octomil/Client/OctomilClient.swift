@@ -674,14 +674,15 @@ public final class OctomilClient: @unchecked Sendable {
 
     // MARK: - Installed Models
 
-    /// Returns all active installed model records from the SDK metadata store.
+    /// Returns installed model records that are locally available (active or staged).
     ///
-    /// Use this to check which models are locally available and their file paths.
+    /// Includes both `.active` and `.staged` records so the host app can bridge
+    /// paths for models that were recovered but not yet activated.
     /// Returns an empty array if the metadata store hasn't been initialized yet
     /// (e.g., before device registration).
     public func installedModels() -> [InstalledModelRecord] {
         guard let store = modelMetadataStore else { return [] }
-        return store.allRecords().filter { $0.status == .active }
+        return store.allRecords().filter { $0.status == .active || $0.status == .staged }
     }
 
     /// Returns all installed model records (any status) from the SDK metadata store.

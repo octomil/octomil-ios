@@ -73,11 +73,14 @@ public struct ArtifactFileInfo: Codable, Sendable {
     public let path: String
     public let sizeBytes: Int64
     public let sha256: String
+    /// Resource kind (e.g. "weights", "tokenizer"). Nil for legacy manifests.
+    public let kind: String?
 
     enum CodingKeys: String, CodingKey {
         case path
         case sizeBytes = "size_bytes"
         case sha256
+        case kind
     }
 }
 
