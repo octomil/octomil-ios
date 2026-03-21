@@ -213,9 +213,18 @@ public final class OctomilClient: @unchecked Sendable {
 
         self.secureStorage = SecureStorage()
         self.eventQueue = EventQueue.shared
+
+        // Resolve effective token synchronously: prefer auth.token, fallback to keychain.
+        // This avoids fire-and-forget Task{} races where register() could execute
+        // before setDeviceToken() completes on the actor-isolated APIClient.
+        let authToken = auth.token
+        let storedToken = (try? secureStorage.getDeviceToken()) ?? ""
+        let effectiveToken = !authToken.isEmpty ? authToken : storedToken
+
         self.apiClient = APIClient(
             serverURL: auth.serverURL,
-            configuration: configuration
+            configuration: configuration,
+            initialToken: effectiveToken.isEmpty ? nil : effectiveToken
         )
 
         self.modelManager = ModelManager(
@@ -223,18 +232,9 @@ public final class OctomilClient: @unchecked Sendable {
             configuration: configuration
         )
 
-        // Store device token securely
-        let token = auth.token
-        try? secureStorage.storeDeviceToken(token)
-        Task {
-            await apiClient.setDeviceToken(token)
-        }
-
-        // Try to restore device token from keychain
-        if let storedToken = try? secureStorage.getDeviceToken() {
-            Task {
-                await apiClient.setDeviceToken(storedToken)
-            }
+        // Persist effective token to keychain
+        if !effectiveToken.isEmpty {
+            try? secureStorage.storeDeviceToken(effectiveToken)
         }
 
         // Try to restore server device ID from keychain
