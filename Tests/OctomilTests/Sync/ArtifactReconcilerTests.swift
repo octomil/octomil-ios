@@ -463,8 +463,8 @@ final class ArtifactReconcilerTests: XCTestCase {
             "version": "1.0.0",
             "total_bytes": 2700000000,
             "files": [
-                {"path": "model.bin", "size_bytes": 2600000000, "sha256": "abc123"},
-                {"path": "tokenizer.json", "size_bytes": 100000000, "sha256": "def456"}
+                {"path": "model.bin", "size_bytes": 2600000000, "sha256": "abc123", "kind": "weights"},
+                {"path": "tokenizer.json", "size_bytes": 100000000, "sha256": "def456", "kind": "tokenizer"}
             ]
         }
         """.data(using: .utf8)!
@@ -474,7 +474,26 @@ final class ArtifactReconcilerTests: XCTestCase {
         XCTAssertEqual(manifest.files.count, 2)
         XCTAssertEqual(manifest.files[0].path, "model.bin")
         XCTAssertEqual(manifest.files[0].sha256, "abc123")
+        XCTAssertEqual(manifest.files[0].kind, "weights")
+        XCTAssertEqual(manifest.files[1].kind, "tokenizer")
         XCTAssertEqual(manifest.totalBytes, 2700000000)
+    }
+
+    func testArtifactManifestResponseDecodingWithoutKind() throws {
+        let json = """
+        {
+            "artifact_id": "a1",
+            "model_id": "m1",
+            "version": "1.0.0",
+            "total_bytes": 1024,
+            "files": [
+                {"path": "model.bin", "size_bytes": 1024, "sha256": "abc"}
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try JSONDecoder().decode(ArtifactManifestResponse.self, from: json)
+        XCTAssertNil(manifest.files[0].kind)
     }
 
     func testDownloadUrlsResponseDecoding() throws {
@@ -613,6 +632,40 @@ final class ArtifactReconcilerTests: XCTestCase {
         } else {
             XCTFail("Expected remove action")
         }
+    }
+
+    // MARK: - Resource Kind Inference
+
+    func testInferResourceKindWeights() {
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "model.gguf"), "weights")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "model.bin"), "weights")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "phi-4.mlmodelc"), "weights")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "weights.safetensors"), "weights")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "model.tflite"), "weights")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "model.onnx"), "weights")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "model.mnn"), "weights")
+    }
+
+    func testInferResourceKindTokenizer() {
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "tokenizer.json"), "tokenizer")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "tokenizer.model"), "tokenizer")
+    }
+
+    func testInferResourceKindConfig() {
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "config.json"), "model_config")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "tokenizer_config.json"), "tokenizer_config")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "generation_config.json"), "generation_config")
+    }
+
+    func testInferResourceKindVocabAndMerges() {
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "vocab.json"), "vocab")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "vocab.txt"), "vocab")
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "merges.txt"), "merges")
+    }
+
+    func testInferResourceKindFallback() {
+        // Unknown extension falls back to filename stem
+        XCTAssertEqual(ArtifactReconciler.inferResourceKind(from: "custom_data.xyz"), "custom_data")
     }
 
     // MARK: - ArtifactReconcileError

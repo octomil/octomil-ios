@@ -297,7 +297,10 @@ public actor ArtifactReconciler {
             let filename = URL(fileURLWithPath: file.path).lastPathComponent
             let fileDest = artifactDir.appendingPathComponent(filename)
             try data.write(to: fileDest, options: .atomic)
-            resourceBindings[file.path] = filename
+
+            // Use explicit kind from manifest when available, otherwise infer from filename
+            let bindingKey = file.kind ?? Self.inferResourceKind(from: filename)
+            resourceBindings[bindingKey] = filename
         }
 
         // 5. Record as staged (filePath = directory for multi-file models)
@@ -376,6 +379,51 @@ public actor ArtifactReconciler {
         } catch {
             logger.warning("Failed to report observed state: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Resource Kind Inference
+
+    /// Infers an ``ArtifactResourceKind`` raw value from a filename.
+    ///
+    /// Used as a fallback when the server manifest doesn't include an
+    /// explicit `kind` field. Maps common filenames/extensions to the
+    /// canonical resource kinds expected by ``ModelRuntimeRegistry``.
+    static func inferResourceKind(from filename: String) -> String {
+        let lower = filename.lowercased()
+
+        // Exact filename matches
+        if lower.hasSuffix("tokenizer.json") || lower.hasSuffix("tokenizer.model") {
+            return ArtifactResourceKind.tokenizer.rawValue
+        }
+        if lower.hasSuffix("tokenizer_config.json") {
+            return ArtifactResourceKind.tokenizerConfig.rawValue
+        }
+        if lower.hasSuffix("config.json") || lower.hasSuffix("model_config.json") {
+            return ArtifactResourceKind.modelConfig.rawValue
+        }
+        if lower.hasSuffix("generation_config.json") {
+            return ArtifactResourceKind.generationConfig.rawValue
+        }
+        if lower.hasSuffix("vocab.json") || lower.hasSuffix("vocab.txt") {
+            return ArtifactResourceKind.vocab.rawValue
+        }
+        if lower.hasSuffix("merges.txt") {
+            return ArtifactResourceKind.merges.rawValue
+        }
+        if lower.hasSuffix("projector") || lower.contains("projector") {
+            return ArtifactResourceKind.projector.rawValue
+        }
+
+        // Extension-based inference for model weights
+        let weightExtensions = ["gguf", "bin", "mlmodelc", "mlpackage", "tflite",
+                                "onnx", "mnn", "safetensors", "pt", "pte"]
+        let ext = (lower as NSString).pathExtension
+        if weightExtensions.contains(ext) {
+            return ArtifactResourceKind.weights.rawValue
+        }
+
+        // Default: use the filename stem as kind
+        return (filename as NSString).deletingPathExtension
     }
 }
 
