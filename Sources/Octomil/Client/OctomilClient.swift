@@ -137,6 +137,9 @@ public final class OctomilClient: @unchecked Sendable {
     /// Artifact reconciler for desired-state sync and auto-recovery.
     private var artifactReconciler: ArtifactReconciler?
 
+    /// Metadata store for installed model artifacts.
+    private var modelMetadataStore: ModelMetadataStore?
+
     /// Whether the client has been closed via ``close()``.
     public private(set) var isClosed: Bool = false
 
@@ -631,6 +634,7 @@ public final class OctomilClient: @unchecked Sendable {
     private func setupArtifactReconciler(deviceId: String) async {
         let controlSync = self.control
         let metadataStore = ModelMetadataStore()
+        self.modelMetadataStore = metadataStore
         let reconciler = ArtifactReconciler(
             controlSync: controlSync,
             metadataStore: metadataStore
@@ -666,6 +670,44 @@ public final class OctomilClient: @unchecked Sendable {
         // Schedule periodic background sync
         BackgroundSync.shared.scheduleSync()
         #endif
+    }
+
+    // MARK: - Installed Models
+
+    /// Returns all active installed model records from the SDK metadata store.
+    ///
+    /// Use this to check which models are locally available and their file paths.
+    /// Returns an empty array if the metadata store hasn't been initialized yet
+    /// (e.g., before device registration).
+    public func installedModels() -> [InstalledModelRecord] {
+        guard let store = modelMetadataStore else { return [] }
+        return store.allRecords().filter { $0.status == .active }
+    }
+
+    /// Returns all installed model records (any status) from the SDK metadata store.
+    public func allInstalledModels() -> [InstalledModelRecord] {
+        guard let store = modelMetadataStore else { return [] }
+        return store.allRecords()
+    }
+
+    /// Runs a reconciliation cycle: fetches desired state from the server,
+    /// downloads missing artifacts, and activates them.
+    ///
+    /// This is the primary recovery mechanism — call it when models appear
+    /// missing on disk. The reconciler compares server-authoritative desired
+    /// state against local metadata and downloads/activates as needed.
+    ///
+    /// - Throws: ``OctomilError/deviceNotRegistered`` if the device hasn't been registered.
+    public func recoverModels() async throws {
+        guard let deviceId = self.deviceId else {
+            throw OctomilError.deviceNotRegistered
+        }
+        guard let reconciler = artifactReconciler else {
+            // Reconciler not set up yet — create one on the fly
+            await setupArtifactReconciler(deviceId: deviceId)
+            return
+        }
+        try await reconciler.reconcile(deviceId: deviceId)
     }
 
     // MARK: - Heartbeat
