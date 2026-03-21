@@ -196,21 +196,35 @@ struct ObservedStatePayload: Encodable, Sendable {
     }
 }
 
-// MARK: - Desired State types (GAP-13)
+// MARK: - Desired State types (contract 1.12.0)
 
 /// Response from ``GET /devices/{id}/desired-state``.
 public struct DesiredStateResponse: Decodable, Sendable {
-    public let schemaVersion: String
     public let deviceId: String
-    public let generatedAt: String
+    public let desiredStateVersion: Int
     public let models: [DesiredModelEntry]
     public let gcEligibleArtifactIds: [String]
 
     enum CodingKeys: String, CodingKey {
-        case schemaVersion = "schema_version"
         case deviceId = "device_id"
-        case generatedAt = "generated_at"
+        case desiredStateVersion = "desired_state_version"
         case models
         case gcEligibleArtifactIds = "gc_eligible_artifact_ids"
+    }
+}
+
+// MARK: - Artifact Endpoint Methods
+
+extension ControlSync {
+
+    /// Fetches the file manifest for an artifact.
+    public func fetchArtifactManifest(artifactId: String) async throws -> ArtifactManifestResponse {
+        try await apiClient.getJSON(path: "api/v1/artifacts/\(artifactId)/manifest")
+    }
+
+    /// Fetches presigned download URLs for artifact files.
+    public func fetchDownloadUrls(artifactId: String, files: [String]) async throws -> DownloadUrlsResponse {
+        let body = DownloadUrlsRequest(files: files)
+        return try await apiClient.postJSON(path: "api/v1/artifacts/\(artifactId)/download-urls", body: body)
     }
 }

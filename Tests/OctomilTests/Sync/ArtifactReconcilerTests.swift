@@ -30,12 +30,10 @@ final class ArtifactReconcilerTests: XCTestCase {
         let desired = makeDesiredResponse(models: [
             DesiredModelEntry(
                 modelId: "m1",
-                modelVersion: "1.0.0",
-                artifactVersion: "1.0.0",
-                artifactId: "a1",
-                downloadUrl: "https://example.com/a1.bin",
-                checksum: "abc",
-                fileSize: 1024
+                desiredVersion: "1.0.0",
+                artifactManifest: ArtifactManifest(
+                    artifactId: "a1", modelId: "m1", version: "1.0.0", totalBytes: 1024
+                )
             ),
         ])
 
@@ -51,24 +49,26 @@ final class ArtifactReconcilerTests: XCTestCase {
     }
 
     func testPlanActionsUpToDate() {
+        // Create a real file so the existence check passes
+        let filePath = tempDir.appendingPathComponent("a1").path
+        FileManager.default.createFile(atPath: filePath, contents: Data())
+
         store.upsert(InstalledModelRecord(
             modelId: "m1",
             modelVersion: "1.0.0",
             artifactVersion: "1.0.0",
             artifactId: "a1",
             status: .active,
-            filePath: "/tmp/test/a1"
+            filePath: filePath
         ))
 
         let desired = makeDesiredResponse(models: [
             DesiredModelEntry(
                 modelId: "m1",
-                modelVersion: "1.0.0",
-                artifactVersion: "1.0.0",
-                artifactId: "a1",
-                downloadUrl: "https://example.com/a1.bin",
-                checksum: "abc",
-                fileSize: 1024
+                desiredVersion: "1.0.0",
+                artifactManifest: ArtifactManifest(
+                    artifactId: "a1", modelId: "m1", version: "1.0.0", totalBytes: 1024
+                )
             ),
         ])
 
@@ -96,12 +96,10 @@ final class ArtifactReconcilerTests: XCTestCase {
         let desired = makeDesiredResponse(models: [
             DesiredModelEntry(
                 modelId: "m1",
-                modelVersion: "2.0.0",
-                artifactVersion: "2.0.0",
-                artifactId: "a2",
-                downloadUrl: "https://example.com/a2.bin",
-                checksum: "def",
-                fileSize: 2048
+                desiredVersion: "2.0.0",
+                artifactManifest: ArtifactManifest(
+                    artifactId: "a2", modelId: "m1", version: "2.0.0", totalBytes: 2048
+                )
             ),
         ])
 
@@ -110,32 +108,33 @@ final class ArtifactReconcilerTests: XCTestCase {
 
         XCTAssertEqual(actions.count, 1)
         if case .download(let entry) = actions[0] {
-            XCTAssertEqual(entry.artifactId, "a2")
+            XCTAssertEqual(entry.artifactManifest?.artifactId, "a2")
         } else {
             XCTFail("Expected download action for new version")
         }
     }
 
     func testPlanActionsStagedWithImmediatePolicy() {
+        let filePath = tempDir.appendingPathComponent("a1").path
+        FileManager.default.createFile(atPath: filePath, contents: Data())
+
         store.upsert(InstalledModelRecord(
             modelId: "m1",
             modelVersion: "1.0.0",
             artifactVersion: "1.0.0",
             artifactId: "a1",
             status: .staged,
-            filePath: "/tmp/test/a1"
+            filePath: filePath
         ))
 
         let desired = makeDesiredResponse(models: [
             DesiredModelEntry(
                 modelId: "m1",
-                modelVersion: "1.0.0",
-                artifactVersion: "1.0.0",
-                artifactId: "a1",
-                downloadUrl: "https://example.com/a1.bin",
-                checksum: "abc",
-                fileSize: 1024,
-                activationPolicy: .immediate
+                desiredVersion: "1.0.0",
+                activationPolicy: "immediate",
+                artifactManifest: ArtifactManifest(
+                    artifactId: "a1", modelId: "m1", version: "1.0.0", totalBytes: 1024
+                )
             ),
         ])
 
@@ -152,25 +151,26 @@ final class ArtifactReconcilerTests: XCTestCase {
     }
 
     func testPlanActionsStagedWithNextLaunchPolicy() {
+        let filePath = tempDir.appendingPathComponent("a1").path
+        FileManager.default.createFile(atPath: filePath, contents: Data())
+
         store.upsert(InstalledModelRecord(
             modelId: "m1",
             modelVersion: "1.0.0",
             artifactVersion: "1.0.0",
             artifactId: "a1",
             status: .staged,
-            filePath: "/tmp/test/a1"
+            filePath: filePath
         ))
 
         let desired = makeDesiredResponse(models: [
             DesiredModelEntry(
                 modelId: "m1",
-                modelVersion: "1.0.0",
-                artifactVersion: "1.0.0",
-                artifactId: "a1",
-                downloadUrl: "https://example.com/a1.bin",
-                checksum: "abc",
-                fileSize: 1024,
-                activationPolicy: .nextLaunch
+                desiredVersion: "1.0.0",
+                activationPolicy: "next_launch",
+                artifactManifest: ArtifactManifest(
+                    artifactId: "a1", modelId: "m1", version: "1.0.0", totalBytes: 1024
+                )
             ),
         ])
 
@@ -198,12 +198,10 @@ final class ArtifactReconcilerTests: XCTestCase {
         let desired = makeDesiredResponse(models: [
             DesiredModelEntry(
                 modelId: "m1",
-                modelVersion: "1.0.0",
-                artifactVersion: "1.0.0",
-                artifactId: "a1",
-                downloadUrl: "https://example.com/a1.bin",
-                checksum: "abc",
-                fileSize: 1024
+                desiredVersion: "1.0.0",
+                artifactManifest: ArtifactManifest(
+                    artifactId: "a1", modelId: "m1", version: "1.0.0", totalBytes: 1024
+                )
             ),
         ])
 
@@ -215,6 +213,38 @@ final class ArtifactReconcilerTests: XCTestCase {
             // Re-download after failure
         } else {
             XCTFail("Expected download action for failed artifact")
+        }
+    }
+
+    func testPlanActionsRedownloadWhenFilePurged() {
+        // Record exists but file is gone from disk
+        store.upsert(InstalledModelRecord(
+            modelId: "m1",
+            modelVersion: "1.0.0",
+            artifactVersion: "1.0.0",
+            artifactId: "a1",
+            status: .active,
+            filePath: "/tmp/nonexistent/a1"
+        ))
+
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                desiredVersion: "1.0.0",
+                artifactManifest: ArtifactManifest(
+                    artifactId: "a1", modelId: "m1", version: "1.0.0", totalBytes: 1024
+                )
+            ),
+        ])
+
+        let reconciler = makeReconciler()
+        let actions = reconciler.planActionsSync(desired: desired)
+
+        XCTAssertEqual(actions.count, 1)
+        if case .download = actions[0] {
+            // Re-download since file was purged
+        } else {
+            XCTFail("Expected download action for purged file")
         }
     }
 
@@ -249,6 +279,20 @@ final class ArtifactReconcilerTests: XCTestCase {
             models: [],
             gcEligibleArtifactIds: ["nonexistent"]
         )
+
+        let reconciler = makeReconciler()
+        let actions = reconciler.planActionsSync(desired: desired)
+        XCTAssertTrue(actions.isEmpty)
+    }
+
+    func testPlanActionsSkipsEntryWithoutArtifactManifest() {
+        let desired = makeDesiredResponse(models: [
+            DesiredModelEntry(
+                modelId: "m1",
+                desiredVersion: "1.0.0",
+                artifactManifest: nil
+            ),
+        ])
 
         let reconciler = makeReconciler()
         let actions = reconciler.planActionsSync(desired: desired)
@@ -315,53 +359,68 @@ final class ArtifactReconcilerTests: XCTestCase {
 
     // MARK: - Desired State Types
 
-    func testActivationPolicyCoding() throws {
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-
-        for policy in [ActivationPolicy.immediate, .nextLaunch, .manual, .whenIdle] {
-            let data = try encoder.encode(policy)
-            let decoded = try decoder.decode(ActivationPolicy.self, from: data)
-            XCTAssertEqual(decoded, policy)
-        }
-    }
-
     func testDesiredModelEntryDecoding() throws {
         let json = """
         {
-            "model_id": "m1",
-            "model_version": "1.0.0",
-            "artifact_version": "1.0.0",
-            "artifact_id": "a1",
-            "download_url": "https://example.com/a1.bin",
-            "checksum": "abc123",
-            "file_size": 1024,
-            "activation_policy": "next_launch"
+            "modelId": "m1",
+            "desiredVersion": "1.0.0",
+            "deliveryMode": "managed",
+            "activationPolicy": "immediate",
+            "artifactManifest": {
+                "artifactId": "a1",
+                "modelId": "m1",
+                "version": "1.0.0",
+                "totalBytes": 1024
+            }
         }
         """.data(using: .utf8)!
 
         let entry = try JSONDecoder().decode(DesiredModelEntry.self, from: json)
         XCTAssertEqual(entry.modelId, "m1")
-        XCTAssertEqual(entry.activationPolicy, .nextLaunch)
-        XCTAssertEqual(entry.fileSize, 1024)
+        XCTAssertEqual(entry.desiredVersion, "1.0.0")
+        XCTAssertEqual(entry.activationPolicy, "immediate")
+        XCTAssertEqual(entry.artifactManifest?.artifactId, "a1")
+        XCTAssertEqual(entry.artifactManifest?.totalBytes, 1024)
+        XCTAssertNil(entry.rolloutId)
+    }
+
+    func testDesiredModelEntryDecodingWithNullOptionals() throws {
+        let json = """
+        {
+            "modelId": "m1",
+            "desiredVersion": "1.0.0",
+            "deliveryMode": "managed",
+            "activationPolicy": "next_launch",
+            "enginePolicy": null,
+            "artifactManifest": null,
+            "rolloutId": null
+        }
+        """.data(using: .utf8)!
+
+        let entry = try JSONDecoder().decode(DesiredModelEntry.self, from: json)
+        XCTAssertEqual(entry.modelId, "m1")
+        XCTAssertEqual(entry.activationPolicy, "next_launch")
+        XCTAssertNil(entry.enginePolicy)
+        XCTAssertNil(entry.artifactManifest)
     }
 
     func testDesiredStateResponseDecoding() throws {
         let json = """
         {
-            "schema_version": "1.4.0",
             "device_id": "dev1",
-            "generated_at": "2026-03-18T00:00:00Z",
+            "desired_state_version": 5,
             "models": [
                 {
-                    "model_id": "m1",
-                    "model_version": "1.0.0",
-                    "artifact_version": "1.0.0",
-                    "artifact_id": "a1",
-                    "download_url": "https://example.com/a1.bin",
-                    "checksum": "abc123",
-                    "file_size": 1024,
-                    "activation_policy": "immediate"
+                    "modelId": "m1",
+                    "desiredVersion": "1.0.0",
+                    "deliveryMode": "managed",
+                    "activationPolicy": "immediate",
+                    "artifactManifest": {
+                        "artifactId": "a1",
+                        "modelId": "m1",
+                        "version": "1.0.0",
+                        "totalBytes": 1024
+                    }
                 }
             ],
             "gc_eligible_artifact_ids": ["old-1"]
@@ -369,12 +428,70 @@ final class ArtifactReconcilerTests: XCTestCase {
         """.data(using: .utf8)!
 
         let response = try JSONDecoder().decode(DesiredStateResponse.self, from: json)
-        XCTAssertEqual(response.schemaVersion, "1.4.0")
         XCTAssertEqual(response.deviceId, "dev1")
+        XCTAssertEqual(response.desiredStateVersion, 5)
         XCTAssertEqual(response.models.count, 1)
         XCTAssertEqual(response.models[0].modelId, "m1")
-        XCTAssertEqual(response.models[0].activationPolicy, .immediate)
+        XCTAssertEqual(response.models[0].activationPolicy, "immediate")
         XCTAssertEqual(response.gcEligibleArtifactIds, ["old-1"])
+    }
+
+    func testEnginePolicyDecoding() throws {
+        let json = """
+        {
+            "modelId": "m1",
+            "desiredVersion": "1.0.0",
+            "deliveryMode": "managed",
+            "activationPolicy": "immediate",
+            "enginePolicy": {
+                "allowed": ["coreml", "llamacpp"],
+                "forced": "coreml"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let entry = try JSONDecoder().decode(DesiredModelEntry.self, from: json)
+        XCTAssertEqual(entry.enginePolicy?.allowed, ["coreml", "llamacpp"])
+        XCTAssertEqual(entry.enginePolicy?.forced, "coreml")
+    }
+
+    func testArtifactManifestResponseDecoding() throws {
+        let json = """
+        {
+            "artifact_id": "a1",
+            "model_id": "m1",
+            "version": "1.0.0",
+            "total_bytes": 2700000000,
+            "files": [
+                {"path": "model.bin", "size_bytes": 2600000000, "sha256": "abc123"},
+                {"path": "tokenizer.json", "size_bytes": 100000000, "sha256": "def456"}
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try JSONDecoder().decode(ArtifactManifestResponse.self, from: json)
+        XCTAssertEqual(manifest.artifactId, "a1")
+        XCTAssertEqual(manifest.files.count, 2)
+        XCTAssertEqual(manifest.files[0].path, "model.bin")
+        XCTAssertEqual(manifest.files[0].sha256, "abc123")
+        XCTAssertEqual(manifest.totalBytes, 2700000000)
+    }
+
+    func testDownloadUrlsResponseDecoding() throws {
+        let json = """
+        {
+            "artifact_id": "a1",
+            "urls": [
+                {"path": "model.bin", "url": "https://cdn.example.com/model.bin?sig=abc"},
+                {"path": "tokenizer.json", "url": "https://cdn.example.com/tokenizer.json?sig=def"}
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let response = try JSONDecoder().decode(DownloadUrlsResponse.self, from: json)
+        XCTAssertEqual(response.artifactId, "a1")
+        XCTAssertEqual(response.urls.count, 2)
+        XCTAssertEqual(response.urls[0].path, "model.bin")
     }
 
     func testObservedModelEntryCoding() throws {
@@ -415,7 +532,8 @@ final class ArtifactReconcilerTests: XCTestCase {
             artifactVersion: "1.0.0",
             artifactId: "a1",
             status: .active,
-            filePath: "/tmp/test/a1"
+            filePath: "/tmp/test/a1",
+            resourceBindings: ["model.bin": "model.bin", "tokenizer.json": "tokenizer.json"]
         )
 
         let encoder = JSONEncoder()
@@ -429,6 +547,28 @@ final class ArtifactReconcilerTests: XCTestCase {
         XCTAssertEqual(decoded.modelId, "m1")
         XCTAssertEqual(decoded.status, .active)
         XCTAssertEqual(decoded.artifactId, "a1")
+        XCTAssertEqual(decoded.resourceBindings?["model.bin"], "model.bin")
+    }
+
+    func testInstalledModelRecordCodingWithoutResourceBindings() throws {
+        let record = InstalledModelRecord(
+            modelId: "m1",
+            modelVersion: "1.0.0",
+            artifactVersion: "1.0.0",
+            artifactId: "a1",
+            status: .active,
+            filePath: "/tmp/test/a1"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(record)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(InstalledModelRecord.self, from: data)
+
+        XCTAssertNil(decoded.resourceBindings)
     }
 
     func testInstalledModelStatusRawValues() {
@@ -443,18 +583,26 @@ final class ArtifactReconcilerTests: XCTestCase {
     func testReconcileActionDownload() {
         let entry = DesiredModelEntry(
             modelId: "m1",
-            modelVersion: "1.0.0",
-            artifactVersion: "1.0.0",
-            artifactId: "a1",
-            downloadUrl: "https://example.com",
-            checksum: "abc",
-            fileSize: 100
+            desiredVersion: "1.0.0",
+            artifactManifest: ArtifactManifest(
+                artifactId: "a1", modelId: "m1", version: "1.0.0", totalBytes: 100
+            )
         )
         let action = ReconcileAction.download(entry)
         if case .download(let e) = action {
             XCTAssertEqual(e.modelId, "m1")
         } else {
             XCTFail("Expected download action")
+        }
+    }
+
+    func testReconcileActionActivate() {
+        let action = ReconcileAction.activate(modelId: "m1", version: "1.0.0")
+        if case .activate(let modelId, let version) = action {
+            XCTAssertEqual(modelId, "m1")
+            XCTAssertEqual(version, "1.0.0")
+        } else {
+            XCTFail("Expected activate action")
         }
     }
 
@@ -495,9 +643,8 @@ final class ArtifactReconcilerTests: XCTestCase {
         gcEligibleArtifactIds: [String] = []
     ) -> DesiredStateResponse {
         DesiredStateResponse(
-            schemaVersion: "1.4.0",
             deviceId: "dev1",
-            generatedAt: "2026-03-18T00:00:00Z",
+            desiredStateVersion: 1,
             models: models,
             gcEligibleArtifactIds: gcEligibleArtifactIds
         )
@@ -516,22 +663,30 @@ private struct TestableReconciler {
         var actions: [ReconcileAction] = []
 
         for entry in desired.models {
-            let existing = store.record(forArtifactId: entry.artifactId)
+            let artifactId = entry.artifactManifest?.artifactId ?? ""
+            guard !artifactId.isEmpty else { continue }
+
+            let existing = store.record(forArtifactId: artifactId)
 
             if let existing = existing {
-                if existing.artifactVersion == entry.artifactVersion {
-                    if existing.status == .active {
+                if existing.artifactVersion == entry.desiredVersion {
+                    // Re-download if files were purged from disk
+                    let pathExists = FileManager.default.fileExists(atPath: existing.filePath)
+                    if !pathExists {
+                        actions.append(.download(entry))
+                    } else if existing.status == .active {
                         actions.append(.upToDate(modelId: entry.modelId))
                     } else if existing.status == .staged {
-                        if entry.activationPolicy == .immediate {
+                        if entry.activationPolicy == "immediate" {
                             actions.append(.activate(
                                 modelId: entry.modelId,
-                                artifactVersion: entry.artifactVersion
+                                version: entry.desiredVersion
                             ))
                         } else {
                             actions.append(.upToDate(modelId: entry.modelId))
                         }
                     } else {
+                        // Failed or rolled-back — re-download
                         actions.append(.download(entry))
                     }
                 } else {

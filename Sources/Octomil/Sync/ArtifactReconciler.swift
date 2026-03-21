@@ -81,32 +81,32 @@ public actor ArtifactReconciler {
         for action in actions {
             switch action {
             case .download(let entry):
+                let artifactId = entry.artifactManifest?.artifactId ?? ""
                 do {
                     try await downloadAndStage(entry: entry)
                     // Activate according to policy
-                    if entry.activationPolicy == .immediate {
+                    if entry.activationPolicy == "immediate" {
                         do {
-                            try activateArtifact(artifactId: entry.artifactId)
+                            try activateArtifact(artifactId: artifactId)
                             completedActions.append(.activate(
                                 modelId: entry.modelId,
-                                artifactVersion: entry.artifactVersion
+                                version: entry.desiredVersion
                             ))
                         } catch {
-                            metadataStore.markFailed(artifactId: entry.artifactId)
-                            logger.error("Activation failed for \(entry.artifactId): \(error.localizedDescription)")
-                            // Rollback: keep old version active
+                            metadataStore.markFailed(artifactId: artifactId)
+                            logger.error("Activation failed for \(artifactId): \(error.localizedDescription)")
                             completedActions.append(.download(entry))
                         }
                     } else {
                         completedActions.append(.download(entry))
                     }
                 } catch {
-                    logger.error("Download failed for \(entry.artifactId): \(error.localizedDescription)")
+                    logger.error("Download failed for \(artifactId): \(error.localizedDescription)")
                 }
 
-            case .activate(let modelId, let artifactVersion):
+            case .activate(let modelId, let version):
                 let matchingRecords = metadataStore.records(forModelId: modelId)
-                if let record = matchingRecords.first(where: { $0.artifactVersion == artifactVersion }) {
+                if let record = matchingRecords.first(where: { $0.artifactVersion == version }) {
                     do {
                         try activateArtifact(artifactId: record.artifactId)
                         completedActions.append(action)
@@ -199,21 +199,24 @@ public actor ArtifactReconciler {
         var actions: [ReconcileAction] = []
 
         for entry in desired.models {
-            let existing = metadataStore.record(forArtifactId: entry.artifactId)
+            let artifactId = entry.artifactManifest?.artifactId ?? ""
+            guard !artifactId.isEmpty else { continue }
+
+            let existing = metadataStore.record(forArtifactId: artifactId)
 
             if let existing = existing {
-                if existing.artifactVersion == entry.artifactVersion {
-                    // Re-download if the file was purged from disk
-                    let fileExists = FileManager.default.fileExists(atPath: existing.filePath)
-                    if !fileExists {
+                if existing.artifactVersion == entry.desiredVersion {
+                    // Re-download if files were purged from disk
+                    let pathExists = FileManager.default.fileExists(atPath: existing.filePath)
+                    if !pathExists {
                         actions.append(.download(entry))
                     } else if existing.status == .active {
                         actions.append(.upToDate(modelId: entry.modelId))
                     } else if existing.status == .staged {
-                        if entry.activationPolicy == .immediate {
+                        if entry.activationPolicy == "immediate" {
                             actions.append(.activate(
                                 modelId: entry.modelId,
-                                artifactVersion: entry.artifactVersion
+                                version: entry.desiredVersion
                             ))
                         } else {
                             actions.append(.upToDate(modelId: entry.modelId))
@@ -223,7 +226,7 @@ public actor ArtifactReconciler {
                         actions.append(.download(entry))
                     }
                 } else {
-                    // Different artifact version — download new
+                    // Different version — download new
                     actions.append(.download(entry))
                 }
             } else {
@@ -245,56 +248,71 @@ public actor ArtifactReconciler {
     // MARK: - Download & Stage
 
     private func downloadAndStage(entry: DesiredModelEntry) async throws {
-        guard let url = URL(string: entry.downloadUrl) else {
-            throw ArtifactReconcileError.invalidDownloadURL(entry.downloadUrl)
+        guard let artifactId = entry.artifactManifest?.artifactId, !artifactId.isEmpty else {
+            throw ArtifactReconcileError.invalidDownloadURL("No artifact manifest for \(entry.modelId)")
         }
 
-        logger.info("Downloading artifact \(entry.artifactId) from \(entry.downloadUrl)")
+        logger.info("Downloading artifact \(artifactId) for model \(entry.modelId)")
 
-        let (data, response) = try await downloadSession.data(from: url)
+        // 1. Fetch file manifest from server
+        let manifest = try await controlSync.fetchArtifactManifest(artifactId: artifactId)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw ArtifactReconcileError.downloadFailed(
-                artifactId: entry.artifactId,
-                reason: "HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)"
-            )
-        }
+        // 2. Get presigned download URLs for all files
+        let filePaths = manifest.files.map(\.path)
+        let urlsResponse = try await controlSync.fetchDownloadUrls(artifactId: artifactId, files: filePaths)
+        let urlMap = Dictionary(urlsResponse.urls.map { ($0.path, $0.url) }, uniquingKeysWith: { a, _ in a })
 
-        // Verify checksum
-        let hash = SHA256.hash(data: data)
-            .compactMap { String(format: "%02x", $0) }
-            .joined()
-
-        guard hash == entry.checksum else {
-            throw ArtifactReconcileError.checksumMismatch(
-                artifactId: entry.artifactId,
-                expected: entry.checksum,
-                actual: hash
-            )
-        }
-
-        // Write to artifact directory
+        // 3. Create artifact directory
         let artifactDir = artifactDirectory
             .appendingPathComponent(entry.modelId, isDirectory: true)
-            .appendingPathComponent(entry.artifactVersion, isDirectory: true)
+            .appendingPathComponent(entry.desiredVersion, isDirectory: true)
         try FileManager.default.createDirectory(at: artifactDir, withIntermediateDirectories: true)
 
-        let filePath = artifactDir.appendingPathComponent("model.bin")
-        try data.write(to: filePath, options: .atomic)
+        // 4. Download each file and verify checksums
+        var resourceBindings: [String: String] = [:]
+        for file in manifest.files {
+            guard let urlString = urlMap[file.path], let url = URL(string: urlString) else {
+                throw ArtifactReconcileError.invalidDownloadURL(file.path)
+            }
 
-        // Record as staged
+            let (data, response) = try await downloadSession.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                throw ArtifactReconcileError.downloadFailed(
+                    artifactId: artifactId,
+                    reason: "HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1) for \(file.path)"
+                )
+            }
+
+            let hash = SHA256.hash(data: data)
+                .compactMap { String(format: "%02x", $0) }
+                .joined()
+            guard hash == file.sha256 else {
+                throw ArtifactReconcileError.checksumMismatch(
+                    artifactId: artifactId,
+                    expected: file.sha256,
+                    actual: hash
+                )
+            }
+
+            let filename = URL(fileURLWithPath: file.path).lastPathComponent
+            let fileDest = artifactDir.appendingPathComponent(filename)
+            try data.write(to: fileDest, options: .atomic)
+            resourceBindings[file.path] = filename
+        }
+
+        // 5. Record as staged (filePath = directory for multi-file models)
         let record = InstalledModelRecord(
             modelId: entry.modelId,
-            modelVersion: entry.modelVersion,
-            artifactVersion: entry.artifactVersion,
-            artifactId: entry.artifactId,
+            modelVersion: entry.desiredVersion,
+            artifactVersion: entry.desiredVersion,
+            artifactId: artifactId,
             status: .staged,
-            filePath: filePath.path
+            filePath: artifactDir.path,
+            resourceBindings: resourceBindings
         )
         metadataStore.upsert(record)
 
-        logger.info("Staged artifact \(entry.artifactId) at \(filePath.path)")
+        logger.info("Staged artifact \(artifactId) (\(manifest.files.count) files) at \(artifactDir.path)")
     }
 
     // MARK: - Activation

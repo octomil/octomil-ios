@@ -25,6 +25,8 @@ public struct InstalledModelRecord: Codable, Sendable {
     public let filePath: String
     public var launchCount: Int
     public var crashCount: Int
+    /// Resource kind → filename mapping for multi-file models.
+    public var resourceBindings: [String: String]?
 
     public init(
         modelId: String,
@@ -36,7 +38,8 @@ public struct InstalledModelRecord: Codable, Sendable {
         activatedAt: Date? = nil,
         filePath: String,
         launchCount: Int = 0,
-        crashCount: Int = 0
+        crashCount: Int = 0,
+        resourceBindings: [String: String]? = nil
     ) {
         self.modelId = modelId
         self.modelVersion = modelVersion
@@ -48,6 +51,7 @@ public struct InstalledModelRecord: Codable, Sendable {
         self.filePath = filePath
         self.launchCount = launchCount
         self.crashCount = crashCount
+        self.resourceBindings = resourceBindings
     }
 }
 
