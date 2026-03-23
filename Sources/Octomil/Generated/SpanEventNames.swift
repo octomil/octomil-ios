@@ -8,6 +8,7 @@ public enum SpanEventName {
     public static let completed = "completed"
     public static let toolCallParseSucceeded = "tool_call_parse_succeeded"
     public static let toolCallParseFailed = "tool_call_parse_failed"
+    public static let credentialResolved = "credential_resolved"
     public static let downloadStarted = "download_started"
     public static let downloadCompleted = "download_completed"
     public static let checksumVerified = "checksum_verified"
@@ -47,6 +48,7 @@ public enum SpanEventName {
         "completed": "octomil.response",
         "tool_call_parse_succeeded": "octomil.response",
         "tool_call_parse_failed": "octomil.response",
+        "credential_resolved": "octomil.fallback.cloud",
         "download_started": "octomil.model.load",
         "download_completed": "octomil.model.load",
         "checksum_verified": "octomil.model.load",

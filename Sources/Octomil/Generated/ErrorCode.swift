@@ -7,6 +7,9 @@ public enum ErrorCode: String, Codable, Sendable {
     case deviceNotRegistered = "device_not_registered"
     case tokenExpired = "token_expired"
     case deviceRevoked = "device_revoked"
+    case cloudCredentialsMissing = "cloud_credentials_missing"
+    case cloudCredentialsRevoked = "cloud_credentials_revoked"
+    case cloudProviderAuthFailed = "cloud_provider_auth_failed"
     case networkUnavailable = "network_unavailable"
     case requestTimeout = "request_timeout"
     case serverError = "server_error"
@@ -97,6 +100,9 @@ extension ErrorCode {
         case .deviceNotRegistered: return .auth
         case .tokenExpired: return .auth
         case .deviceRevoked: return .auth
+        case .cloudCredentialsMissing: return .auth
+        case .cloudCredentialsRevoked: return .auth
+        case .cloudProviderAuthFailed: return .auth
         case .networkUnavailable: return .network
         case .requestTimeout: return .network
         case .serverError: return .network
@@ -138,6 +144,9 @@ extension ErrorCode {
         case .deviceNotRegistered: return .never
         case .tokenExpired: return .never
         case .deviceRevoked: return .never
+        case .cloudCredentialsMissing: return .never
+        case .cloudCredentialsRevoked: return .never
+        case .cloudProviderAuthFailed: return .never
         case .networkUnavailable: return .backoffSafe
         case .requestTimeout: return .conditional
         case .serverError: return .backoffSafe
@@ -179,6 +188,9 @@ extension ErrorCode {
         case .deviceNotRegistered: return false
         case .tokenExpired: return false
         case .deviceRevoked: return false
+        case .cloudCredentialsMissing: return false
+        case .cloudCredentialsRevoked: return false
+        case .cloudProviderAuthFailed: return false
         case .networkUnavailable: return true
         case .requestTimeout: return true
         case .serverError: return true
@@ -220,6 +232,9 @@ extension ErrorCode {
         case .deviceNotRegistered: return .registerDevice
         case .tokenExpired: return .reauthenticate
         case .deviceRevoked: return .registerDevice
+        case .cloudCredentialsMissing: return .fixCredentials
+        case .cloudCredentialsRevoked: return .fixCredentials
+        case .cloudProviderAuthFailed: return .fixCredentials
         case .networkUnavailable: return .retryOrFallback
         case .requestTimeout: return .retryOrFallback
         case .serverError: return .retry
