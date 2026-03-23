@@ -447,6 +447,12 @@ public enum OctomilError: LocalizedError, Sendable {
             return .tokenExpired
         case .deviceRevoked:
             return .deviceRevoked
+        case .cloudCredentialsMissing:
+            return .authenticationFailed(reason: message)
+        case .cloudCredentialsRevoked:
+            return .authenticationFailed(reason: message)
+        case .cloudProviderAuthFailed:
+            return .authenticationFailed(reason: message)
         case .rateLimited:
             return .rateLimited(retryAfter: nil)
         case .invalidInput:

@@ -78,6 +78,43 @@ public actor ControlSync {
         return result
     }
 
+    // MARK: - Unified Device Sync (contract: devices.sync)
+
+    /// Performs a unified device sync round-trip.
+    ///
+    /// This combines observed-state reporting and desired-state fetch into a
+    /// single server call. New SDK integrations should prefer this over the
+    /// separate desired/observed endpoints.
+    public func sync(
+        deviceId: String,
+        modelInventory: [SyncModelInventoryEntry] = [],
+        activeVersions: [SyncActiveVersionEntry] = [],
+        knownStateVersion: String? = nil,
+        appId: String? = nil,
+        appVersion: String? = nil,
+        availableStorageBytes: Int64? = nil
+    ) async throws -> DeviceSyncResponse {
+        let payload = DeviceSyncRequest(
+            deviceId: deviceId,
+            requestedAt: ISO8601DateFormatter().string(from: Date()),
+            knownStateVersion: knownStateVersion,
+            sdkVersion: OctomilVersion.current,
+            platform: "ios",
+            appId: appId,
+            appVersion: appVersion,
+            modelInventory: modelInventory,
+            activeVersions: activeVersions,
+            availableStorageBytes: availableStorageBytes
+        )
+
+        let result: DeviceSyncResponse = try await apiClient.postJSON(
+            path: "api/v1/devices/\(deviceId)/sync",
+            body: payload
+        )
+        logger.debug("Unified device sync completed for device \(deviceId)")
+        return result
+    }
+
     // MARK: - Heartbeat (contract: control.heartbeat)
 
     /// Sends a liveness signal to the server.
@@ -211,6 +248,90 @@ public struct DesiredStateResponse: Decodable, Sendable {
         case models
         case gcEligibleArtifactIds = "gc_eligible_artifact_ids"
     }
+}
+
+/// Installed model artifact status included in a unified sync request.
+public struct SyncModelInventoryEntry: Codable, Sendable {
+    public let modelId: String
+    public let version: String
+    public let artifactId: String?
+    public let status: String
+
+    public init(
+        modelId: String,
+        version: String,
+        artifactId: String? = nil,
+        status: String
+    ) {
+        self.modelId = modelId
+        self.version = version
+        self.artifactId = artifactId
+        self.status = status
+    }
+}
+
+/// Active serving version included in a unified sync request.
+public struct SyncActiveVersionEntry: Codable, Sendable {
+    public let modelId: String
+    public let version: String
+
+    public init(modelId: String, version: String) {
+        self.modelId = modelId
+        self.version = version
+    }
+}
+
+/// Request payload for ``POST /api/v1/devices/{id}/sync``.
+public struct DeviceSyncRequest: Codable, Sendable {
+    public let schemaVersion: String
+    public let deviceId: String
+    public let requestedAt: String
+    public let knownStateVersion: String?
+    public let sdkVersion: String?
+    public let platform: String?
+    public let appId: String?
+    public let appVersion: String?
+    public let modelInventory: [SyncModelInventoryEntry]
+    public let activeVersions: [SyncActiveVersionEntry]
+    public let availableStorageBytes: Int64?
+
+    public init(
+        schemaVersion: String = "1.12.0",
+        deviceId: String,
+        requestedAt: String,
+        knownStateVersion: String? = nil,
+        sdkVersion: String? = nil,
+        platform: String? = nil,
+        appId: String? = nil,
+        appVersion: String? = nil,
+        modelInventory: [SyncModelInventoryEntry] = [],
+        activeVersions: [SyncActiveVersionEntry] = [],
+        availableStorageBytes: Int64? = nil
+    ) {
+        self.schemaVersion = schemaVersion
+        self.deviceId = deviceId
+        self.requestedAt = requestedAt
+        self.knownStateVersion = knownStateVersion
+        self.sdkVersion = sdkVersion
+        self.platform = platform
+        self.appId = appId
+        self.appVersion = appVersion
+        self.modelInventory = modelInventory
+        self.activeVersions = activeVersions
+        self.availableStorageBytes = availableStorageBytes
+    }
+}
+
+/// Response from ``POST /api/v1/devices/{id}/sync``.
+public struct DeviceSyncResponse: Decodable, Sendable {
+    public let schemaVersion: String
+    public let deviceId: String
+    public let generatedAt: String?
+    public let stateChanged: Bool
+    public let models: [DesiredModelEntry]
+    public let gcEligibleArtifactIds: [String]
+    public let nextPollIntervalSeconds: Int
+    public let serverTimestamp: String?
 }
 
 // MARK: - Artifact Endpoint Methods

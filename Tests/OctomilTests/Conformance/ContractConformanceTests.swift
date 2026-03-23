@@ -395,6 +395,23 @@ final class ContractConformanceTests: XCTestCase {
         // The call above should not block. No assertions needed beyond
         // the fact that it compiled and returned immediately.
     }
+
+    /// ControlSync must expose an async throwing sync() method for unified
+    /// device sync. This is a compile-time signature check only.
+    func testDeviceSyncExists() async {
+        let config = TestConfiguration.standard
+        let apiClient = APIClient(
+            serverURL: URL(string: "https://localhost:9999")!,
+            configuration: config
+        )
+        let control = ControlSync(apiClient: apiClient)
+
+        let call: (String) async throws -> DeviceSyncResponse = { deviceId in
+            try await control.sync(deviceId: deviceId)
+        }
+
+        _ = call
+    }
 }
 
 // MARK: - Test Helpers
