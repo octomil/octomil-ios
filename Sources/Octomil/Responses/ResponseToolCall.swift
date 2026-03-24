@@ -12,13 +12,13 @@ public struct ResponseToolCall: Sendable {
         self.arguments = arguments
     }
 
-    /// Convert to the legacy ``ToolCall`` type.
-    public func toLegacyToolCall() -> ToolCall {
-        ToolCall(id: id, function: FunctionCall(name: name, arguments: arguments))
+    /// Convert to the legacy ``LegacyToolCall`` type.
+    public func toLegacyToolCall() -> LegacyToolCall {
+        LegacyToolCall(id: id, function: FunctionCall(name: name, arguments: arguments))
     }
 
-    /// Create from a legacy ``ToolCall``.
-    public static func fromLegacy(_ toolCall: ToolCall) -> ResponseToolCall {
+    /// Create from a legacy ``LegacyToolCall``.
+    public static func fromLegacy(_ toolCall: LegacyToolCall) -> ResponseToolCall {
         ResponseToolCall(id: toolCall.id, name: toolCall.function.name, arguments: toolCall.function.arguments)
     }
 }

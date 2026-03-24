@@ -94,7 +94,7 @@ public final class OctomilChat: @unchecked Sendable {
                             isFirst = false
 
                         case .toolCallDelta(let index, let id, let name, let argsDelta):
-                            let tc = ToolCall(
+                            let tc = LegacyToolCall(
                                 id: id ?? "call_\(index)",
                                 function: FunctionCall(
                                     name: name ?? "",
@@ -200,7 +200,7 @@ public final class OctomilChat: @unchecked Sendable {
         let completionId = "chatcmpl-\(UUID().uuidString.prefix(12))"
 
         var contentText: String?
-        var toolCalls: [ToolCall]?
+        var toolCalls: [LegacyToolCall]?
 
         for item in response.output {
             switch item {

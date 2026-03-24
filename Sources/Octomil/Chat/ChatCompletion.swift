@@ -61,9 +61,9 @@ public struct ChatCompletionChunk: Sendable {
     public struct Delta: Sendable {
         public let role: ChatMessage.Role?
         public let content: String?
-        public let toolCalls: [ToolCall]?
+        public let toolCalls: [LegacyToolCall]?
 
-        public init(role: ChatMessage.Role? = nil, content: String? = nil, toolCalls: [ToolCall]? = nil) {
+        public init(role: ChatMessage.Role? = nil, content: String? = nil, toolCalls: [LegacyToolCall]? = nil) {
             self.role = role
             self.content = content
             self.toolCalls = toolCalls
