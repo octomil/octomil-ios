@@ -37,7 +37,8 @@ public final class ToolRunner: @unchecked Sendable {
                 temperature: request.temperature,
                 topP: request.topP,
                 stop: request.stop,
-                metadata: request.metadata
+                metadata: request.metadata,
+                repetitionPenalty: request.repetitionPenalty
             )
             let response = try await responses.create(currentRequest)
 
@@ -80,7 +81,8 @@ public final class ToolRunner: @unchecked Sendable {
             temperature: request.temperature,
             topP: request.topP,
             stop: request.stop,
-            metadata: request.metadata
+            metadata: request.metadata,
+            repetitionPenalty: request.repetitionPenalty
         )
         return try await responses.create(finalRequest)
     }
