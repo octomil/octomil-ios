@@ -38,8 +38,8 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     /// resolution. When nil, inferred from the file extension as a fallback.
     public let engine: Engine?
 
-    /// Resolved engine instance, lazily created on first use.
-    private var resolvedEngine: StreamingInferenceEngine?
+    /// Resolved engine instances keyed by modality, lazily created on first use.
+    private var resolvedEngines: [Modality: StreamingInferenceEngine] = [:]
     private let lock = NSLock()
 
     public let capabilities: RuntimeCapabilities
@@ -177,7 +177,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public func close() {
         lock.lock()
-        resolvedEngine = nil
+        resolvedEngines.removeAll()
         lock.unlock()
     }
 
@@ -257,7 +257,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        if let existing = resolvedEngine { return existing }
+        if let existing = resolvedEngines[modality] { return existing }
 
         let engineToUse = engine ?? EngineRegistry.engineFromURL(fileURL)
         let modelURL = resolvedResource(.weights) ?? fileURL
@@ -266,7 +266,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
             engine: engineToUse,
             modelURL: modelURL
         )
-        resolvedEngine = resolved
+        resolvedEngines[modality] = resolved
         return resolved
     }
 
