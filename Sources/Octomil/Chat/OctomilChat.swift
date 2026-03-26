@@ -190,7 +190,8 @@ public final class OctomilChat: @unchecked Sendable {
             maxOutputTokens: chat.maxTokens,
             temperature: chat.temperature,
             topP: chat.topP,
-            stop: chat.stop
+            stop: chat.stop,
+            repetitionPenalty: chat.repetitionPenalty
         )
     }
 
