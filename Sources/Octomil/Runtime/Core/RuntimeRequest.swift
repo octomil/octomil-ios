@@ -55,6 +55,26 @@ public struct RuntimeRequest: Sendable {
     }
 }
 
+/// Structured multimodal input for engines that support text + media.
+///
+/// Text-only engines cast `input as? String`; multimodal-capable engines
+/// cast `input as? MultimodalInput` to access both the prompt and media data.
+/// No local engine consumes this yet — it is prep for VLM support.
+public struct MultimodalInput: Sendable {
+    /// The rendered text prompt (ChatML or plain text).
+    public let prompt: String
+    /// Raw media bytes (image, audio, video), if present.
+    public let mediaData: Data?
+    /// MIME type of the media (e.g. "image/jpeg", "audio/wav").
+    public let mediaType: String?
+
+    public init(prompt: String, mediaData: Data? = nil, mediaType: String? = nil) {
+        self.prompt = prompt
+        self.mediaData = mediaData
+        self.mediaType = mediaType
+    }
+}
+
 /// A tool definition passed to the runtime.
 public struct RuntimeToolDef: Sendable {
     public let name: String

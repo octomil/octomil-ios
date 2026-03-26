@@ -90,8 +90,9 @@ public protocol StreamingInferenceEngine: Sendable {
     /// - Parameters:
     ///   - input: Modality-specific input (prompt string, conditioning image, etc.).
     ///   - modality: The output modality.
+    ///   - config: Per-request generation parameters (maxTokens, temperature, etc.).
     /// - Returns: An async stream of inference chunks.
-    func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error>
+    func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error>
 }
 
 // MARK: - Timing Wrapper
@@ -117,7 +118,8 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
     /// result.
     public func wrap(
         _ engine: StreamingInferenceEngine,
-        input: Any
+        input: Any,
+        config: GenerationConfig = GenerationConfig()
     ) -> (stream: AsyncThrowingStream<InferenceChunk, Error>, result: @Sendable () -> StreamingInferenceResult?) {
 
         let sessionId = self.sessionId
@@ -135,7 +137,7 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
 
         let state = State()
 
-        let rawStream = engine.generate(input: input, modality: modality)
+        let rawStream = engine.generate(input: input, modality: modality, config: config)
 
         let modelId = self.modelId
 
