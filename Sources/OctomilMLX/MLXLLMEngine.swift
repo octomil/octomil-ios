@@ -61,6 +61,7 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
         let maxTokens = config.maxTokens
         let temperature = Float(config.temperature)
         let topP = Float(config.topP)
+        let repetitionPenalty = config.repetitionPenalty.map { Float($0) }
         let container = self.modelContainer
         let cacheEnabled = self.cacheEnabled
 
@@ -86,6 +87,7 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
                                 maxTokens: maxTokens,
                                 temperature: temperature,
                                 topP: topP,
+                                repetitionPenalty: repetitionPenalty,
                                 prefillStepSize: 4096
                             ),
                             context: context
