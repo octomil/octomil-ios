@@ -95,13 +95,8 @@ public final class LLMRuntimeAdapter: ModelRuntime, @unchecked Sendable {
         return nil
     }
 
-    private func makeConfig(from request: RuntimeRequest) -> GenerateConfig {
-        GenerateConfig(
-            maxTokens: request.generationConfig.maxTokens,
-            temperature: request.generationConfig.temperature,
-            topP: request.generationConfig.topP,
-            stop: request.generationConfig.stop
-        )
+    private func makeConfig(from request: RuntimeRequest) -> GenerationConfig {
+        request.generationConfig
     }
 
     private func estimateTokens(_ text: String) -> Int {
