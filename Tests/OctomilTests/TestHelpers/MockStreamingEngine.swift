@@ -33,8 +33,12 @@ final class MockStreamingEngine: StreamingInferenceEngine, @unchecked Sendable {
     /// Records every `input` received.
     private(set) var recordedInputs: [Any] = []
 
-    func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    /// Records every `config` received.
+    private(set) var recordedConfigs: [GenerationConfig] = []
+
+    func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         recordedInputs.append(input)
+        recordedConfigs.append(config)
         let specs = chunks
         let error = terminalError
 
