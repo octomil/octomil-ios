@@ -44,13 +44,13 @@ public final class MLXDeployedModel: @unchecked Sendable {
         stream: AsyncThrowingStream<InferenceChunk, Error>,
         result: @Sendable () -> StreamingInferenceResult?
     ) {
-        let engine = MLXLLMEngine(
-            modelContainer: modelContainer,
+        let engine = MLXLLMEngine(modelContainer: modelContainer)
+        let config = GenerationConfig(
             maxTokens: maxTokens,
-            temperature: temperature
+            temperature: Double(temperature)
         )
         let wrapper = InstrumentedStreamWrapper(modality: .text)
-        return wrapper.wrap(engine, input: prompt)
+        return wrapper.wrap(engine, input: prompt, config: config)
     }
 
     /// Generate text with a specific modality (for protocol flexibility).
@@ -61,12 +61,12 @@ public final class MLXDeployedModel: @unchecked Sendable {
         stream: AsyncThrowingStream<InferenceChunk, Error>,
         result: @Sendable () -> StreamingInferenceResult?
     ) {
-        let engine = MLXLLMEngine(
-            modelContainer: modelContainer,
+        let engine = MLXLLMEngine(modelContainer: modelContainer)
+        let config = GenerationConfig(
             maxTokens: maxTokens,
-            temperature: temperature
+            temperature: Double(temperature)
         )
         let wrapper = InstrumentedStreamWrapper(modality: modality)
-        return wrapper.wrap(engine, input: input)
+        return wrapper.wrap(engine, input: input, config: config)
     }
 }

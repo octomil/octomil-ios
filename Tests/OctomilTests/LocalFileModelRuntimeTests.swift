@@ -324,4 +324,43 @@ final class LocalFileModelRuntimeTests: XCTestCase {
         XCTAssertEqual(mockEngine.recordedConfigs[0].temperature, 0.5, accuracy: 0.001)
         XCTAssertEqual(mockEngine.recordedConfigs[0].topP, 0.9, accuracy: 0.001)
     }
+
+    // MARK: - Engine Cache Per-Modality
+
+    func testRunResolvesCorrectEnginePerModality() async throws {
+        let textEngine = MockStreamingEngine()
+        textEngine.chunks = [MockStreamingEngine.ChunkSpec("text reply")]
+
+        let audioEngine = MockStreamingEngine()
+        audioEngine.chunks = [MockStreamingEngine.ChunkSpec("transcribed")]
+
+        EngineRegistry.shared.register(modality: .text) { _ in textEngine }
+        EngineRegistry.shared.register(modality: .audio) { _ in audioEngine }
+        defer { EngineRegistry.shared.reset() }
+
+        let runtime = LocalFileModelRuntime(
+            modelId: "multi-test",
+            fileURL: URL(fileURLWithPath: "/tmp/fake-model")
+        )
+
+        // First call: text request -> text engine
+        let textRequest = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [.text("Hello")])]
+        )
+        let textResponse = try await runtime.run(request: textRequest)
+        XCTAssertEqual(textResponse.text, "text reply")
+        XCTAssertEqual(textEngine.recordedInputs.count, 1)
+        XCTAssertEqual(audioEngine.recordedInputs.count, 0)
+
+        // Second call: audio request -> must use audio engine, not cached text engine
+        let audioRequest = RuntimeRequest(
+            messages: [RuntimeMessage(role: .user, parts: [
+                .audio(data: Data([0x01]), mediaType: "audio/wav")
+            ])]
+        )
+        let audioResponse = try await runtime.run(request: audioRequest)
+        XCTAssertEqual(audioResponse.text, "transcribed")
+        XCTAssertEqual(audioEngine.recordedInputs.count, 1,
+                       "Audio request must resolve audio engine, not reuse cached text engine")
+    }
 }
