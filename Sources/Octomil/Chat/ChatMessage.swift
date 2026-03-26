@@ -19,6 +19,8 @@ public struct ChatMessage: Codable, Sendable {
     public let toolCalls: [ToolCall]?
     /// The ID of the tool call this message is a response to.
     public let toolCallId: String?
+    /// Multimodal content parts. When present, these are used instead of `content` for user messages.
+    public let parts: [ContentPart]?
 
     public enum Role: String, Codable, Sendable {
         case system
@@ -32,13 +34,15 @@ public struct ChatMessage: Codable, Sendable {
         content: String? = nil,
         name: String? = nil,
         toolCalls: [ToolCall]? = nil,
-        toolCallId: String? = nil
+        toolCallId: String? = nil,
+        parts: [ContentPart]? = nil
     ) {
         self.role = role
         self.content = content
         self.name = name
         self.toolCalls = toolCalls
         self.toolCallId = toolCallId
+        self.parts = parts
     }
 
     // MARK: - Convenience factories
@@ -59,8 +63,17 @@ public struct ChatMessage: Codable, Sendable {
         ChatMessage(role: .tool, content: content, toolCallId: toolCallId)
     }
 
+    public static func user(_ content: String, imageData: Data) -> ChatMessage {
+        let base64 = imageData.base64EncodedString()
+        return ChatMessage(
+            role: .user,
+            content: content,
+            parts: [.text(content), .imageData(base64, mediaType: "image/jpeg")]
+        )
+    }
+
     enum CodingKeys: String, CodingKey {
-        case role, content, name
+        case role, content, name, parts
         case toolCalls = "tool_calls"
         case toolCallId = "tool_call_id"
     }

@@ -169,7 +169,11 @@ public final class OctomilChat: @unchecked Sendable {
             case .system:
                 input.append(.system(msg.content ?? ""))
             case .user:
-                input.append(.text(msg.content ?? ""))
+                if let parts = msg.parts, !parts.isEmpty {
+                    input.append(.userParts(parts))
+                } else {
+                    input.append(.text(msg.content ?? ""))
+                }
             case .assistant:
                 if let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                     let rtcs = toolCalls.map { ResponseToolCall.fromLegacy($0) }
