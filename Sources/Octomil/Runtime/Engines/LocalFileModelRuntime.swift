@@ -120,13 +120,12 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     // MARK: - ModelRuntime
 
     public func run(request: RuntimeRequest) async throws -> RuntimeResponse {
-        // Determine modality from the request's message parts.
         let modality = Self.modality(for: request)
-        let input: Any = Self.engineInput(for: request)
+        let input: Any = Self.engineInput(for: request, modality: modality)
         let eng = try resolveEngine(modality: modality)
 
         var tokens: [String] = []
-        for try await chunk in eng.generate(input: input, modality: modality) {
+        for try await chunk in eng.generate(input: input, modality: modality, config: request.generationConfig) {
             if let text = String(data: chunk.data, encoding: .utf8) {
                 tokens.append(text)
             }
@@ -149,7 +148,8 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
         let modelURL = resolvedResource(.weights) ?? fileURL
         let engine = self.engine
         let modality = Self.modality(for: request)
-        let input: Any = Self.engineInput(for: request)
+        let input: Any = Self.engineInput(for: request, modality: modality)
+        let config = request.generationConfig
 
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -161,7 +161,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
                         modelURL: modelURL
                     )
 
-                    for try await chunk in eng.generate(input: input, modality: modality) {
+                    for try await chunk in eng.generate(input: input, modality: modality, config: config) {
                         if let text = String(data: chunk.data, encoding: .utf8) {
                             continuation.yield(RuntimeChunk(text: text))
                         }
@@ -183,40 +183,74 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     // MARK: - Private
 
-    /// Determine the ``Modality`` from a ``RuntimeRequest`` by inspecting message parts.
+    /// Determine the output ``Modality`` from a ``RuntimeRequest``.
     ///
-    /// Checks for non-text content parts; defaults to `.text` when all parts are text.
-    private static func modality(for request: RuntimeRequest) -> Modality {
+    /// Pure audio requests (audio parts, no user text, no images) resolve as
+    /// `.audio` so transcription engines (Sherpa, Whisper) are selected.
+    /// Everything else — text-only, text+image, text+audio — resolves as `.text`
+    /// so text-generating engines (llama.cpp, MLX, CoreML) are selected.
+    static func modality(for request: RuntimeRequest) -> Modality {
+        var hasAudio = false
+        var hasUserText = false
+        var hasImage = false
+
         for msg in request.messages {
             for part in msg.parts {
                 switch part {
-                case .audio: return .audio
-                case .image: return .image
-                case .video: return .video
-                case .text: continue
+                case .audio: hasAudio = true
+                case .image: hasImage = true
+                case .video: break
+                case .text(let t):
+                    if msg.role == .user && !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        hasUserText = true
+                    }
                 }
             }
         }
+
+        // Pure audio transcription: audio present, no user text, no images
+        if hasAudio && !hasUserText && !hasImage {
+            return .audio
+        }
+
         return .text
     }
 
     /// Extract the appropriate engine input from a ``RuntimeRequest``.
     ///
-    /// For audio/image/video requests that carry media data in message parts,
-    /// the raw `Data` is passed to the engine. For text requests, the rendered
-    /// prompt string is used.
-    private static func engineInput(for request: RuntimeRequest) -> Any {
+    /// - Pure audio (`.audio` modality): returns raw audio `Data` for transcription engines.
+    /// - Text with media (`.text` modality + media parts): returns ``MultimodalInput``
+    ///   containing the rendered prompt and the first media attachment.
+    /// - Text-only: returns the ChatML-rendered prompt string.
+    static func engineInput(for request: RuntimeRequest, modality: Modality) -> Any {
+        // Pure audio: return raw bytes for transcription engines
+        if modality == .audio {
+            for msg in request.messages {
+                for part in msg.parts {
+                    if case .audio(let data, _) = part { return data }
+                }
+            }
+        }
+
+        let prompt = ChatMLRenderer.render(request)
+
+        // Check for media attachments — return MultimodalInput if present
         for msg in request.messages {
             for part in msg.parts {
                 switch part {
-                case .image(let data, _), .audio(let data, _), .video(let data, _):
-                    return data
+                case .image(let data, let mediaType):
+                    return MultimodalInput(prompt: prompt, mediaData: data, mediaType: mediaType)
+                case .audio(let data, let mediaType):
+                    return MultimodalInput(prompt: prompt, mediaData: data, mediaType: mediaType)
+                case .video(let data, let mediaType):
+                    return MultimodalInput(prompt: prompt, mediaData: data, mediaType: mediaType)
                 case .text:
                     continue
                 }
             }
         }
-        return ChatMLRenderer.render(request)
+
+        return prompt
     }
 
     private func resolveEngine(modality: Modality) throws -> StreamingInferenceEngine {

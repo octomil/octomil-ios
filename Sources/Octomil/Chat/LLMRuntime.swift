@@ -52,24 +52,12 @@ public extension LLMRuntime {
     func supportsAudio() -> Bool { false }
 }
 
-/// Configuration for text generation.
-public struct GenerateConfig: Sendable {
-    /// Maximum tokens to generate.
-    public let maxTokens: Int
-    /// Sampling temperature.
-    public let temperature: Double
-    /// Top-p nucleus sampling.
-    public let topP: Double
-    /// Stop sequences.
-    public let stop: [String]?
-
-    public init(maxTokens: Int = 512, temperature: Double = 0.7, topP: Double = 1.0, stop: [String]? = nil) {
-        self.maxTokens = maxTokens
-        self.temperature = temperature
-        self.topP = topP
-        self.stop = stop
-    }
-}
+/// Deprecated: use ``GenerationConfig`` instead.
+///
+/// This typealias preserves backward compatibility for existing ``LLMRuntime``
+/// conformers that reference `GenerateConfig` in their method signatures.
+@available(*, deprecated, renamed: "GenerationConfig")
+public typealias GenerateConfig = GenerationConfig
 
 /// Global registry for LLM runtimes.
 ///

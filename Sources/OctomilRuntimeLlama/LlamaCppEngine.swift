@@ -18,17 +18,19 @@ final class LlamaCppEngine: StreamingInferenceEngine, @unchecked Sendable {
         self.temperature = temperature
     }
 
-    func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
             prompt = str
+        } else if let mm = input as? MultimodalInput {
+            prompt = mm.prompt
         } else {
             prompt = String(describing: input)
         }
 
         let path = modelPath.path
-        let maxTokens = self.maxTokens
-        let temperature = self.temperature
+        let maxTokens = config.maxTokens
+        let temperature = Float(config.temperature)
 
         return AsyncThrowingStream { continuation in
             let task = Task {

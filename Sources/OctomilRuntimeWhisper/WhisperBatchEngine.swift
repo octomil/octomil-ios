@@ -18,7 +18,7 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
         self.modelPath = modelPath
     }
 
-    func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    func generate(input: Any, modality: Modality, config _: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let path = modelPath.path
 
         return AsyncThrowingStream { continuation in

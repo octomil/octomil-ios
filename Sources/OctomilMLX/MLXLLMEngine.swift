@@ -48,16 +48,19 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - StreamingInferenceEngine
 
-    public func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
             prompt = str
+        } else if let mm = input as? MultimodalInput {
+            prompt = mm.prompt
         } else {
             prompt = String(describing: input)
         }
 
-        let maxTokens = self.maxTokens
-        let temperature = self.temperature
+        let maxTokens = config.maxTokens
+        let temperature = Float(config.temperature)
+        let topP = Float(config.topP)
         let container = self.modelContainer
         let cacheEnabled = self.cacheEnabled
 
@@ -82,7 +85,7 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
                             parameters: .init(
                                 maxTokens: maxTokens,
                                 temperature: temperature,
-                                topP: 0.9,
+                                topP: topP,
                                 prefillStepSize: 4096
                             ),
                             context: context
