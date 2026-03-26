@@ -29,17 +29,19 @@ public final class LLMEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - StreamingInferenceEngine
 
-    public func generate(input: Any, modality _: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input: Any, modality _: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
             prompt = str
+        } else if let mm = input as? MultimodalInput {
+            prompt = mm.prompt
         } else {
             prompt = String(describing: input)
         }
 
         let modelPath = self.modelPath
-        let maxTokens = self.maxTokens
-        let temperature = self.temperature
+        let maxTokens = config.maxTokens
+        let temperature = config.temperature
 
         return AsyncThrowingStream { continuation in
             let task = Task {

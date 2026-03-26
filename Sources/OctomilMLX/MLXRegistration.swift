@@ -18,22 +18,16 @@ private final class LazyMLXEngine: StreamingInferenceEngine, @unchecked Sendable
         self.temperature = temperature
     }
 
-    func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let loader = self.loader
         let url = self.modelURL
-        let maxTokens = self.maxTokens
-        let temperature = self.temperature
 
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     let container = try await loader.loadModel(from: url)
-                    let engine = MLXLLMEngine(
-                        modelContainer: container,
-                        maxTokens: maxTokens,
-                        temperature: temperature
-                    )
-                    let innerStream = engine.generate(input: input, modality: modality)
+                    let engine = MLXLLMEngine(modelContainer: container)
+                    let innerStream = engine.generate(input: input, modality: modality, config: config)
                     for try await chunk in innerStream {
                         continuation.yield(chunk)
                     }
