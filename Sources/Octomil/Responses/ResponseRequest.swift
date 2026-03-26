@@ -28,6 +28,9 @@ public struct ResponseRequest: Sendable {
     /// Per-request routing policy override.
     public let routing: AppRoutingPolicy?
 
+    /// Repetition penalty (1.0 = no penalty).
+    public let repetitionPenalty: Double?
+
     public init(
         model: String,
         input: [InputItem],
@@ -43,7 +46,8 @@ public struct ResponseRequest: Sendable {
         instructions: String? = nil,
         previousResponseId: String? = nil,
         modelRef: ModelRef? = nil,
-        routing: AppRoutingPolicy? = nil
+        routing: AppRoutingPolicy? = nil,
+        repetitionPenalty: Double? = nil
     ) {
         self.model = model
         self.input = input
@@ -60,6 +64,7 @@ public struct ResponseRequest: Sendable {
         self.previousResponseId = previousResponseId
         self.modelRef = modelRef
         self.routing = routing
+        self.repetitionPenalty = repetitionPenalty
     }
 
     /// Convenience: create a request with a plain string input.
@@ -78,7 +83,8 @@ public struct ResponseRequest: Sendable {
         instructions: String? = nil,
         previousResponseId: String? = nil,
         modelRef: ModelRef? = nil,
-        routing: AppRoutingPolicy? = nil
+        routing: AppRoutingPolicy? = nil,
+        repetitionPenalty: Double? = nil
     ) {
         self.init(
             model: model,
@@ -95,7 +101,8 @@ public struct ResponseRequest: Sendable {
             instructions: instructions,
             previousResponseId: previousResponseId,
             modelRef: modelRef,
-            routing: routing
+            routing: routing,
+            repetitionPenalty: repetitionPenalty
         )
     }
 
@@ -114,7 +121,8 @@ public struct ResponseRequest: Sendable {
         metadata: [String: String]? = nil,
         instructions: String? = nil,
         previousResponseId: String? = nil,
-        routing: AppRoutingPolicy? = nil
+        routing: AppRoutingPolicy? = nil,
+        repetitionPenalty: Double? = nil
     ) {
         let modelString: String
         switch modelRef {
@@ -136,7 +144,8 @@ public struct ResponseRequest: Sendable {
             instructions: instructions,
             previousResponseId: previousResponseId,
             modelRef: modelRef,
-            routing: routing
+            routing: routing,
+            repetitionPenalty: repetitionPenalty
         )
     }
 }
