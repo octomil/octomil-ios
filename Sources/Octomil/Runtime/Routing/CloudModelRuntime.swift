@@ -145,6 +145,10 @@ public final class CloudModelRuntime: ModelRuntime, @unchecked Sendable {
             body["stop"] = stop
         }
 
+        if let penalty = request.generationConfig.repetitionPenalty {
+            body["repetition_penalty"] = penalty
+        }
+
         // Include tool definitions if present
         if let toolDefs = request.toolDefinitions, !toolDefs.isEmpty {
             body["tools"] = toolDefs.map { tool -> [String: Any] in

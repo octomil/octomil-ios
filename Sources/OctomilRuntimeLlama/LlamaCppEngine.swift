@@ -31,11 +31,12 @@ final class LlamaCppEngine: StreamingInferenceEngine, @unchecked Sendable {
         let path = modelPath.path
         let maxTokens = config.maxTokens
         let temperature = Float(config.temperature)
+        let repetitionPenalty = config.repetitionPenalty.map { Float($0) }
 
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let ctx = try LlamaContext.create(path: path, temperature: temperature)
+                    let ctx = try LlamaContext.create(path: path, temperature: temperature, repetitionPenalty: repetitionPenalty)
                     defer { ctx.destroy() }
 
                     ctx.preparePrompt(prompt)
@@ -127,7 +128,7 @@ final class LlamaContext: @unchecked Sendable {
 
     private var temporaryInvalidCChars: [CChar] = []
 
-    private init(model: OpaquePointer, context: OpaquePointer, temperature: Float) {
+    private init(model: OpaquePointer, context: OpaquePointer, temperature: Float, repetitionPenalty: Float? = nil) {
         self.model = model
         self.context = context
         self.vocab = llama_model_get_vocab(model)
@@ -137,9 +138,15 @@ final class LlamaContext: @unchecked Sendable {
         self.sampling = llama_sampler_chain_init(sparams)
         llama_sampler_chain_add(self.sampling, llama_sampler_init_temp(temperature))
         llama_sampler_chain_add(self.sampling, llama_sampler_init_dist(UInt32.random(in: 0...UInt32.max)))
+        if let penalty = repetitionPenalty, penalty != 1.0 {
+            llama_sampler_chain_add(
+                self.sampling,
+                llama_sampler_init_penalties(64, penalty, 0.0, 0.0)
+            )
+        }
     }
 
-    static func create(path: String, temperature: Float) throws -> LlamaContext {
+    static func create(path: String, temperature: Float, repetitionPenalty: Float? = nil) throws -> LlamaContext {
         llama_backend_init()
 
         var modelParams = llama_model_default_params()
@@ -162,7 +169,7 @@ final class LlamaContext: @unchecked Sendable {
             throw LlamaCppError.contextInitFailed
         }
 
-        return LlamaContext(model: model, context: context, temperature: temperature)
+        return LlamaContext(model: model, context: context, temperature: temperature, repetitionPenalty: repetitionPenalty)
     }
 
     func preparePrompt(_ text: String) {

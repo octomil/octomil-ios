@@ -26,12 +26,14 @@ public struct GenerationConfig: Sendable {
     public let temperature: Double
     public let topP: Double
     public let stop: [String]?
+    public let repetitionPenalty: Double?
 
-    public init(maxTokens: Int = 512, temperature: Double = 0.7, topP: Double = 1.0, stop: [String]? = nil) {
+    public init(maxTokens: Int = 512, temperature: Double = 0.7, topP: Double = 1.0, stop: [String]? = nil, repetitionPenalty: Double? = nil) {
         self.maxTokens = maxTokens
         self.temperature = temperature
         self.topP = topP
         self.stop = stop
+        self.repetitionPenalty = repetitionPenalty
     }
 }
 

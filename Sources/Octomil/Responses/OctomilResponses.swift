@@ -208,7 +208,8 @@ public final class OctomilResponses: @unchecked Sendable {
             instructions: nil,
             previousResponseId: nil,
             modelRef: request.modelRef,
-            routing: request.routing
+            routing: request.routing,
+            repetitionPenalty: request.repetitionPenalty
         )
     }
 
@@ -293,7 +294,8 @@ public final class OctomilResponses: @unchecked Sendable {
                 maxTokens: request.maxOutputTokens ?? 512,
                 temperature: request.temperature ?? 0.7,
                 topP: request.topP ?? 1.0,
-                stop: request.stop
+                stop: request.stop,
+                repetitionPenalty: request.repetitionPenalty
             ),
             toolDefinitions: toolDefs,
             jsonSchema: jsonSchema

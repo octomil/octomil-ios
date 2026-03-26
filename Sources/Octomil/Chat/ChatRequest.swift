@@ -25,6 +25,8 @@ public struct ChatRequest: Sendable {
     /// Optional per-request model override. When set, this takes precedence
     /// over the model name provided to the ``OctomilChat`` constructor.
     public let model: String?
+    /// Repetition penalty (1.0 = no penalty).
+    public let repetitionPenalty: Double?
 
     public init(
         messages: [ChatMessage],
@@ -33,7 +35,8 @@ public struct ChatRequest: Sendable {
         topP: Double = 1.0,
         tools: [Tool]? = nil,
         stop: [String]? = nil,
-        model: String? = nil
+        model: String? = nil,
+        repetitionPenalty: Double? = nil
     ) {
         self.messages = messages
         self.temperature = temperature
@@ -42,5 +45,6 @@ public struct ChatRequest: Sendable {
         self.tools = tools
         self.stop = stop
         self.model = model
+        self.repetitionPenalty = repetitionPenalty
     }
 }
