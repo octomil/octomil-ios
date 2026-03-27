@@ -122,7 +122,7 @@ public actor APIClient {
         let url = serverURL.appendingPathComponent("api/v1/devices/\(deviceId)/heartbeat")
 
         var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
+        urlRequest.httpMethod = "PUT"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         try configureHeaders(&urlRequest)
         urlRequest.httpBody = try jsonEncoder.encode(request)

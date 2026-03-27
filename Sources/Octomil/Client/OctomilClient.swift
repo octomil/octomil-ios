@@ -491,11 +491,27 @@ public final class OctomilClient: @unchecked Sendable {
         let hardwareInfo = DeviceInfoRequest(
             manufacturer: "Apple",
             model: deviceInfo.deviceModel,
-            cpuArchitecture: "arm64",
+            cpuArchitecture: DeviceMetadata().cpuArchitecture,
             gpuAvailable: deviceInfo.hasNeuralEngine,
             totalMemoryMb: deviceInfo.totalMemoryMb,
             availableStorageMb: deviceInfo.availableStorageMb
         )
+
+        // Collect battery state for flat fields
+        var batteryPct: Int? = nil
+        var charging: Bool? = nil
+        #if canImport(UIKit)
+        let batteryState = await MainActor.run { () -> (level: Float, state: UIDevice.BatteryState) in
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let level = UIDevice.current.batteryLevel
+            let state = UIDevice.current.batteryState
+            return (level, state)
+        }
+        if batteryState.level >= 0 {
+            batteryPct = Int(batteryState.level * 100)
+        }
+        charging = batteryState.state != .unplugged && batteryState.state != .unknown
+        #endif
 
         let request = DeviceRegistrationRequest(
             deviceIdentifier: identifier,
@@ -509,7 +525,15 @@ public final class OctomilClient: @unchecked Sendable {
             region: deviceInfo.region,
             timezone: deviceInfo.timezone,
             metadata: metadata,
-            capabilities: capabilities
+            capabilities: capabilities,
+            manufacturer: "Apple",
+            model: DeviceMetadata().model,
+            cpuArchitecture: DeviceMetadata().cpuArchitecture,
+            gpuAvailable: deviceInfo.hasNeuralEngine,
+            totalMemoryMb: deviceInfo.totalMemoryMb,
+            availableStorageMb: deviceInfo.availableStorageMb,
+            batteryPct: batteryPct,
+            charging: charging
         )
 
         let registration = try await apiClient.registerDevice(request)
@@ -729,7 +753,28 @@ public final class OctomilClient: @unchecked Sendable {
             metadata = ["available_storage_mb": String(availableStorageMb)]
         }
 
-        let request = HeartbeatRequest(metadata: metadata)
+        var request = HeartbeatRequest(metadata: metadata)
+
+        // Collect battery state
+        #if canImport(UIKit)
+        let batteryState = await MainActor.run { () -> (level: Float, state: UIDevice.BatteryState) in
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let level = UIDevice.current.batteryLevel
+            let state = UIDevice.current.batteryState
+            return (level, state)
+        }
+        if batteryState.level >= 0 {
+            request.batteryPct = Int(batteryState.level * 100)
+        }
+        request.charging = batteryState.state != .unplugged && batteryState.state != .unknown
+        #endif
+
+        // Report available memory
+        #if os(iOS) || os(tvOS) || os(watchOS)
+        request.availableMemoryMb = Int(os_proc_available_memory() / (1024 * 1024))
+        #else
+        request.availableMemoryMb = Int(ProcessInfo.processInfo.physicalMemory / (1024 * 1024))
+        #endif
 
         return try await apiClient.sendHeartbeat(deviceId: deviceId, request: request)
     }
@@ -1946,14 +1991,13 @@ public final class OctomilClient: @unchecked Sendable {
         // Get total memory
         totalMemoryMb = Int(ProcessInfo.processInfo.physicalMemory / (1024 * 1024))
 
-        let deviceInfo = await MainActor.run {
-            (model: UIDevice.current.model, os: UIDevice.current.systemVersion)
-        }
-        deviceModel = deviceInfo.model
-        osVersion = deviceInfo.os
+        // Use DeviceMetadata.model for machine identifier (e.g. "iPhone16,1")
+        // instead of UIDevice.current.model which returns generic "iPhone"
+        deviceModel = DeviceMetadata().model
+        osVersion = await MainActor.run { UIDevice.current.systemVersion }
         #else
         osVersion = ProcessInfo.processInfo.operatingSystemVersionString
-        deviceModel = "Mac"
+        deviceModel = DeviceMetadata().model
         totalMemoryMb = Int(ProcessInfo.processInfo.physicalMemory / (1024 * 1024))
         #endif
 

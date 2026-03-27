@@ -32,6 +32,24 @@ public struct DeviceRegistrationRequest: Codable, Sendable {
     /// ML-specific capabilities.
     public let capabilities: DeviceCapabilities?
 
+    // Flat hardware fields (server reads these directly)
+    /// Device manufacturer (e.g., "Apple").
+    public let manufacturer: String?
+    /// Device model identifier (e.g., "iPhone16,1").
+    public let model: String?
+    /// CPU architecture (e.g., "arm64").
+    public let cpuArchitecture: String?
+    /// Whether GPU/NPU is available.
+    public let gpuAvailable: Bool?
+    /// Total RAM in megabytes.
+    public let totalMemoryMb: Int?
+    /// Available storage in megabytes.
+    public let availableStorageMb: Int?
+    /// Battery percentage (0-100).
+    public let batteryPct: Int?
+    /// Whether device is charging.
+    public let charging: Bool?
+
     enum CodingKeys: String, CodingKey {
         case deviceIdentifier = "device_identifier"
         case orgId = "org_id"
@@ -45,6 +63,14 @@ public struct DeviceRegistrationRequest: Codable, Sendable {
         case timezone
         case metadata
         case capabilities
+        case manufacturer
+        case model
+        case cpuArchitecture = "cpu_architecture"
+        case gpuAvailable = "gpu_available"
+        case totalMemoryMb = "total_memory_mb"
+        case availableStorageMb = "available_storage_mb"
+        case batteryPct = "battery_pct"
+        case charging
     }
 }
 
@@ -143,10 +169,10 @@ public struct HeartbeatRequest: Codable, Sendable {
     public var osVersion: String?
     /// App version.
     public var appVersion: String?
-    /// Battery level (0-100).
-    public var batteryLevel: Int?
+    /// Battery percentage (0-100).
+    public var batteryPct: Int?
     /// Whether device is charging.
-    public var isCharging: Bool?
+    public var charging: Bool?
     /// Available storage in MB.
     public var availableStorageMb: Int?
     /// Available memory in MB.
@@ -159,8 +185,8 @@ public struct HeartbeatRequest: Codable, Sendable {
         case sdkVersion = "sdk_version"
         case osVersion = "os_version"
         case appVersion = "app_version"
-        case batteryLevel = "battery_level"
-        case isCharging = "is_charging"
+        case batteryPct = "battery_pct"
+        case charging
         case availableStorageMb = "available_storage_mb"
         case availableMemoryMb = "available_memory_mb"
         case networkType = "network_type"
