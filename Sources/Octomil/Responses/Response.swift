@@ -15,6 +15,14 @@ public struct Response: Sendable {
         self.finishReason = finishReason
         self.usage = usage
     }
+
+    /// Concatenated text from all `.text` output items.
+    public var outputText: String {
+        output.compactMap { item in
+            if case .text(let text) = item { return text }
+            return nil
+        }.joined()
+    }
 }
 
 /// Token usage statistics for a response.
