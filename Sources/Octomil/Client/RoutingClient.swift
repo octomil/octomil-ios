@@ -23,12 +23,13 @@ public struct RoutingDeviceCapabilities: Codable, Sendable {
 }
 
 /// Request body for POST /api/v1/route.
-struct RoutingRequest: Codable {
+struct RoutingRequest: Encodable {
     let modelId: String
     let modelParams: Int
     let modelSizeMb: Double
     let deviceCapabilities: RoutingDeviceCapabilities
-    let prefer: String
+    let prefer: String?
+    let deploymentId: String?
 
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
@@ -36,6 +37,17 @@ struct RoutingRequest: Codable {
         case modelSizeMb = "model_size_mb"
         case deviceCapabilities = "device_capabilities"
         case prefer
+        case deploymentId = "deployment_id"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(modelId, forKey: .modelId)
+        try container.encode(modelParams, forKey: .modelParams)
+        try container.encode(modelSizeMb, forKey: .modelSizeMb)
+        try container.encode(deviceCapabilities, forKey: .deviceCapabilities)
+        try container.encodeIfPresent(prefer, forKey: .prefer)
+        try container.encodeIfPresent(deploymentId, forKey: .deploymentId)
     }
 }
 
@@ -132,23 +144,34 @@ public struct RoutingConfig: Sendable {
     public let apiKey: String
     public let cacheTtlSeconds: TimeInterval
     public let prefer: RoutingPreference
+    /// When `true`, `prefer` was explicitly set by the caller. When `false`
+    /// (the default), managed routing omits `prefer` from the request so the
+    /// server applies the deployment's own `routing_preference`.
+    public let preferExplicit: Bool
     public let modelParams: Int
     public let modelSizeMb: Double
+    /// Deployment identifier for managed routing. When set, the server
+    /// applies the deployment's routing_preference automatically.
+    public let deploymentId: String?
 
     public init(
         serverURL: URL,
         apiKey: String,
         cacheTtlSeconds: TimeInterval = 300,
         prefer: RoutingPreference = .fastest,
+        preferExplicit: Bool = false,
         modelParams: Int = 0,
-        modelSizeMb: Double = 0
+        modelSizeMb: Double = 0,
+        deploymentId: String? = nil
     ) {
         self.serverURL = serverURL
         self.apiKey = apiKey
         self.cacheTtlSeconds = cacheTtlSeconds
         self.prefer = prefer
+        self.preferExplicit = preferExplicit
         self.modelParams = modelParams
         self.modelSizeMb = modelSizeMb
+        self.deploymentId = deploymentId
     }
 }
 
@@ -220,12 +243,19 @@ public actor RoutingClient {
             return cached.decision
         }
 
+        // When a deploymentId is present and prefer was not explicitly set,
+        // omit prefer so the server applies the deployment's routing_preference.
+        let preferValue: String? = (config.deploymentId != nil && !config.preferExplicit)
+            ? nil
+            : config.prefer.rawValue
+
         let body = RoutingRequest(
             modelId: modelId,
             modelParams: config.modelParams,
             modelSizeMb: config.modelSizeMb,
             deviceCapabilities: deviceCapabilities,
-            prefer: config.prefer.rawValue
+            prefer: preferValue,
+            deploymentId: config.deploymentId
         )
 
         let url = config.serverURL.appendingPathComponent("api/v1/route")

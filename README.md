@@ -209,15 +209,39 @@ Sources/
 | A/B model experiments | Build it yourself | `ExperimentsClient` |
 | Smart device/cloud routing | Build it yourself | `configureRouting()` |
 
-## Octomil Manifest
+## AppManifest and Control Plane
 
-The [Octomil Manifest](https://github.com/octomil/octomil-python#manifest) (`octomil.yaml`) is a declarative config file that describes which models your app needs, their delivery mode (`bundled`, `managed`, or `cloud`), and which capability each model serves. Generate it with the CLI:
+The iOS SDK uses a **hybrid model**: your app declares what it can consume via `AppManifest` in code, and the Octomil control plane decides which specific model version each device gets.
 
-```bash
-octomil manifest init
+`AppManifest` is a Swift struct — not a config file. You instantiate it in code:
+
+```swift
+import Octomil
+
+// 1. Create client with auth
+let client = OctomilClient(auth: .publishableKey("oct_pub_live_..."))
+
+// 2. Declare capabilities and delivery modes
+let manifest = AppManifest(models: [
+    AppModelEntry(id: "chat-model", capability: .chat, delivery: .managed),
+    AppModelEntry(id: "transcription", capability: .transcription, delivery: .managed),
+    AppModelEntry(id: "classifier", capability: .classification, delivery: .bundled,
+                  bundledPath: "models/classifier.mlmodelc"),
+])
+
+// 3. Configure — bootstraps catalog, registers device, starts desired-state polling
+try await client.configure(manifest: manifest, auth: .publishableKey("oct_pub_live_..."), monitoring: .enabled)
 ```
 
-The iOS SDK reads `octomil.yaml` via `AppManifest` and `ModelCatalogService` to handle model downloads and runtime resolution automatically.
+**Delivery modes:**
+
+| Mode | Behaviour |
+|------|-----------|
+| `.managed` | Control plane assigns the model version. SDK downloads, caches, and updates it via `ArtifactReconciler`. |
+| `.bundled` | Model is included in the app binary at `bundledPath`. No control plane involvement. |
+| `.cloud` | Inference routes to a cloud provider. No local artifact. |
+
+After `configure()`, the SDK registers the device, starts polling desired state via `ArtifactReconciler`, downloads assigned artifacts with SHA-256 verification, and registers runtimes as models become ready. Use `client.catalog.runtime(for: .chat)` to resolve the runtime by capability.
 
 ## Samples
 
