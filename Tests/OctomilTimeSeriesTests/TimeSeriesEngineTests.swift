@@ -82,7 +82,7 @@ final class TimeSeriesEngineTests: XCTestCase {
 
     func testTimeSeriesEngineRejectsNonTimeSeriesInput() async {
         let engine = TimeSeriesEngine()
-        let stream = engine.generate(input: "not a time series input", modality: .timeSeries)
+        let stream = engine.generate(input: "not a time series input", modality: .timeSeries, config: GenerationConfig())
 
         do {
             for try await _ in stream {

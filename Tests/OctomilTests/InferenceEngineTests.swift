@@ -17,7 +17,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testLLMEngineGeneratesChunks() async throws {
         let engine = LLMEngine(modelPath: tempModelPath, maxTokens: 512)
-        let stream = engine.generate(input: "Hello world test", modality: .text)
+        let stream = engine.generate(input: "Hello world test", modality: .text, config: GenerationConfig())
 
         var chunks: [InferenceChunk] = []
         for try await chunk in stream {
@@ -29,7 +29,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testLLMEngineChunksHaveTextModality() async throws {
         let engine = LLMEngine(modelPath: tempModelPath, maxTokens: 512)
-        let stream = engine.generate(input: "Test prompt", modality: .text)
+        let stream = engine.generate(input: "Test prompt", modality: .text, config: GenerationConfig())
 
         for try await chunk in stream {
             XCTAssertEqual(chunk.modality, .text)
@@ -38,7 +38,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testLLMEngineChunksContainUTF8Data() async throws {
         let engine = LLMEngine(modelPath: tempModelPath, maxTokens: 512)
-        let stream = engine.generate(input: "Sample input", modality: .text)
+        let stream = engine.generate(input: "Sample input", modality: .text, config: GenerationConfig())
 
         for try await chunk in stream {
             let text = String(data: chunk.data, encoding: .utf8)
@@ -64,7 +64,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testLLMEngineCancellation() async throws {
         let engine = LLMEngine(modelPath: tempModelPath, maxTokens: 512)
-        let stream = engine.generate(input: "Long prompt for testing cancellation behavior", modality: .text)
+        let stream = engine.generate(input: "Long prompt for testing cancellation behavior", modality: .text, config: GenerationConfig())
 
         let task = Task {
             var count = 0
@@ -81,7 +81,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testLLMEngineChunkIndicesStartAtZero() async throws {
         let engine = LLMEngine(modelPath: tempModelPath, maxTokens: 512)
-        let stream = engine.generate(input: "Index test", modality: .text)
+        let stream = engine.generate(input: "Index test", modality: .text, config: GenerationConfig())
 
         var indices: [Int] = []
         for try await chunk in stream {
@@ -100,7 +100,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testImageEngineGeneratesCorrectNumberOfChunks() async throws {
         let engine = ImageEngine(modelPath: tempModelPath, steps: 5)
-        let stream = engine.generate(input: "A cat", modality: .image)
+        let stream = engine.generate(input: "A cat", modality: .image, config: GenerationConfig())
 
         var count = 0
         for try await _ in stream {
@@ -112,7 +112,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testImageEngineChunksHaveImageModality() async throws {
         let engine = ImageEngine(modelPath: tempModelPath, steps: 3)
-        let stream = engine.generate(input: "A dog", modality: .image)
+        let stream = engine.generate(input: "A dog", modality: .image, config: GenerationConfig())
 
         for try await chunk in stream {
             XCTAssertEqual(chunk.modality, .image)
@@ -131,7 +131,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testImageEngineCustomSteps() async throws {
         let engine = ImageEngine(modelPath: tempModelPath, steps: 3)
-        let stream = engine.generate(input: "test", modality: .image)
+        let stream = engine.generate(input: "test", modality: .image, config: GenerationConfig())
 
         var count = 0
         for try await _ in stream { count += 1 }
@@ -140,7 +140,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testImageEngineCancellation() async throws {
         let engine = ImageEngine(modelPath: tempModelPath, steps: 50)
-        let stream = engine.generate(input: "test", modality: .image)
+        let stream = engine.generate(input: "test", modality: .image, config: GenerationConfig())
 
         let task = Task {
             var count = 0
@@ -162,7 +162,7 @@ final class InferenceEngineTests: XCTestCase {
         // 0.5 sec * 16000 / 1024 = ~7 frames
         let totalFrames = Int(0.5 * Double(16000) / 1024)
         let engine = AudioEngine(modelPath: tempModelPath, totalFrames: totalFrames, sampleRate: 16000)
-        let stream = engine.generate(input: "audio input", modality: .audio)
+        let stream = engine.generate(input: "audio input", modality: .audio, config: GenerationConfig())
 
         var count = 0
         for try await _ in stream {
@@ -174,7 +174,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testAudioEngineChunksHaveAudioModality() async throws {
         let engine = AudioEngine(modelPath: tempModelPath, totalFrames: 3, sampleRate: 16000)
-        let stream = engine.generate(input: "test", modality: .audio)
+        let stream = engine.generate(input: "test", modality: .audio, config: GenerationConfig())
 
         for try await chunk in stream {
             XCTAssertEqual(chunk.modality, .audio)
@@ -183,7 +183,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testAudioEngineChunkDataSize() async throws {
         let engine = AudioEngine(modelPath: tempModelPath, totalFrames: 3, sampleRate: 16000)
-        let stream = engine.generate(input: "test", modality: .audio)
+        let stream = engine.generate(input: "test", modality: .audio, config: GenerationConfig())
 
         for try await chunk in stream {
             // Each frame: 1024 samples * 2 bytes = 2048
@@ -199,7 +199,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testAudioEngineCancellation() async throws {
         let engine = AudioEngine(modelPath: tempModelPath, totalFrames: 200, sampleRate: 16000)
-        let stream = engine.generate(input: "test", modality: .audio)
+        let stream = engine.generate(input: "test", modality: .audio, config: GenerationConfig())
 
         let task = Task {
             var count = 0
@@ -218,7 +218,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testVideoEngineGeneratesCorrectFrameCount() async throws {
         let engine = VideoEngine(modelPath: tempModelPath, frameCount: 5, width: 64, height: 64)
-        let stream = engine.generate(input: "video input", modality: .video)
+        let stream = engine.generate(input: "video input", modality: .video, config: GenerationConfig())
 
         var count = 0
         for try await _ in stream {
@@ -230,7 +230,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testVideoEngineChunksHaveVideoModality() async throws {
         let engine = VideoEngine(modelPath: tempModelPath, frameCount: 3)
-        let stream = engine.generate(input: "test", modality: .video)
+        let stream = engine.generate(input: "test", modality: .video, config: GenerationConfig())
 
         for try await chunk in stream {
             XCTAssertEqual(chunk.modality, .video)
@@ -253,7 +253,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testVideoEngineCancellation() async throws {
         let engine = VideoEngine(modelPath: tempModelPath, frameCount: 100)
-        let stream = engine.generate(input: "test", modality: .video)
+        let stream = engine.generate(input: "test", modality: .video, config: GenerationConfig())
 
         let task = Task {
             var count = 0
@@ -271,7 +271,7 @@ final class InferenceEngineTests: XCTestCase {
 
     func testVideoEngineChunkIndicesAreSequential() async throws {
         let engine = VideoEngine(modelPath: tempModelPath, frameCount: 4)
-        let stream = engine.generate(input: "test", modality: .video)
+        let stream = engine.generate(input: "test", modality: .video, config: GenerationConfig())
 
         var indices: [Int] = []
         for try await chunk in stream {

@@ -59,7 +59,7 @@ final class TryItOutModalityTests: XCTestCase {
     }
 
     func testNilDefaultsToText() {
-        XCTAssertEqual(TryItOutModality.from(nil), .text)
+        XCTAssertEqual(TryItOutModality.from(nil as String?), .text)
     }
 
     func testEmptyStringDefaultsToText() {
