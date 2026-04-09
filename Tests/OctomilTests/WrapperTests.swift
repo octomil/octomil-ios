@@ -403,7 +403,7 @@ final class OctomilWrappedModelTests: XCTestCase {
 
 final class OctomilWrapperEntryPointTests: XCTestCase {
 
-    // The `Octomil.wrap` static method requires a real MLModel instance,
+    // The `OctomilCoreML.wrap` static method requires a real MLModel instance,
     // which needs a compiled .mlmodelc bundle. These tests verify the
     // factory's compile-time API and config handling.
 

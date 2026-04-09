@@ -6,20 +6,20 @@ final class UnifiedFacadeTests: XCTestCase {
     // MARK: - Constructor tests
 
     func testInitWithPublishableKey() {
-        let facade = OctomilSDK(publishableKey: "oct_pub_test_abc123")
+        let facade = Octomil(publishableKey: "oct_pub_test_abc123")
         // Should not throw — facade is created but not initialized
         XCTAssertNotNil(facade)
     }
 
     func testInitWithApiKeyAndOrgId() {
-        let facade = OctomilSDK(apiKey: "edg_abc123", orgId: "org_456")
+        let facade = Octomil(apiKey: "edg_abc123", orgId: "org_456")
         XCTAssertNotNil(facade)
     }
 
     // MARK: - Initialization
 
     func testInitializeIsIdempotent() async throws {
-        let facade = OctomilSDK(publishableKey: "oct_pub_test_abc123")
+        let facade = Octomil(publishableKey: "oct_pub_test_abc123")
         try await facade.initialize()
         try await facade.initialize() // second call should not throw
         let _ = try facade.responses // should work after init
@@ -28,7 +28,7 @@ final class UnifiedFacadeTests: XCTestCase {
     // MARK: - Not initialized guard
 
     func testResponsesBeforeInitializeThrows() {
-        let facade = OctomilSDK(publishableKey: "oct_pub_test_abc123")
+        let facade = Octomil(publishableKey: "oct_pub_test_abc123")
         XCTAssertThrowsError(try facade.responses) { error in
             XCTAssertTrue(error is OctomilNotInitializedError)
         }

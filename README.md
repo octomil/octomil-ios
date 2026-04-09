@@ -76,7 +76,7 @@ let model = try MLModel(contentsOf: modelURL)
 let output = try model.prediction(from: input)
 
 // After
-let model = try Octomil.wrap(MLModel(contentsOf: modelURL), modelId: "classifier")
+let model = try OctomilCoreML.wrap(MLModel(contentsOf: modelURL), modelId: "classifier")
 let output = try model.predict(input: input)  // same result, now with telemetry + OTA
 ```
 
@@ -109,7 +109,7 @@ let result = getResult()
 Route inference on-device or to the cloud based on device capabilities:
 
 ```swift
-let model = try Octomil.wrap(MLModel(contentsOf: url), modelId: "classifier")
+let model = try OctomilCoreML.wrap(MLModel(contentsOf: url), modelId: "classifier")
 model.configureRouting(RoutingConfig(serverURL: apiURL, apiKey: key))
 // Automatically routes to cloud when device is constrained
 // Falls back to local CoreML on any cloud failure

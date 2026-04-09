@@ -3,12 +3,12 @@ import Foundation
 /// Configuration for an ``OctomilWrappedModel``.
 ///
 /// Controls validation, telemetry collection, and OTA update behaviour
-/// when wrapping a CoreML ``MLModel`` with ``Octomil/wrap(_:modelId:config:)``.
+/// when wrapping a CoreML ``MLModel`` with ``OctomilCoreML/wrap(_:modelId:config:)``.
 ///
 /// ```swift
 /// var config = OctomilWrapperConfig.default
 /// config.telemetryEnabled = false  // disable for local-only usage
-/// let model = try Octomil.wrap(coreModel, modelId: "classifier", config: config)
+/// let model = try OctomilCoreML.wrap(coreModel, modelId: "classifier", config: config)
 /// ```
 public struct OctomilWrapperConfig: Sendable {
 

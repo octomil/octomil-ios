@@ -15,7 +15,7 @@ import os.log
 /// let result = try model.prediction(from: input)
 ///
 /// // After
-/// let model = try Octomil.wrap(MLModel(contentsOf: url), modelId: "classifier")
+/// let model = try OctomilCoreML.wrap(MLModel(contentsOf: url), modelId: "classifier")
 /// let result = try model.predict(input: input)
 /// ```
 ///

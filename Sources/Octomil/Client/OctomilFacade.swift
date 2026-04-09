@@ -5,12 +5,12 @@ import Foundation
 /// Wraps ``OctomilClient`` with a streamlined API for common operations.
 ///
 /// ```swift
-/// let octomil = OctomilSDK(publishableKey: "oct_pub_live_...")
+/// let octomil = Octomil(publishableKey: "oct_pub_live_...")
 /// try await octomil.initialize()
 /// let response = try await octomil.responses.create(model: "phi-4-mini", input: "Hello")
 /// print(response.outputText)
 /// ```
-public final class OctomilSDK: @unchecked Sendable {
+public final class Octomil: @unchecked Sendable {
     private var initialized = false
     private let authConfig: AuthConfig
     private var client: OctomilClient?
@@ -43,7 +43,7 @@ public final class OctomilSDK: @unchecked Sendable {
     }
 }
 
-/// Error thrown when accessing facade APIs before calling ``OctomilSDK/initialize()``.
+/// Error thrown when accessing facade APIs before calling ``Octomil/initialize()``.
 public struct OctomilNotInitializedError: Error, LocalizedError {
     public var errorDescription: String? {
         "Octomil client is not initialized. Call try await client.initialize() first."
