@@ -307,7 +307,7 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testModelInfoIsPreserved() {
-        let info = makeModelInfo(modality: "vision")
+        let info = makeModelInfo(modalities: ["vision"])
         let vm = TryItOutViewModel(modelInfo: info)
         XCTAssertEqual(vm.modelInfo.name, "test-model")
         XCTAssertEqual(vm.modelInfo.version, "v1.0")
@@ -317,7 +317,7 @@ final class TryItOutViewModelTests: XCTestCase {
     // MARK: - Text Inference
 
     func testSendTextPromptAddsUserMessage() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
         vm.sendTextPrompt("Hello world")
 
         XCTAssertEqual(vm.messages.count, 1)
@@ -326,21 +326,21 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testSendEmptyPromptIgnored() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
         vm.sendTextPrompt("")
 
         XCTAssertTrue(vm.messages.isEmpty)
     }
 
     func testSendWhitespaceOnlyPromptIgnored() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
         vm.sendTextPrompt("   ")
 
         XCTAssertTrue(vm.messages.isEmpty)
     }
 
     func testSendTextPromptSetsLoadingState() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
         vm.sendTextPrompt("test")
 
         if case .loading = vm.inferenceState {
@@ -351,7 +351,7 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testTextInferenceCompletesWithResponse() async {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
 
         let expectation = expectation(description: "Text inference completes")
         var cancellable: AnyCancellable?
@@ -379,7 +379,7 @@ final class TryItOutViewModelTests: XCTestCase {
     // MARK: - Vision Inference
 
     func testAnalyzeImageSetsLoadingState() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "vision"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["vision"]))
         vm.analyzeImage(imageData: Data([0xFF]), prompt: nil)
 
         if case .loading = vm.inferenceState {
@@ -390,7 +390,7 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testVisionInferenceCompletes() async {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "vision"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["vision"]))
 
         let expectation = expectation(description: "Vision inference completes")
         var cancellable: AnyCancellable?
@@ -419,7 +419,7 @@ final class TryItOutViewModelTests: XCTestCase {
     // MARK: - Classification Inference
 
     func testClassifyImageSetsLoadingState() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classification"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["classification"]))
         vm.classifyImage(imageData: Data([0xFF]))
 
         if case .loading = vm.inferenceState {
@@ -430,14 +430,14 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testClassifyImageClearsOldResults() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classification"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["classification"]))
         // Should start empty and remain empty during loading
         vm.classifyImage(imageData: Data([0xFF]))
         XCTAssertTrue(vm.classificationResults.isEmpty)
     }
 
     func testClassificationInferenceCompletes() async {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classification"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["classification"]))
 
         let expectation = expectation(description: "Classification inference completes")
         var cancellable: AnyCancellable?
@@ -470,7 +470,7 @@ final class TryItOutViewModelTests: XCTestCase {
     // MARK: - Audio Inference
 
     func testTranscribeAudioSetsLoadingState() {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "audio"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["audio"]))
         vm.transcribeAudio(audioData: Data([0x00]))
 
         if case .loading = vm.inferenceState {
@@ -481,7 +481,7 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testAudioInferenceCompletes() async {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "audio"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["audio"]))
 
         let expectation = expectation(description: "Audio inference completes")
         var cancellable: AnyCancellable?
@@ -510,7 +510,7 @@ final class TryItOutViewModelTests: XCTestCase {
     // MARK: - Reset
 
     func testResetClearsMessages() async {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
 
         let expectation = expectation(description: "Inference completes before reset")
         var cancellable: AnyCancellable?
@@ -536,7 +536,7 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testResetClearsClassificationResults() async {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classification"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["classification"]))
 
         let expectation = expectation(description: "Classification completes before reset")
         var cancellable: AnyCancellable?
@@ -575,7 +575,7 @@ final class TryItOutViewModelTests: XCTestCase {
     }
 
     func testResetClearsLatency() async {
-        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+        let vm = TryItOutViewModel(modelInfo: makeModelInfo(modalities: ["text"]))
 
         let expectation = expectation(description: "Inference completes before reset")
         var cancellable: AnyCancellable?
