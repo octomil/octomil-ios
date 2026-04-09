@@ -10,9 +10,11 @@ final class OctomilClientTests: XCTestCase {
 
     func testClientInitialization() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         XCTAssertNotNil(client)
@@ -27,9 +29,11 @@ final class OctomilClientTests: XCTestCase {
         )
 
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL,
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            ),
             configuration: config
         )
 
@@ -38,9 +42,11 @@ final class OctomilClientTests: XCTestCase {
 
     func testSharedInstance() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         // The last created client becomes the shared instance
@@ -52,9 +58,11 @@ final class OctomilClientTests: XCTestCase {
 
     func testRegistrationRequiredForModelDownload() async {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         XCTAssertFalse(client.isRegistered)
@@ -77,9 +85,11 @@ final class OctomilClientTests: XCTestCase {
 
     func testGetCachedModelReturnsNil() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         let model = client.getCachedModel(modelId: "nonexistent-model")
@@ -88,9 +98,11 @@ final class OctomilClientTests: XCTestCase {
 
     func testGetCachedModelWithVersionReturnsNil() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         let model = client.getCachedModel(modelId: "nonexistent-model", version: "1.0.0")
@@ -111,8 +123,10 @@ final class OctomilClientTests: XCTestCase {
 
     func testClientUsesDefaultServerURLWhenNotSpecified() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test"
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token"
+            )
         )
 
         XCTAssertNotNil(client)
@@ -120,9 +134,11 @@ final class OctomilClientTests: XCTestCase {
 
     func testClientUsesCustomServerURL() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         XCTAssertNotNil(client)
@@ -132,31 +148,37 @@ final class OctomilClientTests: XCTestCase {
 
     func testCurrentDeviceIdNilBeforeRegistration() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         XCTAssertNil(client.deviceId)
     }
 
-    func testDeviceIdentifierNilBeforeRegistration() {
+    func testDeviceIdentifierPreservedFromConstructor() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
-        XCTAssertNil(client.deviceIdentifier)
+        XCTAssertEqual(client.deviceIdentifier, "dev_test")
     }
 
     // MARK: - Org ID Tests
 
     func testOrgIdIsStored() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "my-org-123",
-            serverURL: Self.testServerURL
+            auth: .orgApiKey(
+                apiKey: "edg_test-key",
+                orgId: "my-org-123",
+                serverURL: Self.testServerURL
+            )
         )
 
         XCTAssertEqual(client.orgId, "my-org-123")
@@ -167,9 +189,11 @@ final class OctomilClientTests: XCTestCase {
     #if os(iOS)
     func testBackgroundTrainingConfiguration() {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         // This should not crash
@@ -191,22 +215,24 @@ final class OctomilClientTests: XCTestCase {
         // should fail with the same class of error. Crucially, the second call
         // must NOT crash or leave the client in a broken state.
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         var firstError: Error?
         var secondError: Error?
 
         do {
-            _ = try await client.register()
+            _ = try await client.register(deviceId: nil)
         } catch {
             firstError = error
         }
 
         do {
-            _ = try await client.register()
+            _ = try await client.register(deviceId: nil)
         } catch {
             secondError = error
         }
@@ -225,9 +251,11 @@ final class OctomilClientTests: XCTestCase {
 
     func testRegisterSetsClientStateToInitializing() async {
         let client = OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         XCTAssertEqual(client.currentState, .uninitialized)
@@ -235,7 +263,7 @@ final class OctomilClientTests: XCTestCase {
         // Start registration (will fail due to no real server, but state
         // should transition to .initializing before the network call)
         let task = Task {
-            _ = try? await client.register()
+            _ = try? await client.register(deviceId: nil)
         }
 
         // Give a tiny moment for the state transition

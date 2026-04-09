@@ -9,15 +9,14 @@ import XCTest
 /// - `client.telemetry` namespace exists and supports track/flush
 /// - `OctomilModel.format` property exposes metadata format
 /// - `OctomilModel.warmup()` exists and returns a WarmupResult
-/// - `OctomilClient(apiKey:...)` initializer works
+/// - `OctomilClient(auth:)` initializer works with all AuthConfig variants
 final class FacadeWiringTests: XCTestCase {
 
     // MARK: - client.models
 
     func testModelsNamespaceExistsOnClient() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         // Accessing .models should not crash and should return an OctomilModels instance
         let modelsClient = client.models
@@ -26,8 +25,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testModelsStatusReturnsNotCachedByDefault() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         let status = client.models.status("nonexistent_model")
         XCTAssertEqual(status, .notCached)
@@ -35,8 +33,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testModelsListReturnsEmptyByDefault() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         let cached = client.models.list()
         // May contain previously cached models from other tests,
@@ -46,8 +43,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testModelsUnloadDoesNotCrashForUnknownModel() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         // Unloading a model that was never loaded should be a no-op
         client.models.unload("nonexistent_model")
@@ -58,8 +54,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testCapabilitiesNamespaceExistsOnClient() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         let capabilities = client.capabilities
         XCTAssertNotNil(capabilities)
@@ -67,8 +62,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testCapabilitiesCurrentReturnsValidProfile() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         let profile = client.capabilities.current()
 
@@ -112,8 +106,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testTelemetryNamespaceExistsOnClient() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         let telemetryClient = client.telemetry
         XCTAssertNotNil(telemetryClient)
@@ -121,8 +114,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testTelemetryTrackDoesNotCrash() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         // track() should not crash even if TelemetryQueue.shared is nil
         client.telemetry.track(name: "test.event", attributes: [
@@ -135,8 +127,7 @@ final class FacadeWiringTests: XCTestCase {
 
     func testTelemetryFlushDoesNotCrash() async {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "test-token")
         )
         // flush() should not crash even if TelemetryQueue.shared is nil
         await client.telemetry.flush()
@@ -165,29 +156,24 @@ final class FacadeWiringTests: XCTestCase {
         XCTAssertEqual(metadata.format, "coreml")
     }
 
-    // MARK: - apiKey init
+    // MARK: - AuthConfig init variants
 
-    func testApiKeyInitCreatesFunctionalClient() {
+    func testOrgApiKeyInitCreatesFunctionalClient() {
         let client = OctomilClient(
-            apiKey: "test-api-key",
-            orgId: "org_test"
+            auth: .orgApiKey(apiKey: "test-api-key", orgId: "org_test")
         )
         XCTAssertNotNil(client)
         XCTAssertEqual(client.orgId, "org_test")
         XCTAssertFalse(client.isClosed)
     }
 
-    func testApiKeyInitAndDeviceAccessTokenInitAreEquivalent() {
+    func testOrgApiKeyAndDeviceTokenBothProduceFunctionalClients() {
         let client1 = OctomilClient(
-            apiKey: "same-token",
-            orgId: "org_test"
+            auth: .orgApiKey(apiKey: "same-token", orgId: "org_test")
         )
         let client2 = OctomilClient(
-            deviceAccessToken: "same-token",
-            orgId: "org_test"
+            auth: .deviceToken(deviceId: "dev_test", bootstrapToken: "same-token")
         )
-        // Both should produce functional clients with the same org
-        XCTAssertEqual(client1.orgId, client2.orgId)
         XCTAssertFalse(client1.isClosed)
         XCTAssertFalse(client2.isClosed)
     }

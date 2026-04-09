@@ -313,9 +313,11 @@ final class FederatedAnalyticsTests: XCTestCase {
 
     func testOctomilClientAnalyticsFactory() {
         let client = OctomilClient(
-            deviceAccessToken: "test-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-token",
+                serverURL: Self.testServerURL
+            )
         )
 
         let analytics = client.analytics(federationId: "fed-abc")

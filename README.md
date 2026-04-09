@@ -31,7 +31,22 @@ Four library products available:
 | `OctomilTimeSeries` | Time series forecasting engine. |
 | `OctomilClip` | App Clip pairing flow. |
 
-## Quick Start
+## Quick Start (Unified Facade)
+
+```swift
+import OctomilClient
+
+let client = Octomil(publishableKey: "oct_pub_live_...")
+try await client.initialize()
+let response = try await client.responses.create(model: "phi-4-mini", input: "Hello")
+print(response.outputText)
+```
+
+### Migrating from OctomilClient
+
+`OctomilClient` and the low-level `OctomilResponses` / `ResponseRequest` APIs still work exactly as before. The `Octomil` facade is a convenience wrapper for the cloud-backed Responses path. For local CoreML inference, continue using `Deploy.model()` and `OctomilCoreML.wrap()`.
+
+## Local Inference
 
 ### CoreML inference (5 lines)
 
@@ -76,7 +91,7 @@ let model = try MLModel(contentsOf: modelURL)
 let output = try model.prediction(from: input)
 
 // After
-let model = try Octomil.wrap(MLModel(contentsOf: modelURL), modelId: "classifier")
+let model = try OctomilCoreML.wrap(MLModel(contentsOf: modelURL), modelId: "classifier")
 let output = try model.predict(input: input)  // same result, now with telemetry + OTA
 ```
 
@@ -109,7 +124,7 @@ let result = getResult()
 Route inference on-device or to the cloud based on device capabilities:
 
 ```swift
-let model = try Octomil.wrap(MLModel(contentsOf: url), modelId: "classifier")
+let model = try OctomilCoreML.wrap(MLModel(contentsOf: url), modelId: "classifier")
 model.configureRouting(RoutingConfig(serverURL: apiURL, apiKey: key))
 // Automatically routes to cloud when device is constrained
 // Falls back to local CoreML on any cloud failure

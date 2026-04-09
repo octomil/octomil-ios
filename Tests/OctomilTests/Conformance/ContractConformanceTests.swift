@@ -354,14 +354,14 @@ final class ContractConformanceTests: XCTestCase {
         XCTAssertNotNil(CompatibilityLevel(rawValue: "compatibility"))
     }
 
-    /// OTLP resource attribute keys match contract.
+    /// OTLP resource attribute keys match contract (resource_attributes.yaml).
     func testOTLPResourceAttributeKeys() {
         XCTAssertEqual(OTLPResourceAttribute.serviceName, "service.name")
         XCTAssertEqual(OTLPResourceAttribute.serviceVersion, "service.version")
-        XCTAssertEqual(OTLPResourceAttribute.octomilSdk, "octomil.sdk")
-        XCTAssertEqual(OTLPResourceAttribute.octomilOrgId, "octomil.org_id")
-        XCTAssertEqual(OTLPResourceAttribute.octomilDeviceId, "octomil.device_id")
-        XCTAssertEqual(OTLPResourceAttribute.osType, "os.type")
+        XCTAssertEqual(OTLPResourceAttribute.octomilSdkSurface, "octomil.sdk.surface")
+        XCTAssertEqual(OTLPResourceAttribute.octomilOrgId, "octomil.org.id")
+        XCTAssertEqual(OTLPResourceAttribute.octomilDeviceId, "octomil.device.id")
+        XCTAssertEqual(OTLPResourceAttribute.octomilPlatform, "octomil.platform")
     }
 
     /// Telemetry event names match contract.

@@ -12,12 +12,12 @@ import os.log
 /// let model = try MLModel(contentsOf: modelURL)
 ///
 /// // After
-/// let model = try Octomil.wrap(MLModel(contentsOf: modelURL), modelId: "classifier")
+/// let model = try OctomilCoreML.wrap(MLModel(contentsOf: modelURL), modelId: "classifier")
 ///
 /// // Call sites use the cross-SDK predict() API
 /// let result = try model.predict(input: input)
 /// ```
-public enum Octomil {
+public enum OctomilCoreML {
 
     private static let logger = Logger(subsystem: "ai.octomil.sdk", category: "Octomil")
 
