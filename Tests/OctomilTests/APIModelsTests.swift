@@ -61,7 +61,15 @@ final class APIModelsTests: XCTestCase {
             region: nil,
             timezone: nil,
             metadata: ["app_version": "1.0.0"],
-            capabilities: capabilities
+            capabilities: capabilities,
+            manufacturer: nil,
+            model: nil,
+            cpuArchitecture: nil,
+            gpuAvailable: nil,
+            totalMemoryMb: nil,
+            availableStorageMb: nil,
+            batteryPct: nil,
+            charging: nil
         )
 
         let encoder = JSONEncoder()
@@ -896,13 +904,13 @@ final class APIModelsTests: XCTestCase {
 
     func testHeartbeatRequestDeviceStateEncoding() throws {
         var req = HeartbeatRequest(metadata: ["key": "val"])
-        req.batteryLevel = 85
-        req.isCharging = true
+        req.batteryPct = 85
+        req.charging = true
         req.networkType = "wifi"
         let data = try JSONEncoder().encode(req)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        XCTAssertEqual(json["battery_level"] as? Int, 85)
-        XCTAssertEqual(json["is_charging"] as? Bool, true)
+        XCTAssertEqual(json["battery_pct"] as? Int, 85)
+        XCTAssertEqual(json["charging"] as? Bool, true)
         XCTAssertEqual(json["network_type"] as? String, "wifi")
     }
 

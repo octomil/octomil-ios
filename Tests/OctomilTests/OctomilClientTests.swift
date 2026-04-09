@@ -226,13 +226,13 @@ final class OctomilClientTests: XCTestCase {
         var secondError: Error?
 
         do {
-            _ = try await client.register()
+            _ = try await client.register(deviceId: nil)
         } catch {
             firstError = error
         }
 
         do {
-            _ = try await client.register()
+            _ = try await client.register(deviceId: nil)
         } catch {
             secondError = error
         }
@@ -263,7 +263,7 @@ final class OctomilClientTests: XCTestCase {
         // Start registration (will fail due to no real server, but state
         // should transition to .initializing before the network call)
         let task = Task {
-            _ = try? await client.register()
+            _ = try? await client.register(deviceId: nil)
         }
 
         // Give a tiny moment for the state transition
