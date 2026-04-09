@@ -97,4 +97,37 @@ final class UnifiedFacadeTests: XCTestCase {
         let emb = try facade.embeddings
         XCTAssertNotNil(emb)
     }
+
+    func testPublishableKeyEmbeddingsCreateThrowsNetworkError() async throws {
+        let facade = Octomil(publishableKey: "oct_pub_test_abc123")
+        try await facade.initialize()
+
+        let emb = try facade.embeddings
+        XCTAssertTrue(emb is FacadeEmbeddings)
+
+        // Calling create against the default server URL (no server running) should
+        // fail with a network-level error (URLError), NOT an auth or init error.
+        // This proves the publishable key was wired through to the EmbeddingClient.
+        do {
+            _ = try await emb.create(model: "test-model", input: "hello")
+            XCTFail("Expected network error but call succeeded")
+        } catch is OctomilNotInitializedError {
+            XCTFail("Got OctomilNotInitializedError — auth was not wired through")
+        } catch let error as URLError {
+            // Expected: network error because no server is running
+            XCTAssertTrue(
+                [.cannotConnectToHost, .networkConnectionLost, .timedOut, .notConnectedToInternet,
+                 .cannotFindHost, .secureConnectionFailed].contains(error.code),
+                "Unexpected URLError code: \(error.code)"
+            )
+        } catch let error as OctomilError {
+            // Also acceptable: server error from a reachable host returning an error status
+            switch error {
+            case .serverError:
+                break // This is fine — the request reached the network layer
+            default:
+                XCTFail("Unexpected OctomilError: \(error)")
+            }
+        }
+    }
 }
