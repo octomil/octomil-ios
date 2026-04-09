@@ -503,30 +503,37 @@ final class APIClientTelemetryV2Tests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertTrue(request.url!.path.contains("/api/v2/telemetry/events"))
 
-        let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+        // Wire format is now OTLP: { resourceLogs: [{ resource, scopeLogs }] }
+        let otlp = try JSONDecoder().decode(
+            ExportLogsServiceRequest.self,
+            from: request.httpBody!
+        )
 
-        // Verify resource
-        let resourceBody = body["resource"] as! [String: Any]
-        XCTAssertEqual(resourceBody["sdk"] as? String, "ios")
-        XCTAssertEqual(resourceBody["sdk_version"] as? String, OctomilVersion.current)
-        XCTAssertEqual(resourceBody["device_id"] as? String, "dev-1")
-        XCTAssertEqual(resourceBody["platform"] as? String, "ios")
-        XCTAssertEqual(resourceBody["org_id"] as? String, "org-1")
+        XCTAssertEqual(otlp.resourceLogs.count, 1)
+        let rl = otlp.resourceLogs[0]
 
-        // Verify events
-        let eventsBody = body["events"] as! [[String: Any]]
-        XCTAssertEqual(eventsBody.count, 1)
+        // Verify resource attributes
+        let resAttrs = Dictionary(uniqueKeysWithValues: rl.resource.attributes.map { ($0.key, $0.value) })
+        XCTAssertEqual(resAttrs["sdk"], .stringValue("ios"))
+        XCTAssertEqual(resAttrs["sdk.version"], .stringValue(OctomilVersion.current))
+        XCTAssertEqual(resAttrs["device.id"], .stringValue("dev-1"))
+        XCTAssertEqual(resAttrs["platform"], .stringValue("ios"))
+        XCTAssertEqual(resAttrs["org.id"], .stringValue("org-1"))
 
-        let event = eventsBody[0]
-        XCTAssertEqual(event["name"] as? String, "inference.completed")
-        XCTAssertEqual(event["timestamp"] as? String, "2026-02-26T00:00:00Z")
+        // Verify log records
+        let logRecords = rl.scopeLogs.flatMap(\.logRecords)
+        XCTAssertEqual(logRecords.count, 1)
 
-        let attrs = event["attributes"] as! [String: Any]
-        XCTAssertEqual(attrs["model.id"] as? String, "fraud_detection")
-        XCTAssertEqual(attrs["inference.duration_ms"] as? Double, 42.5)
-        XCTAssertEqual(attrs["inference.modality"] as? String, "text")
-        XCTAssertEqual(attrs["device.compute_unit"] as? String, "ane")
-        XCTAssertEqual(attrs["model.format"] as? String, "coreml")
+        let record = logRecords[0]
+        XCTAssertEqual(record.body, .stringValue("inference.completed"))
+        XCTAssertEqual(record.timeUnixNano, "1772064000000000000")
+
+        let attrs = Dictionary(uniqueKeysWithValues: record.attributes.map { ($0.key, $0.value) })
+        XCTAssertEqual(attrs["model.id"], .stringValue("fraud_detection"))
+        XCTAssertEqual(attrs["inference.duration_ms"], .doubleValue(42.5))
+        XCTAssertEqual(attrs["inference.modality"], .stringValue("text"))
+        XCTAssertEqual(attrs["device.compute_unit"], .stringValue("ane"))
+        XCTAssertEqual(attrs["model.format"], .stringValue("coreml"))
     }
 
     func testReportTelemetryEventsWithMultipleEvents() async throws {
@@ -565,15 +572,16 @@ final class APIClientTelemetryV2Tests: XCTestCase {
 
         try await apiClient.reportTelemetryEvents(envelope)
 
-        let body = try JSONSerialization.jsonObject(
-            with: SharedMockURLProtocol.requests.last!.httpBody!
-        ) as! [String: Any]
+        let otlp = try JSONDecoder().decode(
+            ExportLogsServiceRequest.self,
+            from: SharedMockURLProtocol.requests.last!.httpBody!
+        )
 
-        let eventsBody = body["events"] as! [[String: Any]]
-        XCTAssertEqual(eventsBody.count, 3)
-        XCTAssertEqual(eventsBody[0]["name"] as? String, "inference.completed")
-        XCTAssertEqual(eventsBody[1]["name"] as? String, "inference.failed")
-        XCTAssertEqual(eventsBody[2]["name"] as? String, "funnel.first_deploy")
+        let logRecords = otlp.resourceLogs[0].scopeLogs.flatMap(\.logRecords)
+        XCTAssertEqual(logRecords.count, 3)
+        XCTAssertEqual(logRecords[0].body, .stringValue("inference.completed"))
+        XCTAssertEqual(logRecords[1].body, .stringValue("inference.failed"))
+        XCTAssertEqual(logRecords[2].body, .stringValue("funnel.first_deploy"))
     }
 
     func testReportTelemetryEventsUsesV2Path() async throws {
