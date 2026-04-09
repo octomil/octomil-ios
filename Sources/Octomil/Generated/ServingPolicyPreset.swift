@@ -4,7 +4,6 @@ public enum ServingPolicyPreset: String, Codable, Sendable {
     case `private` = "private"
     case localFirst = "local_first"
     case performanceFirst = "performance_first"
-    case qualityFirst = "quality_first"
     case cloudFirst = "cloud_first"
     case cloudOnly = "cloud_only"
 }

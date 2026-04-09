@@ -30,6 +30,33 @@ final class RouterModelRuntimeTests: XCTestCase {
         XCTAssertEqual(response.text, "cloud result")
     }
 
+    func testCloudFirstUsesCloudWhenAvailable() async throws {
+        let localRuntime = RouterMockRuntime(text: "local result")
+        let cloudRuntime = RouterMockRuntime(text: "cloud result")
+
+        let router = RouterModelRuntime(
+            localFactory: { _ in localRuntime },
+            cloudFactory: { _ in cloudRuntime },
+            defaultPolicy: .auto(preferLocal: false)
+        )
+
+        let response = try await router.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
+        XCTAssertEqual(response.text, "cloud result")
+    }
+
+    func testCloudFirstFallsBackToLocal() async throws {
+        let localRuntime = RouterMockRuntime(text: "local result")
+
+        let router = RouterModelRuntime(
+            localFactory: { _ in localRuntime },
+            cloudFactory: nil,
+            defaultPolicy: .auto(preferLocal: false)
+        )
+
+        let response = try await router.run(request: RuntimeRequest(messages: [RuntimeMessage(role: .user, parts: [.text("test")])]))
+        XCTAssertEqual(response.text, "local result")
+    }
+
     func testLocalOnlyThrowsWhenNoLocal() async {
         let router = RouterModelRuntime(
             localFactory: nil,

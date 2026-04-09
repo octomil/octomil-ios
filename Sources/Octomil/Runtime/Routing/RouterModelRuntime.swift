@@ -12,7 +12,7 @@ import Foundation
 /// Resolution order:
 /// - `.localOnly`  → use local factory, throw if unavailable
 /// - `.cloudOnly`  → use cloud factory, throw if unavailable
-/// - `.auto`       → prefer local, fall back to cloud (or vice versa)
+/// - `.auto`       → prefer local or cloud depending on `preferLocal`, then fall back
 public final class RouterModelRuntime: ModelRuntime, @unchecked Sendable {
     private let localFactory: RuntimeFactory?
     private let cloudFactory: RuntimeFactory?
@@ -62,9 +62,14 @@ public final class RouterModelRuntime: ModelRuntime, @unchecked Sendable {
                 throw OctomilResponsesError.runtimeNotFound("No cloud runtime available")
             }
             return cloud
-        case .auto(_, _, let fallback):
-            if let local = localFactory?("local") { return local }
-            if fallback == "cloud", let cloud = cloudFactory?("cloud") { return cloud }
+        case .auto(let preferLocal, _, let fallback):
+            if preferLocal {
+                if let local = localFactory?("local") { return local }
+                if fallback == "cloud", let cloud = cloudFactory?("cloud") { return cloud }
+            } else {
+                if let cloud = cloudFactory?("cloud") { return cloud }
+                if let local = localFactory?("local") { return local }
+            }
             throw OctomilResponsesError.runtimeNotFound("No runtime available")
         }
     }
