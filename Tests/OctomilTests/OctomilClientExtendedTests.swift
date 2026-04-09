@@ -15,9 +15,11 @@ final class OctomilClientExtendedTests: XCTestCase {
 
     private func makeClient() -> OctomilClient {
         return OctomilClient(
-            deviceAccessToken: "test-device-token",
-            orgId: "org-test",
-            serverURL: Self.testServerURL,
+            auth: .deviceToken(
+                deviceId: "dev_test",
+                bootstrapToken: "test-device-token",
+                serverURL: Self.testServerURL
+            ),
             configuration: TestConfiguration.fast()
         )
     }
@@ -233,9 +235,11 @@ final class OctomilClientExtendedTests: XCTestCase {
 
     func testOrgIdPreserved() {
         let client = OctomilClient(
-            deviceAccessToken: "tok",
-            orgId: "my-org-456",
-            serverURL: Self.testServerURL
+            auth: .orgApiKey(
+                apiKey: "edg_test-key",
+                orgId: "my-org-456",
+                serverURL: Self.testServerURL
+            )
         )
         XCTAssertEqual(client.orgId, "my-org-456")
     }
