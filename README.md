@@ -42,6 +42,16 @@ let response = try await client.responses.create(model: "phi-4-mini", input: "He
 print(response.outputText)
 ```
 
+### Embeddings
+
+```swift
+let result = try await client.embeddings.create(
+    model: "nomic-embed-text-v1.5",
+    input: "On-device AI inference at scale"
+)
+print(Array(result.embeddings[0].prefix(5)))
+```
+
 ### Migrating from OctomilClient
 
 `OctomilClient` and the low-level `OctomilResponses` / `ResponseRequest` APIs still work exactly as before. The `Octomil` facade is a convenience wrapper for the cloud-backed Responses path. For local CoreML inference, continue using `Deploy.model()` and `OctomilCoreML.wrap()`.
