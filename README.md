@@ -31,7 +31,22 @@ Four library products available:
 | `OctomilTimeSeries` | Time series forecasting engine. |
 | `OctomilClip` | App Clip pairing flow. |
 
-## Quick Start
+## Quick Start (Unified Facade)
+
+```swift
+import OctomilClient
+
+let client = Octomil(publishableKey: "oct_pub_live_...")
+try await client.initialize()
+let response = try await client.responses.create(model: "phi-4-mini", input: "Hello")
+print(response.outputText)
+```
+
+### Migrating from OctomilClient
+
+`OctomilClient` and the low-level `OctomilResponses` / `ResponseRequest` APIs still work exactly as before. The `Octomil` facade is a convenience wrapper for the cloud-backed Responses path. For local CoreML inference, continue using `Deploy.model()` and `OctomilCoreML.wrap()`.
+
+## Local Inference
 
 ### CoreML inference (5 lines)
 
