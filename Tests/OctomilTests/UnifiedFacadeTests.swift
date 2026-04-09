@@ -66,4 +66,35 @@ final class UnifiedFacadeTests: XCTestCase {
         )
         XCTAssertEqual(response.outputText, "beforeafter")
     }
+
+    // MARK: - Embeddings namespace
+
+    func testEmbeddingsBeforeInitializeThrows() {
+        let facade = Octomil(publishableKey: "oct_pub_test_abc123")
+        XCTAssertThrowsError(try facade.embeddings) { error in
+            XCTAssertTrue(error is OctomilNotInitializedError)
+        }
+    }
+
+    func testEmbeddingsNamespaceExistsAfterInitialize() async throws {
+        let facade = Octomil(publishableKey: "oct_pub_test_abc123")
+        try await facade.initialize()
+        let emb = try facade.embeddings
+        XCTAssertNotNil(emb)
+    }
+
+    func testEmbeddingsNamespaceType() async throws {
+        let facade = Octomil(apiKey: "edg_abc123", orgId: "org_456")
+        try await facade.initialize()
+        let emb = try facade.embeddings
+        XCTAssertTrue(emb is FacadeEmbeddings)
+    }
+
+    func testEmbeddingsIdempotentInitialize() async throws {
+        let facade = Octomil(publishableKey: "oct_pub_test_abc123")
+        try await facade.initialize()
+        try await facade.initialize() // second call should be a no-op
+        let emb = try facade.embeddings
+        XCTAssertNotNil(emb)
+    }
 }

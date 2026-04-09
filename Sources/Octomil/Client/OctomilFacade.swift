@@ -14,6 +14,7 @@ public final class Octomil: @unchecked Sendable {
     private var initialized = false
     private let authConfig: AuthConfig
     private var client: OctomilClient?
+    private var _embeddings: FacadeEmbeddings?
 
     /// Creates a facade using a publishable key (mobile/edge SDKs).
     public init(publishableKey: String) {
@@ -29,6 +30,13 @@ public final class Octomil: @unchecked Sendable {
     public func initialize() async throws {
         guard !initialized else { return }
         client = OctomilClient(auth: authConfig)
+
+        let embeddingClient = EmbeddingClient(
+            serverURL: authConfig.serverURL,
+            apiKey: authConfig.token
+        )
+        _embeddings = FacadeEmbeddings(embeddingClient: embeddingClient)
+
         initialized = true
     }
 
@@ -39,6 +47,16 @@ public final class Octomil: @unchecked Sendable {
                 throw OctomilNotInitializedError()
             }
             return FacadeResponses(underlying: client.responses)
+        }
+    }
+
+    /// Embeddings namespace. Throws ``OctomilNotInitializedError`` if ``initialize()`` has not been called.
+    public var embeddings: FacadeEmbeddings {
+        get throws {
+            guard initialized, let emb = _embeddings else {
+                throw OctomilNotInitializedError()
+            }
+            return emb
         }
     }
 }
@@ -78,5 +96,38 @@ public final class FacadeResponses: @unchecked Sendable {
     /// Streams a response from a full ``ResponseRequest``.
     public func stream(_ request: ResponseRequest) -> AsyncThrowingStream<ResponseStreamEvent, Error> {
         underlying.stream(request)
+    }
+}
+
+/// Embeddings namespace on the unified Octomil facade.
+///
+/// Wraps ``EmbeddingClient`` with a simplified API that mirrors the
+/// OpenAI-style `client.embeddings.create(...)` pattern.
+@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+public final class FacadeEmbeddings: @unchecked Sendable {
+    private let embeddingClient: EmbeddingClient
+
+    init(embeddingClient: EmbeddingClient) {
+        self.embeddingClient = embeddingClient
+    }
+
+    /// Create embeddings for a single input string.
+    ///
+    /// - Parameters:
+    ///   - model: Embedding model identifier (e.g. `"nomic-embed-text-v1.5"`).
+    ///   - input: Text to embed.
+    /// - Returns: An ``EmbeddingResult`` with the dense vector.
+    public func create(model: String, input: String) async throws -> EmbeddingResult {
+        try await embeddingClient.embed(modelId: model, input: input)
+    }
+
+    /// Create embeddings for multiple input strings.
+    ///
+    /// - Parameters:
+    ///   - model: Embedding model identifier (e.g. `"nomic-embed-text-v1.5"`).
+    ///   - input: Array of texts to embed.
+    /// - Returns: An ``EmbeddingResult`` with one vector per input string.
+    public func create(model: String, input: [String]) async throws -> EmbeddingResult {
+        try await embeddingClient.embed(modelId: model, input: input)
     }
 }
