@@ -226,9 +226,9 @@ final class OctomilClientExtendedTests: XCTestCase {
         XCTAssertNil(client.deviceId)
     }
 
-    func testDeviceIdentifierNilBeforeRegistration() {
+    func testDeviceIdentifierPreservedFromConstructor() {
         let client = makeClient()
-        XCTAssertNil(client.deviceIdentifier)
+        XCTAssertEqual(client.deviceIdentifier, "dev_test")
     }
 
     // MARK: - orgId

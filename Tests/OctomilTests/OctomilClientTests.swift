@@ -158,7 +158,7 @@ final class OctomilClientTests: XCTestCase {
         XCTAssertNil(client.deviceId)
     }
 
-    func testDeviceIdentifierNilBeforeRegistration() {
+    func testDeviceIdentifierPreservedFromConstructor() {
         let client = OctomilClient(
             auth: .deviceToken(
                 deviceId: "dev_test",
@@ -167,7 +167,7 @@ final class OctomilClientTests: XCTestCase {
             )
         )
 
-        XCTAssertNil(client.deviceIdentifier)
+        XCTAssertEqual(client.deviceIdentifier, "dev_test")
     }
 
     // MARK: - Org ID Tests
