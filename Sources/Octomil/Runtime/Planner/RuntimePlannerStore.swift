@@ -14,16 +14,16 @@ public final class RuntimePlannerStore: @unchecked Sendable {
 
     // MARK: - Types
 
-    struct CachedPlan: Codable {
-        let cacheKey: String
-        let model: String
-        let capability: String
-        let policy: String
-        let planJson: Data
-        let source: String
-        let ttlSeconds: Int
-        let createdAt: Date
-        let expiresAt: Date
+    public struct CachedPlan: Codable {
+        public let cacheKey: String
+        public let model: String
+        public let capability: String
+        public let policy: String
+        public let planJson: Data
+        public let source: String
+        public let ttlSeconds: Int
+        public let createdAt: Date
+        public let expiresAt: Date
 
         enum CodingKeys: String, CodingKey {
             case cacheKey = "cache_key"
@@ -36,17 +36,17 @@ public final class RuntimePlannerStore: @unchecked Sendable {
         }
     }
 
-    struct CachedBenchmark: Codable {
-        let cacheKey: String
-        let model: String
-        let capability: String
-        let engine: String
-        let policy: String
-        let tokensPerSecond: Double
-        let ttftMs: Double
-        let memoryMb: Double
-        let createdAt: Date
-        let expiresAt: Date
+    public struct CachedBenchmark: Codable {
+        public let cacheKey: String
+        public let model: String
+        public let capability: String
+        public let engine: String
+        public let policy: String
+        public let tokensPerSecond: Double
+        public let ttftMs: Double
+        public let memoryMb: Double
+        public let createdAt: Date
+        public let expiresAt: Date
 
         enum CodingKeys: String, CodingKey {
             case cacheKey = "cache_key"
