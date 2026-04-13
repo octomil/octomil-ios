@@ -1,3 +1,4 @@
+#if canImport(sherpa_onnx)
 import Foundation
 import Octomil
 import sherpa_onnx
@@ -170,3 +171,4 @@ public final class SherpaLiveTranscriber: LiveTranscriber, @unchecked Sendable {
         )
     }
 }
+#endif
