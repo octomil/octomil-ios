@@ -21,7 +21,15 @@ public enum DeviceRuntimeProfileCollector {
         additionalRuntimes: [InstalledRuntime] = []
     ) -> DeviceRuntimeProfile {
         var runtimes = detectCoreRuntimes()
-        runtimes.append(contentsOf: additionalRuntimes)
+        runtimes.append(contentsOf: additionalRuntimes.map {
+            InstalledRuntime(
+                engine: $0.engine,
+                version: $0.version,
+                available: $0.available,
+                accelerator: $0.accelerator,
+                metadata: $0.metadata
+            )
+        })
 
         return DeviceRuntimeProfile(
             sdk: "ios",
@@ -112,20 +120,12 @@ public enum DeviceRuntimeProfileCollector {
 
     /// Detect inference engines that ship with the core SDK.
     ///
-    /// Extension-module engines (MLX, llama.cpp, etc.) must be passed in
+    /// CoreML framework availability is not the same as having a model-capable
+    /// Octomil runtime installed. Extension-module engines (CoreML model
+    /// adapters, MLX, llama.cpp, etc.) must be passed in
     /// via `additionalRuntimes` because the core `Octomil` target does not
     /// link against those binary frameworks.
     static func detectCoreRuntimes() -> [InstalledRuntime] {
-        var runtimes: [InstalledRuntime] = []
-
-        // CoreML is always available on supported platforms
-        runtimes.append(InstalledRuntime(
-            engine: "coreml",
-            version: nil,
-            available: true,
-            accelerator: "ane"
-        ))
-
-        return runtimes
+        []
     }
 }

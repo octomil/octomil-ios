@@ -250,7 +250,7 @@ public final class RuntimePlannerStore: @unchecked Sendable {
             cacheKey: cacheKey,
             model: model,
             capability: capability,
-            engine: engine,
+            engine: RuntimeEngineID.canonical(engine),
             policy: policy,
             tokensPerSecond: tokensPerSecond,
             ttftMs: ttftMs,

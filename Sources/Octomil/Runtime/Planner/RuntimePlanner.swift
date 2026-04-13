@@ -9,11 +9,9 @@ import os.log
 /// 2. Check local plan cache
 /// 3. If network allowed and not private policy, fetch server plan
 /// 4. Validate server plan against installed native runtimes
-/// 5. Check local benchmark cache
-/// 6. If needed, run local benchmark
-/// 7. Persist benchmark locally
-/// 8. Upload privacy-safe telemetry (not for private policy)
-/// 9. Return ``RuntimeSelection``
+/// 5. Check real local benchmark cache
+/// 6. Select an explicitly reported local runtime, if one exists
+/// 7. Return ``RuntimeSelection``
 ///
 /// The planner never blocks inference on server failures. All network
 /// operations are best-effort with short timeouts.
@@ -87,7 +85,10 @@ public final class RuntimePlanner: @unchecked Sendable {
 
         if let cachedPlan = store.getPlan(cacheKey: cacheKey) {
             logger.debug("Using cached plan for \(model)/\(capability)")
-            return selectionFromPlan(cachedPlan, device: device, source: "cache")
+            if let selection = resolveFromServerPlan(cachedPlan, device: device, source: "cache") {
+                return selection
+            }
+            logger.debug("Cached plan had no viable candidates; continuing resolution")
         }
 
         // Step 3: Fetch server plan if allowed
@@ -119,7 +120,7 @@ public final class RuntimePlanner: @unchecked Sendable {
 
         // Step 4: Validate server plan against installed runtimes
         if let plan = serverPlan {
-            if let selection = resolveFromServerPlan(plan, device: device) {
+            if let selection = resolveFromServerPlan(plan, device: device, source: "server_plan") {
                 return selection
             }
         }
@@ -142,56 +143,70 @@ public final class RuntimePlanner: @unchecked Sendable {
     /// Cloud candidates are accepted as-is.
     private func resolveFromServerPlan(
         _ plan: RuntimePlanResponse,
-        device: DeviceRuntimeProfile
+        device: DeviceRuntimeProfile,
+        source: String
     ) -> RuntimeSelection? {
         let installedEngines = Set(
             device.installedRuntimes
                 .filter { $0.available }
-                .map { $0.engine }
+                .map { RuntimeEngineID.canonical($0.engine) }
         )
 
-        // Try primary candidates
-        for candidate in plan.candidates {
-            switch candidate.locality {
-            case .local:
-                if let engine = candidate.engine, !installedEngines.contains(engine) {
-                    continue // Skip engines we don't have
-                }
-                return RuntimeSelection(
-                    locality: .local,
-                    engine: candidate.engine,
-                    artifact: candidate.artifact,
-                    benchmarkRan: false,
-                    source: "server_plan",
-                    fallbackCandidates: plan.fallbackCandidates,
-                    reason: candidate.reason
-                )
-            case .cloud:
-                return RuntimeSelection(
-                    locality: .cloud,
-                    engine: candidate.engine,
-                    artifact: candidate.artifact,
-                    benchmarkRan: false,
-                    source: "server_plan",
-                    fallbackCandidates: plan.fallbackCandidates,
-                    reason: candidate.reason
-                )
-            }
+        if let selection = selectCandidate(
+            from: plan.candidates,
+            installedEngines: installedEngines,
+            source: source,
+            fallbackCandidates: plan.fallbackCandidates,
+            fallbackPrefix: nil
+        ) {
+            return selection
         }
 
-        // Try fallback candidates
-        for candidate in plan.fallbackCandidates {
-            if candidate.locality == .local,
-               let engine = candidate.engine,
-               installedEngines.contains(engine) {
+        return selectCandidate(
+            from: plan.fallbackCandidates,
+            installedEngines: installedEngines,
+            source: source,
+            fallbackCandidates: [],
+            fallbackPrefix: "fallback: "
+        )
+    }
+
+    private func selectCandidate(
+        from candidates: [RuntimeCandidatePlan],
+        installedEngines: Set<String>,
+        source: String,
+        fallbackCandidates: [RuntimeCandidatePlan],
+        fallbackPrefix: String?
+    ) -> RuntimeSelection? {
+        for candidate in candidates {
+            switch candidate.locality {
+            case .local:
+                let engine = RuntimeEngineID.canonical(candidate.engine)
+                if let engine {
+                    if !installedEngines.contains(engine) {
+                        continue // Skip engines we don't have
+                    }
+                } else if installedEngines.isEmpty {
+                    continue // "any local" still requires at least one runtime
+                }
                 return RuntimeSelection(
                     locality: .local,
                     engine: engine,
                     artifact: candidate.artifact,
                     benchmarkRan: false,
-                    source: "server_plan",
-                    fallbackCandidates: [],
-                    reason: "fallback: \(candidate.reason)"
+                    source: source,
+                    fallbackCandidates: fallbackCandidates,
+                    reason: "\(fallbackPrefix ?? "")\(candidate.reason)"
+                )
+            case .cloud:
+                return RuntimeSelection(
+                    locality: .cloud,
+                    engine: RuntimeEngineID.canonical(candidate.engine),
+                    artifact: candidate.artifact,
+                    benchmarkRan: false,
+                    source: source,
+                    fallbackCandidates: fallbackCandidates,
+                    reason: "\(fallbackPrefix ?? "")\(candidate.reason)"
                 )
             }
         }
@@ -228,9 +243,10 @@ public final class RuntimePlanner: @unchecked Sendable {
         )
 
         if let cached = store.getBenchmark(cacheKey: bmCacheKey) {
+            let engine = RuntimeEngineID.canonical(cached.engine)
             return RuntimeSelection(
                 locality: .local,
-                engine: cached.engine,
+                engine: engine,
                 benchmarkRan: false,
                 source: "cache",
                 reason: "cached benchmark: \(String(format: "%.1f", cached.tokensPerSecond)) tok/s"
@@ -239,44 +255,20 @@ public final class RuntimePlanner: @unchecked Sendable {
 
         // Step 6: Determine best available local engine.
         // The core SDK cannot directly run benchmarks (that requires engine
-        // binaries from extension modules). Instead, we pick the first
-        // available engine from the device profile.
-        let availableEngines = device.installedRuntimes.filter { $0.available }
+        // binaries from extension modules). Without a server plan, only use
+        // runtimes that explicitly declare support for this model/capability.
+        let availableEngines = device.installedRuntimes.filter {
+            supportsLocalDefault($0, model: model, capability: capability)
+        }
 
         if let bestEngine = availableEngines.first {
-            // Step 7: Persist a placeholder benchmark entry for this engine
-            // so subsequent calls use the cache path. A real benchmark
-            // result will be stored once the engine runs actual inference.
-            store.putBenchmark(
-                cacheKey: bmCacheKey,
-                model: model,
-                capability: capability,
-                engine: bestEngine.engine,
-                policy: routingPolicy
-            )
-
-            // Step 8: Upload telemetry best-effort (not for private policy)
-            if !isPrivate, let client {
-                Task {
-                    let payload: [String: Any] = [
-                        "source": "planner",
-                        "model": model,
-                        "capability": capability,
-                        "engine": bestEngine.engine,
-                        "device": privacySafeDeviceDict(device),
-                        "success": true,
-                        "metadata": ["selection_source": "local_default"],
-                    ]
-                    _ = await client.uploadBenchmark(payload)
-                }
-            }
-
+            let engine = RuntimeEngineID.canonical(bestEngine.engine)
             return RuntimeSelection(
                 locality: .local,
-                engine: bestEngine.engine,
+                engine: engine,
                 benchmarkRan: false,
                 source: "local_default",
-                reason: "selected first available engine: \(bestEngine.engine)"
+                reason: "selected explicitly reported local engine: \(engine)"
             )
         }
 
@@ -303,8 +295,8 @@ public final class RuntimePlanner: @unchecked Sendable {
     /// Store a benchmark result that was collected during actual inference.
     ///
     /// Call this after the first inference run to record real performance
-    /// metrics, replacing any placeholder entries from the planner's
-    /// initial resolution.
+    /// metrics. The planner never writes synthetic benchmark entries during
+    /// resolution; only real engine runs should call this method.
     ///
     /// - Parameters:
     ///   - model: Model identifier.
@@ -331,7 +323,7 @@ public final class RuntimePlanner: @unchecked Sendable {
             cacheKey: bmCacheKey,
             model: model,
             capability: capability,
-            engine: result.engineName,
+            engine: RuntimeEngineID.canonical(result.engineName),
             policy: routingPolicy,
             tokensPerSecond: result.tokensPerSecond,
             ttftMs: result.ttftMs,
@@ -345,7 +337,7 @@ public final class RuntimePlanner: @unchecked Sendable {
                     "source": "planner",
                     "model": model,
                     "capability": capability,
-                    "engine": result.engineName,
+                    "engine": RuntimeEngineID.canonical(result.engineName),
                     "device": privacySafeDeviceDict(device),
                     "success": result.ok,
                     "tokens_per_second": result.tokensPerSecond,
@@ -359,53 +351,6 @@ public final class RuntimePlanner: @unchecked Sendable {
     }
 
     // MARK: - Helpers
-
-    /// Select the best candidate from a plan response given installed runtimes.
-    private func selectionFromPlan(
-        _ plan: RuntimePlanResponse,
-        device: DeviceRuntimeProfile,
-        source: String
-    ) -> RuntimeSelection {
-        let installedEngines = Set(
-            device.installedRuntimes
-                .filter { $0.available }
-                .map { $0.engine }
-        )
-
-        for candidate in plan.candidates {
-            switch candidate.locality {
-            case .local:
-                if let engine = candidate.engine, !installedEngines.contains(engine) {
-                    continue
-                }
-                return RuntimeSelection(
-                    locality: .local,
-                    engine: candidate.engine,
-                    artifact: candidate.artifact,
-                    source: source,
-                    fallbackCandidates: plan.fallbackCandidates,
-                    reason: candidate.reason
-                )
-            case .cloud:
-                return RuntimeSelection(
-                    locality: .cloud,
-                    engine: candidate.engine,
-                    artifact: candidate.artifact,
-                    source: source,
-                    fallbackCandidates: plan.fallbackCandidates,
-                    reason: candidate.reason
-                )
-            }
-        }
-
-        // Nothing matched — generic fallback
-        return RuntimeSelection(
-            locality: .local,
-            engine: nil,
-            source: "fallback",
-            reason: "cached plan had no viable candidates"
-        )
-    }
 
     private func benchmarkCacheKey(
         model: String,
@@ -425,10 +370,41 @@ public final class RuntimePlanner: @unchecked Sendable {
         ])
     }
 
+    private func supportsLocalDefault(
+        _ runtime: InstalledRuntime,
+        model: String,
+        capability: String
+    ) -> Bool {
+        guard runtime.available else { return false }
+
+        let supportedModels = metadataList(runtime.metadata, keys: ["model", "model_id", "models"])
+        guard supportedModels.contains("*") || supportedModels.contains(model.lowercased()) else {
+            return false
+        }
+
+        let supportedCapabilities = metadataList(runtime.metadata, keys: ["capability", "capabilities"])
+        return supportedCapabilities.isEmpty
+            || supportedCapabilities.contains("*")
+            || supportedCapabilities.contains(capability.lowercased())
+    }
+
+    private func metadataList(_ metadata: [String: String], keys: [String]) -> Set<String> {
+        Set(
+            keys
+                .compactMap { metadata[$0] }
+                .flatMap { value in
+                    value
+                        .split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                }
+                .filter { !$0.isEmpty }
+        )
+    }
+
     private func installedRuntimesHash(_ device: DeviceRuntimeProfile) -> String {
         let runtimes = device.installedRuntimes
             .filter { $0.available }
-            .map { "\($0.engine):\($0.version ?? "")" }
+            .map { "\(RuntimeEngineID.canonical($0.engine)):\($0.version ?? "")" }
             .sorted()
             .joined(separator: ",")
 

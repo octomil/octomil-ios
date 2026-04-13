@@ -6,7 +6,7 @@ import Foundation
 ///
 /// Mirrors the server contract `InstalledRuntime` schema.
 public struct InstalledRuntime: Codable, Sendable, Equatable {
-    /// Engine identifier (e.g. "coreml", "mlx", "llamacpp").
+    /// Engine identifier (e.g. "coreml", "mlx-lm", "llama.cpp").
     public let engine: String
     /// Engine version string, if known.
     public let version: String?
@@ -24,11 +24,41 @@ public struct InstalledRuntime: Codable, Sendable, Equatable {
         accelerator: String? = nil,
         metadata: [String: String] = [:]
     ) {
-        self.engine = engine
+        self.engine = RuntimeEngineID.canonical(engine)
         self.version = version
         self.available = available
         self.accelerator = accelerator
         self.metadata = metadata
+    }
+}
+
+/// Canonical runtime engine identifiers shared with the server planner.
+///
+/// Older SDKs and examples used aliases such as `mlx`, `llamacpp`, and
+/// `llama_cpp`. Normalize at SDK boundaries so device profiles, server plans,
+/// cache keys, and telemetry all speak the same wire vocabulary.
+public enum RuntimeEngineID {
+    private static let aliases: [String: String] = [
+        "mlx": "mlx-lm",
+        "mlx_lm": "mlx-lm",
+        "mlxlm": "mlx-lm",
+        "llamacpp": "llama.cpp",
+        "llama_cpp": "llama.cpp",
+        "llama-cpp": "llama.cpp",
+        "whisper": "whisper.cpp",
+        "whispercpp": "whisper.cpp",
+        "whisper_cpp": "whisper.cpp",
+        "whisper-cpp": "whisper.cpp",
+    ]
+
+    public static func canonical(_ engine: String) -> String {
+        let normalized = engine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return aliases[normalized] ?? normalized
+    }
+
+    public static func canonical(_ engine: String?) -> String? {
+        guard let engine else { return nil }
+        return canonical(engine)
     }
 }
 
@@ -167,7 +197,7 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
     public let confidence: Double
     /// Human-readable reason for this recommendation.
     public let reason: String
-    /// Engine to use (e.g. "coreml", "mlx").
+    /// Engine to use (e.g. "coreml", "mlx-lm", "llama.cpp").
     public let engine: String?
     /// Semver constraint on engine version.
     public let engineVersionConstraint: String?
@@ -278,7 +308,7 @@ public struct RuntimeSelection: Sendable, Equatable {
     public let artifact: RuntimeArtifactPlan?
     /// Whether a benchmark was run to produce this selection.
     public let benchmarkRan: Bool
-    /// How the selection was determined: "cache", "server_plan", "local_benchmark", "fallback".
+    /// How the selection was determined: "cache", "server_plan", "local_default", "fallback".
     public let source: String
     /// Fallback candidates if this selection fails at runtime.
     public let fallbackCandidates: [RuntimeCandidatePlan]

@@ -21,7 +21,7 @@ final class RuntimePlannerTests: XCTestCase {
 
     // MARK: - Resolve: Local First (default)
 
-    func testResolveLocalFirstSelectsLocalEngine() async {
+    func testResolveLocalFirstFallsBackToCloudWithoutLocalRuntime() async {
         let planner = RuntimePlanner(store: store, client: nil)
 
         let selection = await planner.resolve(
@@ -31,17 +31,22 @@ final class RuntimePlannerTests: XCTestCase {
             allowNetwork: false
         )
 
-        XCTAssertEqual(selection.locality, .local)
-        // CoreML is always detected by the collector
-        XCTAssertEqual(selection.engine, "coreml")
-        XCTAssertEqual(selection.source, "local_default")
+        XCTAssertEqual(selection.locality, .cloud)
+        XCTAssertNil(selection.engine)
+        XCTAssertEqual(selection.source, "fallback")
     }
 
     func testResolveLocalFirstWithAdditionalRuntimes() async {
         let planner = RuntimePlanner(store: store, client: nil)
 
         let additionalRuntimes = [
-            InstalledRuntime(engine: "mlx", version: "0.30.0", available: true, accelerator: "metal"),
+            InstalledRuntime(
+                engine: "mlx",
+                version: "0.30.0",
+                available: true,
+                accelerator: "metal",
+                metadata: ["models": "gemma-2b", "capabilities": "text"]
+            ),
         ]
 
         let selection = await planner.resolve(
@@ -53,8 +58,8 @@ final class RuntimePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(selection.locality, .local)
-        // Should pick first available engine (coreml, since it's detected first)
-        XCTAssertNotNil(selection.engine)
+        XCTAssertEqual(selection.engine, "mlx-lm")
+        XCTAssertEqual(selection.source, "local_default")
     }
 
     // MARK: - Resolve: Cloud Only
@@ -89,9 +94,9 @@ final class RuntimePlannerTests: XCTestCase {
             allowNetwork: true // Would normally attempt network, but private skips it
         )
 
-        // Should still resolve locally since CoreML is available
         XCTAssertEqual(selection.locality, .local)
-        XCTAssertEqual(selection.engine, "coreml")
+        XCTAssertNil(selection.engine)
+        XCTAssertEqual(selection.source, "fallback")
     }
 
     // MARK: - Resolve: Local Only Fallback
@@ -140,10 +145,9 @@ final class RuntimePlannerTests: XCTestCase {
             allowNetwork: false
         )
 
-        // Plan is cached and requires "nonexistent_engine" which isn't installed,
-        // so it falls through to local resolution. CoreML is still available.
-        // The selectionFromPlan should skip the nonexistent engine.
         XCTAssertEqual(selection.locality, .local)
+        XCTAssertNil(selection.engine)
+        XCTAssertEqual(selection.source, "fallback")
     }
 
     // MARK: - Resolve: Cached Plan
@@ -168,7 +172,7 @@ final class RuntimePlannerTests: XCTestCase {
                     priority: 1,
                     confidence: 0.95,
                     reason: "Cached server recommendation",
-                    engine: "coreml" // An engine we DO have
+                    engine: "mlx-lm" // An engine we report as installed below
                 ),
             ]
         )
@@ -188,11 +192,12 @@ final class RuntimePlannerTests: XCTestCase {
             model: "cached-model",
             capability: "text",
             routingPolicy: "local_first",
-            allowNetwork: false
+            allowNetwork: false,
+            additionalRuntimes: [InstalledRuntime(engine: "mlx")]
         )
 
         XCTAssertEqual(selection.source, "cache")
-        XCTAssertEqual(selection.engine, "coreml")
+        XCTAssertEqual(selection.engine, "mlx-lm")
         XCTAssertEqual(selection.locality, .local)
         XCTAssertEqual(selection.reason, "Cached server recommendation")
     }
@@ -202,24 +207,29 @@ final class RuntimePlannerTests: XCTestCase {
     func testResolveUsesCachedBenchmark() async {
         let planner = RuntimePlanner(store: store, client: nil)
 
-        // First resolve creates a benchmark cache entry
-        let selection1 = await planner.resolve(
+        let additionalRuntimes = [InstalledRuntime(engine: "mlx", available: true)]
+        planner.recordBenchmark(
             model: "bench-model",
             capability: "text",
             routingPolicy: "local_first",
-            allowNetwork: false
+            result: BenchmarkResult(
+                engineName: "mlx",
+                tokensPerSecond: 88.0,
+                ttftMs: 100.0,
+                memoryMb: 512.0
+            ),
+            additionalRuntimes: additionalRuntimes
         )
-        XCTAssertEqual(selection1.source, "local_default")
 
-        // Second resolve should use the benchmark cache
-        let selection2 = await planner.resolve(
+        let selection = await planner.resolve(
             model: "bench-model",
             capability: "text",
             routingPolicy: "local_first",
-            allowNetwork: false
+            allowNetwork: false,
+            additionalRuntimes: additionalRuntimes
         )
-        XCTAssertEqual(selection2.source, "cache")
-        XCTAssertEqual(selection2.engine, "coreml")
+        XCTAssertEqual(selection.source, "cache")
+        XCTAssertEqual(selection.engine, "mlx-lm")
     }
 
     // MARK: - Server Plan Validation
@@ -247,13 +257,13 @@ final class RuntimePlannerTests: XCTestCase {
                     reason: "Best if available",
                     engine: "nonexistent_engine"
                 ),
-                // Second candidate uses CoreML which we do have
+                // Second candidate uses MLX, reported as installed below
                 RuntimeCandidatePlan(
                     locality: .local,
                     priority: 2,
                     confidence: 0.8,
-                    reason: "CoreML fallback",
-                    engine: "coreml"
+                    reason: "MLX fallback",
+                    engine: "mlx-lm"
                 ),
             ]
         )
@@ -273,13 +283,13 @@ final class RuntimePlannerTests: XCTestCase {
             model: "multi-engine",
             capability: "text",
             routingPolicy: "local_first",
-            allowNetwork: false
+            allowNetwork: false,
+            additionalRuntimes: [InstalledRuntime(engine: "mlx")]
         )
 
-        // Should skip nonexistent_engine and use coreml
-        XCTAssertEqual(selection.engine, "coreml")
+        XCTAssertEqual(selection.engine, "mlx-lm")
         XCTAssertEqual(selection.source, "cache")
-        XCTAssertEqual(selection.reason, "CoreML fallback")
+        XCTAssertEqual(selection.reason, "MLX fallback")
     }
 
     func testServerPlanFallbackCandidates() async {
@@ -312,7 +322,7 @@ final class RuntimePlannerTests: XCTestCase {
                     priority: 10,
                     confidence: 0.5,
                     reason: "Slow but works",
-                    engine: "coreml"
+                    engine: "mlx-lm"
                 ),
             ]
         )
@@ -337,11 +347,14 @@ final class RuntimePlannerTests: XCTestCase {
             model: "fallback-test",
             capability: "text",
             routingPolicy: "local_first",
-            allowNetwork: false
+            allowNetwork: false,
+            additionalRuntimes: [InstalledRuntime(engine: "mlx")]
         )
 
-        // The selection should ultimately resolve to something usable
         XCTAssertEqual(selection.locality, .local)
+        XCTAssertEqual(selection.engine, "mlx-lm")
+        XCTAssertEqual(selection.source, "cache")
+        XCTAssertTrue(selection.reason.contains("fallback"))
     }
 
     // MARK: - Record Benchmark

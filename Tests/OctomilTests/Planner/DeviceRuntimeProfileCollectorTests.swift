@@ -19,12 +19,13 @@ final class DeviceRuntimeProfileCollectorTests: XCTestCase {
         XCTAssertGreaterThan(profile.ramTotalBytes ?? 0, 0)
     }
 
-    func testCollectIncludesCoreML() {
+    func testCollectDoesNotAssumeCoreMLRuntime() {
         let profile = DeviceRuntimeProfileCollector.collect()
 
-        let coreml = profile.installedRuntimes.first { $0.engine == "coreml" }
-        XCTAssertNotNil(coreml, "CoreML should always be detected")
-        XCTAssertTrue(coreml?.available ?? false)
+        XCTAssertTrue(
+            profile.installedRuntimes.isEmpty,
+            "CoreML framework availability alone is not a model-capable Octomil runtime"
+        )
     }
 
     func testCollectIncludesAdditionalRuntimes() {
@@ -36,10 +37,9 @@ final class DeviceRuntimeProfileCollectorTests: XCTestCase {
         let profile = DeviceRuntimeProfileCollector.collect(additionalRuntimes: extra)
 
         let engines = Set(profile.installedRuntimes.map { $0.engine })
-        XCTAssertTrue(engines.contains("coreml"))
-        XCTAssertTrue(engines.contains("mlx"))
-        XCTAssertTrue(engines.contains("llamacpp"))
-        XCTAssertEqual(profile.installedRuntimes.count, 3)
+        XCTAssertTrue(engines.contains("mlx-lm"))
+        XCTAssertTrue(engines.contains("llama.cpp"))
+        XCTAssertEqual(profile.installedRuntimes.count, 2)
     }
 
     // MARK: - Platform Detection
@@ -92,11 +92,9 @@ final class DeviceRuntimeProfileCollectorTests: XCTestCase {
 
     // MARK: - Core Runtimes
 
-    func testDetectCoreRuntimesIncludesCoreML() {
+    func testDetectCoreRuntimesDoesNotReportFrameworkAvailability() {
         let runtimes = DeviceRuntimeProfileCollector.detectCoreRuntimes()
-        XCTAssertEqual(runtimes.count, 1)
-        XCTAssertEqual(runtimes[0].engine, "coreml")
-        XCTAssertTrue(runtimes[0].available)
+        XCTAssertTrue(runtimes.isEmpty)
     }
 
     // MARK: - Privacy: No User Data

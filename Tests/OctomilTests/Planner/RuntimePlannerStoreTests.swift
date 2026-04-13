@@ -149,7 +149,7 @@ final class RuntimePlannerStoreTests: XCTestCase {
         let retrieved = store.getBenchmark(cacheKey: key)
         XCTAssertNotNil(retrieved)
         XCTAssertEqual(retrieved?.model, "llama-8b")
-        XCTAssertEqual(retrieved?.engine, "mlx")
+        XCTAssertEqual(retrieved?.engine, "mlx-lm")
         XCTAssertEqual(retrieved?.tokensPerSecond, 85.0)
         XCTAssertEqual(retrieved?.ttftMs, 120.0)
         XCTAssertEqual(retrieved?.memoryMb, 512.0)
