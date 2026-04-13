@@ -339,8 +339,8 @@ final class MultimodalPackageTests: XCTestCase {
     // MARK: - ArtifactResourceKind Extended Cases
 
     func testArtifactResourceKindNewCases() {
-        XCTAssertEqual(ArtifactResourceKind.config.rawValue, "config")
-        XCTAssertEqual(ArtifactResourceKind.embeddings.rawValue, "embeddings")
+        XCTAssertEqual(ArtifactResourceKind.modelConfig.rawValue, "model_config")
+        XCTAssertEqual(ArtifactResourceKind.adapter.rawValue, "adapter")
     }
 
     func testArtifactResourceKindExistingCases() {
