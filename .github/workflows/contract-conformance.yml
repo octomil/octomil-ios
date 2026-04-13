@@ -10,11 +10,12 @@ permissions:
 
 jobs:
   conformance:
-    uses: octomil/octomil-contracts/.github/workflows/sdk-conformance.yml@v1.16.0
+    uses: octomil/octomil-contracts/.github/workflows/sdk-conformance.yml@v1.16.1
     with:
       sdk: ios
-      contract-version: "1.16.0"
+      contract-version: "1.16.1"
       codegen-command: "python3 .contract/scripts/sync_generated.py --sdk ios --check --target-dir Sources/Octomil/Generated"
       test-command: "xcodebuild -scheme Octomil -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:OctomilTests/ContractConformanceTests test && python3 .contract/ci/audit-sdks.py --sdk ios --sdk-path . --out parity_report.json"
       parity-report-path: parity_report.json
       parity-score-floor: 60
+    secrets: inherit
