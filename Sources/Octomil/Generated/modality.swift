@@ -1,5 +1,8 @@
 // Auto-generated from octomil-contracts. Do not edit.
-// NOTE: The canonical Modality enum lives in StreamingInference.swift (superset).
-// This file provides OutputModality as a typealias for backward compatibility.
 
-public typealias OutputModality = Modality
+public enum Modality: String, Codable, Sendable {
+    case text = "text"
+    case audio = "audio"
+    case image = "image"
+    case video = "video"
+}
