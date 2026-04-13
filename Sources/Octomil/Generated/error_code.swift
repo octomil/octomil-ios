@@ -7,9 +7,6 @@ public enum ErrorCode: String, Codable, Sendable {
     case deviceNotRegistered = "device_not_registered"
     case tokenExpired = "token_expired"
     case deviceRevoked = "device_revoked"
-    case cloudCredentialsMissing = "cloud_credentials_missing"
-    case cloudCredentialsRevoked = "cloud_credentials_revoked"
-    case cloudProviderAuthFailed = "cloud_provider_auth_failed"
     case networkUnavailable = "network_unavailable"
     case requestTimeout = "request_timeout"
     case serverError = "server_error"
@@ -31,6 +28,9 @@ public enum ErrorCode: String, Codable, Sendable {
     case streamInterrupted = "stream_interrupted"
     case policyDenied = "policy_denied"
     case cloudFallbackDisallowed = "cloud_fallback_disallowed"
+    case cloudCredentialsMissing = "cloud_credentials_missing"
+    case cloudCredentialsRevoked = "cloud_credentials_revoked"
+    case cloudProviderAuthFailed = "cloud_provider_auth_failed"
     case maxToolRoundsExceeded = "max_tool_rounds_exceeded"
     case trainingFailed = "training_failed"
     case trainingNotSupported = "training_not_supported"
@@ -100,9 +100,6 @@ extension ErrorCode {
         case .deviceNotRegistered: return .auth
         case .tokenExpired: return .auth
         case .deviceRevoked: return .auth
-        case .cloudCredentialsMissing: return .auth
-        case .cloudCredentialsRevoked: return .auth
-        case .cloudProviderAuthFailed: return .auth
         case .networkUnavailable: return .network
         case .requestTimeout: return .network
         case .serverError: return .network
@@ -124,6 +121,9 @@ extension ErrorCode {
         case .streamInterrupted: return .runtime
         case .policyDenied: return .policy
         case .cloudFallbackDisallowed: return .policy
+        case .cloudCredentialsMissing: return .auth
+        case .cloudCredentialsRevoked: return .auth
+        case .cloudProviderAuthFailed: return .auth
         case .maxToolRoundsExceeded: return .policy
         case .trainingFailed: return .training
         case .trainingNotSupported: return .training
@@ -144,9 +144,6 @@ extension ErrorCode {
         case .deviceNotRegistered: return .never
         case .tokenExpired: return .never
         case .deviceRevoked: return .never
-        case .cloudCredentialsMissing: return .never
-        case .cloudCredentialsRevoked: return .never
-        case .cloudProviderAuthFailed: return .never
         case .networkUnavailable: return .backoffSafe
         case .requestTimeout: return .conditional
         case .serverError: return .backoffSafe
@@ -168,6 +165,9 @@ extension ErrorCode {
         case .streamInterrupted: return .immediateSafe
         case .policyDenied: return .never
         case .cloudFallbackDisallowed: return .never
+        case .cloudCredentialsMissing: return .never
+        case .cloudCredentialsRevoked: return .never
+        case .cloudProviderAuthFailed: return .never
         case .maxToolRoundsExceeded: return .never
         case .trainingFailed: return .conditional
         case .trainingNotSupported: return .never
@@ -188,9 +188,6 @@ extension ErrorCode {
         case .deviceNotRegistered: return false
         case .tokenExpired: return false
         case .deviceRevoked: return false
-        case .cloudCredentialsMissing: return false
-        case .cloudCredentialsRevoked: return false
-        case .cloudProviderAuthFailed: return false
         case .networkUnavailable: return true
         case .requestTimeout: return true
         case .serverError: return true
@@ -212,6 +209,9 @@ extension ErrorCode {
         case .streamInterrupted: return true
         case .policyDenied: return false
         case .cloudFallbackDisallowed: return false
+        case .cloudCredentialsMissing: return false
+        case .cloudCredentialsRevoked: return false
+        case .cloudProviderAuthFailed: return false
         case .maxToolRoundsExceeded: return false
         case .trainingFailed: return false
         case .trainingNotSupported: return false
@@ -232,9 +232,6 @@ extension ErrorCode {
         case .deviceNotRegistered: return .registerDevice
         case .tokenExpired: return .reauthenticate
         case .deviceRevoked: return .registerDevice
-        case .cloudCredentialsMissing: return .fixCredentials
-        case .cloudCredentialsRevoked: return .fixCredentials
-        case .cloudProviderAuthFailed: return .fixCredentials
         case .networkUnavailable: return .retryOrFallback
         case .requestTimeout: return .retryOrFallback
         case .serverError: return .retry
@@ -256,6 +253,9 @@ extension ErrorCode {
         case .streamInterrupted: return .retry
         case .policyDenied: return .checkPolicy
         case .cloudFallbackDisallowed: return .changePolicyOrFixLocal
+        case .cloudCredentialsMissing: return .fixCredentials
+        case .cloudCredentialsRevoked: return .fixCredentials
+        case .cloudProviderAuthFailed: return .fixCredentials
         case .maxToolRoundsExceeded: return .increaseLimitOrSimplify
         case .trainingFailed: return .retry
         case .trainingNotSupported: return .fixRequest

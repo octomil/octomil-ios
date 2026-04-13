@@ -1,6 +1,6 @@
 // Auto-generated from octomil-contracts. Do not edit.
 
-public enum SupportTier: String, Codable, Sendable {
+public enum EngineSupportTier: String, Codable, Sendable {
     case blessed = "blessed"
     case supported = "supported"
     case experimental = "experimental"

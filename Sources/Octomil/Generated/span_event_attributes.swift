@@ -20,6 +20,9 @@ public enum SpanEventAttribute {
     public static let octomilRuntimeInitMs = "octomil.runtime.init_ms"
     public static let octomilToolExtractionStrategy = "octomil.tool.extraction_strategy"
     public static let octomilToolRawTextPreview = "octomil.tool.raw_text_preview"
+    public static let octomilKvCacheStrategy = "octomil.kv_cache.strategy"
+    public static let octomilKvCacheQuantizationBits = "octomil.kv_cache.quantization_bits"
+    public static let octomilKvCacheBackend = "octomil.kv_cache.backend"
 
     public static let eventRequiredAttributes: [String: [String]] = [
         "first_token": ["octomil.ttft_ms"],
@@ -33,5 +36,6 @@ public enum SpanEventAttribute {
         "runtime_initialized": ["octomil.runtime.executor", "octomil.runtime.init_ms"],
         "tool_call_parse_succeeded": ["octomil.tool.name", "octomil.tool.extraction_strategy"],
         "tool_call_parse_failed": ["octomil.tool.extraction_strategy"],
+        "kv_cache_applied": ["octomil.kv_cache.strategy"],
     ]
 }
