@@ -1,8 +1,8 @@
 // Auto-generated from octomil-contracts. Do not edit.
 
-public enum OutputModality: String, Codable, Sendable {
+public enum Modality: String, Codable, Sendable {
     case text = "text"
-    case image = "image"
     case audio = "audio"
+    case image = "image"
     case video = "video"
 }

@@ -1,6 +1,6 @@
 // Auto-generated telemetry event names.
 
-public enum ContractTelemetryEvent {
+public enum TelemetryEvent {
     public static let inferenceStarted = "inference.started"
     public static let inferenceCompleted = "inference.completed"
     public static let inferenceFailed = "inference.failed"

@@ -12,4 +12,6 @@ public enum Scope: String, Codable, Sendable {
     case rolloutsWrite = "rollouts:write"
     case benchmarksWrite = "benchmarks:write"
     case evalsWrite = "evals:write"
+    case cloudInference = "cloud:inference"
+    case cloudCredentials = "cloud:credentials"
 }
