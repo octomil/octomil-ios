@@ -1,3 +1,4 @@
+#if canImport(sherpa_onnx)
 import Foundation
 import Octomil
 import sherpa_onnx
@@ -241,3 +242,4 @@ enum SherpaError: Error, LocalizedError {
         }
     }
 }
+#endif

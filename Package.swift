@@ -39,7 +39,7 @@ let package = Package(
             dependencies: [
                 "Octomil",
                 "OctomilRuntimeLlama",
-                "OctomilRuntimeSherpa",
+                .target(name: "OctomilRuntimeSherpa", condition: .when(platforms: [.iOS])),
                 "OctomilRuntimeWhisper",
                 "OctomilMLX",
                 "OctomilTimeSeries",
@@ -66,7 +66,11 @@ let package = Package(
         ),
         .target(
             name: "OctomilRuntimeSherpa",
-            dependencies: ["Octomil", "sherpa_onnx", "onnxruntime"],
+            dependencies: [
+                "Octomil",
+                .target(name: "sherpa_onnx", condition: .when(platforms: [.iOS])),
+                .target(name: "onnxruntime", condition: .when(platforms: [.iOS])),
+            ],
             path: "Sources/OctomilRuntimeSherpa"
         ),
         .target(

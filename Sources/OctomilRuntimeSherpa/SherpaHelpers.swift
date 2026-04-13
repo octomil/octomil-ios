@@ -1,3 +1,4 @@
+#if canImport(sherpa_onnx)
 import sherpa_onnx
 
 /// Empty string pointer for sherpa-onnx config fields.
@@ -64,3 +65,4 @@ func sherpaOnnxOnlineRecognizerConfig(
         hr: SherpaOnnxHomophoneReplacerConfig(dict_dir: empty, lexicon: empty, rule_fsts: empty)
     )
 }
+#endif

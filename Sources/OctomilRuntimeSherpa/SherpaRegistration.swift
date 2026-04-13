@@ -1,3 +1,4 @@
+#if canImport(sherpa_onnx)
 import Foundation
 import Octomil
 
@@ -27,3 +28,4 @@ extension EngineRegistry {
         }
     }
 }
+#endif
