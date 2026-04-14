@@ -1,7 +1,8 @@
 import Foundation
-import XCTest
 @testable import Octomil
+import XCTest
 
+// swiftlint:disable type_body_length
 /// End-to-end smoke tests for runtime planner routing policy behavior.
 ///
 /// These tests exercise the full ``RuntimePlanner`` resolution path — from
@@ -15,7 +16,6 @@ import XCTest
 /// - Cloud-only policy must never attempt local resolution
 /// - Benchmark cache is only used after a real benchmark write
 final class RuntimePlannerE2ETests: XCTestCase {
-
     private var tempDir: URL!
     private var store: RuntimePlannerStore!
 
@@ -59,6 +59,21 @@ final class RuntimePlannerE2ETests: XCTestCase {
             available: true,
             accelerator: "metal"
         )
+    }
+
+    private func planCacheKey(
+        model: String,
+        capability: String,
+        policy: String
+    ) -> String {
+        RuntimePlannerStore.makeCacheKey([
+            "model": model,
+            "capability": capability,
+            "policy": policy,
+            "sdk_version": OctomilVersion.current,
+            "platform": DeviceRuntimeProfileCollector.platformName(),
+            "arch": DeviceRuntimeProfileCollector.cpuArchitecture(),
+        ])
     }
 
     // MARK: - Test 1: private policy → local engine, no cloud
@@ -327,6 +342,49 @@ final class RuntimePlannerE2ETests: XCTestCase {
         )
     }
 
+    /// Cloud-only must also ignore stale cached plans that contain local
+    /// candidates. Client policy enforcement cannot depend solely on the server.
+    func testCloudOnlyIgnoresStaleCachedLocalPlan() async {
+        let planner = RuntimePlanner(store: store, client: nil)
+        let model = "stale-cloud-only-model"
+        let policy = "cloud_only"
+        let plan = RuntimePlanResponse(
+            model: model,
+            capability: "text",
+            policy: policy,
+            candidates: [
+                RuntimeCandidatePlan(
+                    locality: .local,
+                    priority: 1,
+                    confidence: 0.99,
+                    reason: "stale local plan",
+                    engine: "llama.cpp",
+                    artifact: RuntimeArtifactPlan(modelId: model)
+                ),
+            ]
+        )
+        store.putPlan(
+            cacheKey: planCacheKey(model: model, capability: "text", policy: policy),
+            model: model,
+            capability: "text",
+            policy: policy,
+            plan: plan,
+            source: "test"
+        )
+
+        let selection = await planner.resolve(
+            model: model,
+            capability: "text",
+            routingPolicy: policy,
+            allowNetwork: false,
+            additionalRuntimes: [llamaCppEvidence(model: model)]
+        )
+
+        XCTAssertEqual(selection.locality, .cloud)
+        XCTAssertNil(selection.engine)
+        XCTAssertEqual(selection.source, "fallback")
+    }
+
     // MARK: - Test 5: Benchmark cache lifecycle
 
     /// Resolution without a prior benchmark write must NOT use benchmark cache.
@@ -512,4 +570,90 @@ final class RuntimePlannerE2ETests: XCTestCase {
             "Engine must be nil when no local match exists"
         )
     }
+
+    /// A cached/server local candidate that names an installed framework but
+    /// has neither model evidence nor artifact recommendation is not sufficient
+    /// proof that the requested model can run locally.
+    func testCachedLocalPlanWithoutEvidenceOrArtifactDoesNotUseFrameworkOnlyRuntime() async {
+        let planner = RuntimePlanner(store: store, client: nil)
+        let model = "plan-without-proof"
+        let policy = "local_first"
+        let plan = RuntimePlanResponse(
+            model: model,
+            capability: "text",
+            policy: policy,
+            candidates: [
+                RuntimeCandidatePlan(
+                    locality: .local,
+                    priority: 1,
+                    confidence: 0.95,
+                    reason: "bare framework candidate",
+                    engine: "mlx"
+                ),
+            ]
+        )
+        store.putPlan(
+            cacheKey: planCacheKey(model: model, capability: "text", policy: policy),
+            model: model,
+            capability: "text",
+            policy: policy,
+            plan: plan,
+            source: "test"
+        )
+
+        let selection = await planner.resolve(
+            model: model,
+            capability: "text",
+            routingPolicy: policy,
+            allowNetwork: false,
+            additionalRuntimes: [bareRuntime(engine: "mlx")]
+        )
+
+        XCTAssertEqual(selection.locality, .cloud)
+        XCTAssertEqual(selection.source, "fallback")
+        XCTAssertNil(selection.engine)
+    }
+
+    /// Private policy must not trust a cached plan that contains a cloud
+    /// candidate, even if that plan was produced by an older or buggy server.
+    func testPrivatePolicyIgnoresCachedCloudPlan() async {
+        let planner = RuntimePlanner(store: store, client: nil)
+        let model = "private-stale-cloud"
+        let policy = "private"
+        let plan = RuntimePlanResponse(
+            model: model,
+            capability: "text",
+            policy: policy,
+            candidates: [
+                RuntimeCandidatePlan(
+                    locality: .cloud,
+                    priority: 1,
+                    confidence: 0.99,
+                    reason: "stale cloud plan",
+                    engine: "cloud"
+                ),
+            ]
+        )
+        store.putPlan(
+            cacheKey: planCacheKey(model: model, capability: "text", policy: policy),
+            model: model,
+            capability: "text",
+            policy: policy,
+            plan: plan,
+            source: "test"
+        )
+
+        let selection = await planner.resolve(
+            model: model,
+            capability: "text",
+            routingPolicy: policy,
+            allowNetwork: false
+        )
+
+        XCTAssertEqual(selection.locality, .local)
+        XCTAssertNil(selection.engine)
+        XCTAssertEqual(selection.source, "fallback")
+    }
 }
+
+// swiftlint:enable type_body_length

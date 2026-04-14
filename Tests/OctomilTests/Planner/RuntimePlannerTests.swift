@@ -1,9 +1,8 @@
 import Foundation
-import XCTest
 @testable import Octomil
+import XCTest
 
 final class RuntimePlannerTests: XCTestCase {
-
     private var tempDir: URL!
     private var store: RuntimePlannerStore!
 
@@ -172,7 +171,8 @@ final class RuntimePlannerTests: XCTestCase {
                     priority: 1,
                     confidence: 0.95,
                     reason: "Cached server recommendation",
-                    engine: "mlx-lm" // An engine we report as installed below
+                    engine: "mlx-lm", // An engine we report as installed below
+                    artifact: RuntimeArtifactPlan(modelId: "cached-model")
                 ),
             ]
         )
@@ -263,7 +263,8 @@ final class RuntimePlannerTests: XCTestCase {
                     priority: 2,
                     confidence: 0.8,
                     reason: "MLX fallback",
-                    engine: "mlx-lm"
+                    engine: "mlx-lm",
+                    artifact: RuntimeArtifactPlan(modelId: "multi-engine")
                 ),
             ]
         )
@@ -322,7 +323,8 @@ final class RuntimePlannerTests: XCTestCase {
                     priority: 10,
                     confidence: 0.5,
                     reason: "Slow but works",
-                    engine: "mlx-lm"
+                    engine: "mlx-lm",
+                    artifact: RuntimeArtifactPlan(modelId: "fallback-test")
                 ),
             ]
         )
@@ -408,7 +410,7 @@ final class RuntimePlannerTests: XCTestCase {
 
         // This should complete immediately without any network calls
         let start = Date()
-        let _ = await planner.resolve(
+        _ = await planner.resolve(
             model: "any-model",
             capability: "text",
             allowNetwork: false
