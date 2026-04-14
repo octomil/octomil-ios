@@ -12,15 +12,21 @@ final class SherpaStreamingEngine: StreamingInferenceEngine, @unchecked Sendable
 
     private let modelPath: URL
 
+    /// Optional model identifier for benchmark reporting.
+    var modelId: String?
+
     init(modelPath: URL) {
         self.modelPath = modelPath
     }
 
     func generate(input: Any, modality: Modality, config _: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let modelDir = modelPath.path
+        let reportModelId = self.modelId
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                let inferenceStart = CFAbsoluteTimeGetCurrent()
+
                 do {
                     let samples = try Self.extractSamples(from: input)
                     let maxAmp = samples.map { abs($0) }.max() ?? 0
@@ -123,6 +129,24 @@ final class SherpaStreamingEngine: StreamingInferenceEngine, @unchecked Sendable
                                 continuation.yield(inferenceChunk)
                             }
                         }
+                    }
+
+                    // Record real benchmark after successful transcription
+                    if let modelId = reportModelId, chunkIndex > 0 {
+                        let audioDurationSeconds = Double(samples.count) / 16000.0
+                        let wallClockSeconds = CFAbsoluteTimeGetCurrent() - inferenceStart
+                        let throughput = wallClockSeconds > 0
+                            ? audioDurationSeconds / wallClockSeconds
+                            : 0
+
+                        RuntimeBenchmarkReporter.shared.report(
+                            model: modelId,
+                            capability: "audio_transcription",
+                            engineName: "whisper.cpp",
+                            tokensPerSecond: throughput,
+                            ttftMs: wallClockSeconds * 1000,
+                            memoryMb: 0
+                        )
                     }
 
                     continuation.finish()

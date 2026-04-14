@@ -48,6 +48,10 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - StreamingInferenceEngine
 
+    /// Optional model identifier for benchmark reporting.
+    /// Set by the deploy path so benchmarks are attributed to the correct model.
+    public var modelId: String?
+
     public func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
@@ -64,9 +68,13 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
         let repetitionPenalty = config.repetitionPenalty.map { Float($0) }
         let container = self.modelContainer
         let cacheEnabled = self.cacheEnabled
+        let reportModelId = self.modelId
 
         return AsyncThrowingStream { continuation in
             let task = Task { [weak self] in
+                let generationStart = CFAbsoluteTimeGetCurrent()
+                var firstTokenTime: CFAbsoluteTime?
+
                 do {
                     // Prepare input and get the generation stream inside container.perform.
                     // Also capture the cache array so we can store it for next call.
@@ -103,6 +111,10 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
 
                         switch generation {
                         case .chunk(let text):
+                            if firstTokenTime == nil {
+                                firstTokenTime = CFAbsoluteTimeGetCurrent()
+                            }
+
                             let data = Data(text.utf8)
                             let chunk = InferenceChunk(
                                 index: index,
@@ -124,6 +136,27 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
                         self?.cachePool.storeCache(
                             promptTokenIds: promptTokenIds,
                             kvCaches: kvCaches
+                        )
+                    }
+
+                    // Record real benchmark after successful generation
+                    if let modelId = reportModelId, index > 0 {
+                        let totalDuration = CFAbsoluteTimeGetCurrent() - generationStart
+                        let ttftMs = firstTokenTime.map {
+                            ($0 - generationStart) * 1000
+                        } ?? 0
+                        let tokensPerSecond = totalDuration > 0
+                            ? Double(index) / totalDuration
+                            : 0
+                        let memoryMb = Double(ProcessInfo.processInfo.physicalMemory) / (1024 * 1024)
+
+                        RuntimeBenchmarkReporter.shared.report(
+                            model: modelId,
+                            capability: "text",
+                            engineName: "mlx-lm",
+                            tokensPerSecond: tokensPerSecond,
+                            ttftMs: ttftMs,
+                            memoryMb: min(memoryMb, 8192) // Cap at reasonable value
                         )
                     }
 

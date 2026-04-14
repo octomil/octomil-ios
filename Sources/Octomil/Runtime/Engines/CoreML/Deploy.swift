@@ -320,6 +320,38 @@ extension Deploy {
     }
 }
 
+// MARK: - CoreML Runtime Evidence
+
+extension InstalledRuntime {
+
+    /// Create runtime evidence for a locally-deployed CoreML model.
+    ///
+    /// Call this only when a concrete CoreML artifact (.mlmodelc, .mlmodel,
+    /// .mlpackage) exists on disk. Framework availability alone is not
+    /// sufficient evidence.
+    ///
+    /// - Parameters:
+    ///   - model: Model identifier (e.g. "my-classifier", "whisper-tiny").
+    ///   - capability: The capability this model provides (e.g. "text", "classification",
+    ///     "audio_transcription"). Should match the manifest capability when available.
+    ///   - artifactDigest: SHA-256 hex digest of the model file, if known.
+    /// - Returns: An ``InstalledRuntime`` with model evidence metadata.
+    public static func coreMLEvidence(
+        model: String,
+        capability: String,
+        artifactDigest: String? = nil
+    ) -> InstalledRuntime {
+        modelCapable(
+            engine: "coreml",
+            model: model,
+            capabilities: [capability],
+            accelerator: "ane",
+            artifactDigest: artifactDigest,
+            artifactFormat: "coreml"
+        )
+    }
+}
+
 /// Errors from the deploy API.
 public enum DeployError: Error, LocalizedError {
     case unsupportedFormat(String)
