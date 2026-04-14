@@ -12,6 +12,10 @@ final class LlamaCppEngine: StreamingInferenceEngine, @unchecked Sendable {
     private let maxTokens: Int
     private let temperature: Float
 
+    /// Optional model identifier for benchmark reporting.
+    /// Set by the deploy path so benchmarks are attributed to the correct model.
+    var modelId: String?
+
     init(modelPath: URL, maxTokens: Int = 2048, temperature: Float = 0.7) {
         self.modelPath = modelPath
         self.maxTokens = maxTokens
@@ -32,9 +36,13 @@ final class LlamaCppEngine: StreamingInferenceEngine, @unchecked Sendable {
         let maxTokens = config.maxTokens
         let temperature = Float(config.temperature)
         let repetitionPenalty = config.repetitionPenalty.map { Float($0) }
+        let reportModelId = self.modelId
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                let generationStart = CFAbsoluteTimeGetCurrent()
+                var firstTokenTime: CFAbsoluteTime?
+
                 do {
                     let ctx = try LlamaContext.create(path: path, temperature: temperature, repetitionPenalty: repetitionPenalty)
                     defer { ctx.destroy() }
@@ -67,6 +75,10 @@ final class LlamaCppEngine: StreamingInferenceEngine, @unchecked Sendable {
                         }
 
                         if let text = ctx.processToken(tokenId) {
+                            if firstTokenTime == nil {
+                                firstTokenTime = CFAbsoluteTimeGetCurrent()
+                            }
+
                             let chunk = InferenceChunk(
                                 index: index,
                                 data: Data(text.utf8),
@@ -86,6 +98,26 @@ final class LlamaCppEngine: StreamingInferenceEngine, @unchecked Sendable {
                         if llama_decode(ctx.context, ctx.batch) != 0 {
                             throw LlamaCppError.decodeFailed
                         }
+                    }
+
+                    // Record real benchmark after successful generation
+                    if let modelId = reportModelId, index > 0 {
+                        let totalDuration = CFAbsoluteTimeGetCurrent() - generationStart
+                        let ttftMs = firstTokenTime.map {
+                            ($0 - generationStart) * 1000
+                        } ?? 0
+                        let tokensPerSecond = totalDuration > 0
+                            ? Double(index) / totalDuration
+                            : 0
+
+                        RuntimeBenchmarkReporter.shared.report(
+                            model: modelId,
+                            capability: "text",
+                            engineName: "llama.cpp",
+                            tokensPerSecond: tokensPerSecond,
+                            ttftMs: ttftMs,
+                            memoryMb: 0 // llama.cpp does not expose peak memory
+                        )
                     }
 
                     continuation.finish()
