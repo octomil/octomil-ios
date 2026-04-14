@@ -1,6 +1,17 @@
-import Foundation
 import CommonCrypto
+import Foundation
 import os.log
+
+private struct PlanSelectionContext {
+    let installedEngines: Set<String>
+    let installedRuntimes: [InstalledRuntime]
+    let model: String
+    let capability: String
+    let routingPolicy: String
+    let source: String
+    let fallbackCandidates: [RuntimeCandidatePlan]
+    let fallbackPrefix: String?
+}
 
 /// Resolves the best engine/locality for a given model and capability.
 ///
@@ -21,7 +32,6 @@ import os.log
 /// - Private policy skips server plan fetch and telemetry upload
 /// - Cloud-only policy skips local benchmarking
 public final class RuntimePlanner: @unchecked Sendable {
-
     // MARK: - Properties
 
     private let store: RuntimePlannerStore
@@ -69,9 +79,20 @@ public final class RuntimePlanner: @unchecked Sendable {
         allowNetwork: Bool = true,
         additionalRuntimes: [InstalledRuntime] = []
     ) async -> RuntimeSelection {
-
         // Step 1: Collect device profile
         let device = DeviceRuntimeProfileCollector.collect(additionalRuntimes: additionalRuntimes)
+        let isPrivate = routingPolicy == "private"
+
+        // Cloud-only is an exact policy: never let stale local plan or benchmark
+        // cache entries route this request back to on-device execution.
+        if routingPolicy == "cloud_only" {
+            return RuntimeSelection(
+                locality: .cloud,
+                engine: nil,
+                source: "fallback",
+                reason: "cloud_only policy -- no local engines attempted"
+            )
+        }
 
         // Step 2: Check local plan cache
         let cacheKey = RuntimePlannerStore.makeCacheKey([
@@ -85,14 +106,18 @@ public final class RuntimePlanner: @unchecked Sendable {
 
         if let cachedPlan = store.getPlan(cacheKey: cacheKey) {
             logger.debug("Using cached plan for \(model)/\(capability)")
-            if let selection = resolveFromServerPlan(cachedPlan, device: device, source: "cache") {
+            if let selection = resolveFromServerPlan(
+                cachedPlan,
+                device: device,
+                source: "cache",
+                routingPolicy: routingPolicy
+            ) {
                 return selection
             }
             logger.debug("Cached plan had no viable candidates; continuing resolution")
         }
 
         // Step 3: Fetch server plan if allowed
-        let isPrivate = routingPolicy == "private"
         var serverPlan: RuntimePlanResponse?
 
         if allowNetwork && client != nil && !isPrivate {
@@ -120,7 +145,12 @@ public final class RuntimePlanner: @unchecked Sendable {
 
         // Step 4: Validate server plan against installed runtimes
         if let plan = serverPlan {
-            if let selection = resolveFromServerPlan(plan, device: device, source: "server_plan") {
+            if let selection = resolveFromServerPlan(
+                plan,
+                device: device,
+                source: "server_plan",
+                routingPolicy: routingPolicy
+            ) {
                 return selection
             }
         }
@@ -144,59 +174,84 @@ public final class RuntimePlanner: @unchecked Sendable {
     private func resolveFromServerPlan(
         _ plan: RuntimePlanResponse,
         device: DeviceRuntimeProfile,
-        source: String
+        source: String,
+        routingPolicy: String
     ) -> RuntimeSelection? {
-        let installedEngines = Set(
-            device.installedRuntimes
-                .filter { $0.available }
-                .map { RuntimeEngineID.canonical($0.engine) }
+        let installedRuntimes = device.installedRuntimes.filter { $0.available }
+        let installedEngines = Set(installedRuntimes.map { RuntimeEngineID.canonical($0.engine) })
+        let primaryContext = PlanSelectionContext(
+            installedEngines: installedEngines,
+            installedRuntimes: installedRuntimes,
+            model: plan.model,
+            capability: plan.capability,
+            routingPolicy: routingPolicy,
+            source: source,
+            fallbackCandidates: plan.fallbackCandidates,
+            fallbackPrefix: nil
         )
 
         if let selection = selectCandidate(
             from: plan.candidates,
-            installedEngines: installedEngines,
-            source: source,
-            fallbackCandidates: plan.fallbackCandidates,
-            fallbackPrefix: nil
+            context: primaryContext
         ) {
             return selection
         }
 
-        return selectCandidate(
-            from: plan.fallbackCandidates,
+        let fallbackContext = PlanSelectionContext(
             installedEngines: installedEngines,
+            installedRuntimes: installedRuntimes,
+            model: plan.model,
+            capability: plan.capability,
+            routingPolicy: routingPolicy,
             source: source,
             fallbackCandidates: [],
             fallbackPrefix: "fallback: "
+        )
+
+        return selectCandidate(
+            from: plan.fallbackCandidates,
+            context: fallbackContext
         )
     }
 
     private func selectCandidate(
         from candidates: [RuntimeCandidatePlan],
-        installedEngines: Set<String>,
-        source: String,
-        fallbackCandidates: [RuntimeCandidatePlan],
-        fallbackPrefix: String?
+        context: PlanSelectionContext
     ) -> RuntimeSelection? {
         for candidate in candidates {
+            guard candidateAllowedByPolicy(candidate, routingPolicy: context.routingPolicy) else {
+                continue
+            }
+
             switch candidate.locality {
             case .local:
                 let engine = RuntimeEngineID.canonical(candidate.engine)
                 if let engine {
-                    if !installedEngines.contains(engine) {
+                    if !context.installedEngines.contains(engine) {
                         continue // Skip engines we don't have
                     }
-                } else if installedEngines.isEmpty {
+                } else if context.installedEngines.isEmpty {
                     continue // "any local" still requires at least one runtime
                 }
+
+                guard localCandidateHasProof(
+                    candidate,
+                    engine: engine,
+                    installedRuntimes: context.installedRuntimes,
+                    model: context.model,
+                    capability: context.capability
+                ) else {
+                    continue
+                }
+
                 return RuntimeSelection(
                     locality: .local,
                     engine: engine,
                     artifact: candidate.artifact,
                     benchmarkRan: false,
-                    source: source,
-                    fallbackCandidates: fallbackCandidates,
-                    reason: "\(fallbackPrefix ?? "")\(candidate.reason)"
+                    source: context.source,
+                    fallbackCandidates: context.fallbackCandidates,
+                    reason: "\(context.fallbackPrefix ?? "")\(candidate.reason)"
                 )
             case .cloud:
                 return RuntimeSelection(
@@ -204,14 +259,45 @@ public final class RuntimePlanner: @unchecked Sendable {
                     engine: RuntimeEngineID.canonical(candidate.engine),
                     artifact: candidate.artifact,
                     benchmarkRan: false,
-                    source: source,
-                    fallbackCandidates: fallbackCandidates,
-                    reason: "\(fallbackPrefix ?? "")\(candidate.reason)"
+                    source: context.source,
+                    fallbackCandidates: context.fallbackCandidates,
+                    reason: "\(context.fallbackPrefix ?? "")\(candidate.reason)"
                 )
             }
         }
 
         return nil
+    }
+
+    private func candidateAllowedByPolicy(
+        _ candidate: RuntimeCandidatePlan,
+        routingPolicy: String
+    ) -> Bool {
+        if (routingPolicy == "private" || routingPolicy == "local_only") && candidate.locality == .cloud {
+            return false
+        }
+        if routingPolicy == "cloud_only" && candidate.locality == .local {
+            return false
+        }
+        return true
+    }
+
+    private func localCandidateHasProof(
+        _ candidate: RuntimeCandidatePlan,
+        engine: String?,
+        installedRuntimes: [InstalledRuntime],
+        model: String,
+        capability: String
+    ) -> Bool {
+        if let artifact = candidate.artifact, artifact.modelId.lowercased() == model.lowercased() {
+            return true
+        }
+
+        return installedRuntimes.contains { runtime in
+            let runtimeEngine = RuntimeEngineID.canonical(runtime.engine)
+            return (engine == nil || runtimeEngine == engine)
+                && supportsLocalDefault(runtime, model: model, capability: capability)
+        }
     }
 
     // MARK: - Local Resolution
