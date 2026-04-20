@@ -732,17 +732,12 @@ final class RuntimePlannerParityTests: XCTestCase {
     // MARK: - Contract Fixture: RuntimeDefaultsResponse
 
     func testDecodeContractFixtureRuntimeDefaults() throws {
-        // Decode the actual contract fixture from octomil-contracts.
-        // This ensures the iOS struct stays aligned with the canonical JSON shape.
+        // Decode a vendored copy of the contract fixture (originally from
+        // octomil-contracts/fixtures/runtime_planner/runtime_defaults.json).
+        // Vendored into the test bundle so CI does not need a sibling checkout.
         let fixturePath = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // Planner/
-            .deletingLastPathComponent() // OctomilTests/
-            .deletingLastPathComponent() // Tests/
-            .deletingLastPathComponent() // octomil-ios/
-            .deletingLastPathComponent() // Octomil/
-            .appendingPathComponent("octomil-contracts")
-            .appendingPathComponent("fixtures")
-            .appendingPathComponent("runtime_planner")
+            .appendingPathComponent("Fixtures")
             .appendingPathComponent("runtime_defaults.json")
 
         let fixtureData = try Data(contentsOf: fixturePath)
