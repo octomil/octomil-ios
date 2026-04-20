@@ -417,11 +417,32 @@ public struct RuntimeSelection: Sendable, Equatable {
     ///
     /// Maps the internal selection state to the canonical contract-backed
     /// nested ``RouteMetadata`` shape shared across all SDKs.
+    ///
+    /// The contract allows only three planner source values:
+    /// - `"server"` — live plan from the server planner API
+    /// - `"cache"` — cached plan reused within TTL
+    /// - `"offline"` — synthetic plan when server is unreachable
+    ///
+    /// Internal source strings are normalized as follows:
+    /// - `"server_plan"` → `"server"`
+    /// - `"cache"` → `"cache"`
+    /// - `"local_default"`, `"fallback"`, `"empty"`, `""` → `"offline"`
     public func routeMetadata() -> RouteMetadata {
         let isFallback = source == "fallback" || reason.hasPrefix("fallback")
         let localityString = locality == .local ? "local" : "cloud"
         let modeString = locality == .local ? "sdk_runtime" : "hosted_gateway"
-        let plannerSourceString = source.isEmpty ? "offline" : source
+
+        // Normalize internal source to contract enum: server | cache | offline
+        let plannerSourceString: String
+        switch source {
+        case "server_plan":
+            plannerSourceString = "server"
+        case "cache":
+            plannerSourceString = "cache"
+        default:
+            // local_default, fallback, empty, or any unknown value → offline
+            plannerSourceString = "offline"
+        }
 
         let execution = RouteExecution(
             locality: localityString,

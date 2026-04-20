@@ -171,18 +171,27 @@ public actor RuntimePlannerClient {
     // MARK: - Defaults
 
     /// Response from `GET /api/v2/runtime/defaults`.
+    ///
+    /// Matches the contract schema at
+    /// `octomil-contracts/schemas/runtime_planner/runtime_defaults_response.schema.json`.
+    /// Required fields: `default_engines`, `supported_capabilities`,
+    /// `supported_policies`, `plan_ttl_seconds`.
     public struct RuntimeDefaultsResponse: Codable, Sendable {
-        /// Default routing policy.
-        public let defaultPolicy: String
-        /// Default plan TTL in seconds.
-        public let defaultPlanTtlSeconds: Int
-        /// Supported routing policies.
+        /// Mapping of capability to ordered list of default engine identifiers.
+        /// Example: `{"chat": ["mlx-lm", "llama.cpp", "ollama"]}`.
+        public let defaultEngines: [String: [String]]
+        /// Capabilities the planner supports (e.g. "chat", "embeddings", "transcription").
+        public let supportedCapabilities: [String]
+        /// Routing policies the server accepts (e.g. "private", "local_first").
         public let supportedPolicies: [String]
+        /// Default plan TTL in seconds. Clients should cache plans for this duration.
+        public let planTtlSeconds: Int
 
         enum CodingKeys: String, CodingKey {
-            case defaultPolicy = "default_policy"
-            case defaultPlanTtlSeconds = "default_plan_ttl_seconds"
+            case defaultEngines = "default_engines"
+            case supportedCapabilities = "supported_capabilities"
             case supportedPolicies = "supported_policies"
+            case planTtlSeconds = "plan_ttl_seconds"
         }
     }
 

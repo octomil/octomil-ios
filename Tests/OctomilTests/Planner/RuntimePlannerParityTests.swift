@@ -152,7 +152,8 @@ final class RuntimePlannerParityTests: XCTestCase {
         XCTAssertEqual(metadata.model.requested.ref, "gemma-2b")
         XCTAssertEqual(metadata.model.requested.kind, "model")
         XCTAssertEqual(metadata.model.requested.capability, "text")
-        XCTAssertEqual(metadata.planner.source, "server_plan")
+        XCTAssertEqual(metadata.planner.source, "server",
+                       "Internal 'server_plan' must normalize to contract 'server'")
         XCTAssertFalse(metadata.fallback.used)
         XCTAssertEqual(metadata.reason.message, "best for this device")
         XCTAssertEqual(metadata.reason.code, "server_plan")
@@ -173,7 +174,8 @@ final class RuntimePlannerParityTests: XCTestCase {
         XCTAssertEqual(metadata.execution?.locality, "cloud")
         XCTAssertEqual(metadata.execution?.mode, "hosted_gateway")
         XCTAssertNil(metadata.execution?.engine)
-        XCTAssertEqual(metadata.planner.source, "fallback")
+        XCTAssertEqual(metadata.planner.source, "offline",
+                       "Internal 'fallback' must normalize to contract 'offline'")
         XCTAssertTrue(metadata.fallback.used)
     }
 
@@ -652,9 +654,13 @@ final class RuntimePlannerParityTests: XCTestCase {
     func testDefaultsResponseDecodable() throws {
         let json = """
         {
-            "default_policy": "local_first",
-            "default_plan_ttl_seconds": 604800,
-            "supported_policies": ["private", "local_only", "local_first", "cloud_first", "cloud_only", "performance_first"]
+            "default_engines": {
+                "chat": ["mlx-lm", "llama.cpp", "ollama"],
+                "embeddings": ["onnxruntime"]
+            },
+            "supported_capabilities": ["chat", "embeddings", "transcription"],
+            "supported_policies": ["private", "local_only", "local_first", "cloud_first", "cloud_only", "performance_first"],
+            "plan_ttl_seconds": 604800
         }
         """.data(using: .utf8)!
 
@@ -664,12 +670,14 @@ final class RuntimePlannerParityTests: XCTestCase {
             from: json
         )
 
-        XCTAssertEqual(response.defaultPolicy, "local_first")
-        XCTAssertEqual(response.defaultPlanTtlSeconds, 604_800)
+        XCTAssertEqual(response.defaultEngines["chat"], ["mlx-lm", "llama.cpp", "ollama"])
+        XCTAssertEqual(response.defaultEngines["embeddings"], ["onnxruntime"])
+        XCTAssertEqual(response.supportedCapabilities, ["chat", "embeddings", "transcription"])
         XCTAssertEqual(response.supportedPolicies.count, 6)
         XCTAssertTrue(response.supportedPolicies.contains("private"))
         XCTAssertTrue(response.supportedPolicies.contains("performance_first"))
         XCTAssertFalse(response.supportedPolicies.contains("quality_first"))
+        XCTAssertEqual(response.planTtlSeconds, 604_800)
     }
 
     // MARK: - Engine ID Canonicalization (Cross-SDK Parity)
@@ -719,5 +727,113 @@ final class RuntimePlannerParityTests: XCTestCase {
 
         XCTAssertEqual(String(data: localData, encoding: .utf8), "\"local\"")
         XCTAssertEqual(String(data: cloudData, encoding: .utf8), "\"cloud\"")
+    }
+
+    // MARK: - Contract Fixture: RuntimeDefaultsResponse
+
+    func testDecodeContractFixtureRuntimeDefaults() throws {
+        // Decode the actual contract fixture from octomil-contracts.
+        // This ensures the iOS struct stays aligned with the canonical JSON shape.
+        let fixturePath = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // Planner/
+            .deletingLastPathComponent() // OctomilTests/
+            .deletingLastPathComponent() // Tests/
+            .deletingLastPathComponent() // octomil-ios/
+            .deletingLastPathComponent() // Octomil/
+            .appendingPathComponent("octomil-contracts")
+            .appendingPathComponent("fixtures")
+            .appendingPathComponent("runtime_planner")
+            .appendingPathComponent("runtime_defaults.json")
+
+        let fixtureData = try Data(contentsOf: fixturePath)
+        // The fixture wraps the response under a "response" key.
+        let wrapper = try JSONSerialization.jsonObject(with: fixtureData) as! [String: Any]
+        let responseDict = wrapper["response"] as! [String: Any]
+        let responseData = try JSONSerialization.data(withJSONObject: responseDict)
+
+        let decoder = JSONDecoder()
+        let response = try decoder.decode(
+            RuntimePlannerClient.RuntimeDefaultsResponse.self,
+            from: responseData
+        )
+
+        // Validate all required contract fields decode correctly.
+        XCTAssertFalse(response.defaultEngines.isEmpty,
+                       "default_engines must not be empty")
+        XCTAssertEqual(response.defaultEngines["chat"], ["mlx-lm", "llama.cpp", "ollama"])
+        XCTAssertEqual(response.defaultEngines["responses"], ["mlx-lm", "llama.cpp", "ollama"])
+        XCTAssertEqual(response.defaultEngines["embeddings"], ["onnxruntime"])
+        XCTAssertEqual(response.defaultEngines["transcription"], ["whisper.cpp"])
+        XCTAssertEqual(response.defaultEngines["audio"], ["whisper.cpp"])
+
+        XCTAssertEqual(response.supportedCapabilities,
+                       ["chat", "responses", "embeddings", "transcription", "audio"])
+
+        XCTAssertEqual(response.supportedPolicies,
+                       ["private", "local_only", "local_first", "cloud_first",
+                        "cloud_only", "performance_first", "auto"])
+
+        XCTAssertEqual(response.planTtlSeconds, 604_800)
+    }
+
+    // MARK: - Planner Source Normalization (Contract Enum)
+
+    func testPlannerSourceNormalizationServerPlan() {
+        let selection = RuntimeSelection(
+            locality: .local, engine: "mlx-lm", source: "server_plan",
+            model: "gemma-2b", capability: "chat"
+        )
+        XCTAssertEqual(selection.routeMetadata().planner.source, "server",
+                       "'server_plan' must normalize to 'server'")
+    }
+
+    func testPlannerSourceNormalizationCache() {
+        let selection = RuntimeSelection(
+            locality: .local, engine: "mlx-lm", source: "cache",
+            model: "gemma-2b", capability: "chat"
+        )
+        XCTAssertEqual(selection.routeMetadata().planner.source, "cache",
+                       "'cache' must pass through as 'cache'")
+    }
+
+    func testPlannerSourceNormalizationLocalDefault() {
+        let selection = RuntimeSelection(
+            locality: .local, engine: "coreml", source: "local_default",
+            model: "gemma-2b", capability: "chat"
+        )
+        XCTAssertEqual(selection.routeMetadata().planner.source, "offline",
+                       "'local_default' must normalize to 'offline'")
+    }
+
+    func testPlannerSourceNormalizationFallback() {
+        let selection = RuntimeSelection(
+            locality: .cloud, source: "fallback",
+            model: "llama-8b", capability: "chat"
+        )
+        XCTAssertEqual(selection.routeMetadata().planner.source, "offline",
+                       "'fallback' must normalize to 'offline'")
+    }
+
+    func testPlannerSourceNormalizationEmpty() {
+        let selection = RuntimeSelection(locality: .local, source: "",
+                                         model: "gemma-2b", capability: "chat")
+        XCTAssertEqual(selection.routeMetadata().planner.source, "offline",
+                       "Empty source must normalize to 'offline'")
+    }
+
+    func testPlannerSourceOnlyProducesContractValues() {
+        // Exhaustive check: every internal source string must map to one of
+        // the three contract-allowed values.
+        let contractAllowed: Set<String> = ["server", "cache", "offline"]
+        let internalSources = ["server_plan", "cache", "local_default", "fallback", "empty", ""]
+
+        for src in internalSources {
+            let selection = RuntimeSelection(
+                locality: .local, source: src, model: "test", capability: "chat"
+            )
+            let produced = selection.routeMetadata().planner.source
+            XCTAssertTrue(contractAllowed.contains(produced),
+                          "Source '\(src)' produced '\(produced)' which is not in contract enum \(contractAllowed)")
+        }
     }
 }
