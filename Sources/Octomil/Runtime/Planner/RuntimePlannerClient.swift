@@ -15,6 +15,7 @@ public actor RuntimePlannerClient {
 
     static let planPath = "/api/v2/runtime/plan"
     static let benchmarkPath = "/api/v2/runtime/benchmarks"
+    static let defaultsPath = "/api/v2/runtime/defaults"
 
     // MARK: - Properties
 
@@ -165,6 +166,66 @@ public actor RuntimePlannerClient {
             logger.debug("Benchmark upload failed: \(error.localizedDescription)")
             return false
         }
+    }
+
+    // MARK: - Defaults
+
+    /// Response from `GET /api/v2/runtime/defaults`.
+    public struct RuntimeDefaultsResponse: Codable, Sendable {
+        /// Default routing policy.
+        public let defaultPolicy: String
+        /// Default plan TTL in seconds.
+        public let defaultPlanTtlSeconds: Int
+        /// Supported routing policies.
+        public let supportedPolicies: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case defaultPolicy = "default_policy"
+            case defaultPlanTtlSeconds = "default_plan_ttl_seconds"
+            case supportedPolicies = "supported_policies"
+        }
+    }
+
+    /// Fetch runtime defaults from the server.
+    ///
+    /// Returns `nil` on any failure (network, decode, non-2xx). Never throws.
+    public func fetchDefaults() async -> RuntimeDefaultsResponse? {
+        let url = baseURL.appendingPathComponent(Self.defaultsPath)
+
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("octomil-ios/\(OctomilVersion.current)", forHTTPHeaderField: "User-Agent")
+            configureAuth(&request)
+
+            let (data, response) = try await session.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.debug("Defaults fetch returned HTTP \(statusCode)")
+                return nil
+            }
+
+            return try jsonDecoder.decode(RuntimeDefaultsResponse.self, from: data)
+        } catch {
+            logger.debug("Defaults fetch failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // MARK: - Typed Benchmark Submission
+
+    /// Submit a privacy-safe benchmark using the typed ``RuntimeBenchmarkSubmission``.
+    ///
+    /// This is a convenience wrapper around ``uploadBenchmark(_:)`` that
+    /// enforces the banned-keys policy at the type level.
+    ///
+    /// - Parameter submission: The benchmark submission.
+    /// - Returns: `true` if the upload succeeded.
+    public func submitBenchmark(_ submission: RuntimeBenchmarkSubmission) async -> Bool {
+        await uploadBenchmark(submission.toDictionary())
     }
 
     // MARK: - Private

@@ -1,5 +1,77 @@
 import Foundation
 
+// MARK: - RuntimeRoutingPolicy
+
+/// Canonical routing policy names shared across all SDKs.
+///
+/// These string values are the wire-format identifiers sent to the server
+/// planner API and used in plan caching. They must match across the Python,
+/// Node, iOS, Android, and Browser SDKs.
+///
+/// **Note:** `quality_first` is intentionally absent. The server does not
+/// support it and it must not appear in any SDK.
+public enum RuntimeRoutingPolicy {
+    /// No data leaves the device. Server plan fetch and telemetry are skipped.
+    public static let `private` = "private"
+    /// Alias for ``private``. Older SDKs used this name.
+    public static let localOnly = "local_only"
+    /// Prefer on-device inference, fall back to cloud if unavailable.
+    public static let localFirst = "local_first"
+    /// Prefer cloud inference, fall back to on-device if unavailable.
+    public static let cloudFirst = "cloud_first"
+    /// Always use cloud inference. Local engines are never attempted.
+    public static let cloudOnly = "cloud_only"
+    /// Select the engine with the best performance metrics.
+    public static let performanceFirst = "performance_first"
+
+    /// All valid policy names. Use this set for validation.
+    public static let allPolicies: Set<String> = [
+        `private`, localOnly, localFirst, cloudFirst, cloudOnly, performanceFirst,
+    ]
+}
+
+// MARK: - RuntimePlanRequest
+
+/// Typed request body for `POST /api/v2/runtime/plan`.
+///
+/// Mirrors the server contract `RuntimePlanRequest` schema. Using a typed
+/// struct instead of a raw dictionary ensures compile-time safety and
+/// consistent wire format across SDK versions.
+public struct RuntimePlanRequest: Codable, Sendable, Equatable {
+    /// Model identifier (e.g. "gemma-2b", "llama-8b").
+    public let model: String
+    /// Capability needed (e.g. "text", "embeddings", "audio").
+    public let capability: String
+    /// Routing policy (e.g. "local_first", "cloud_only", "private").
+    public let routingPolicy: String?
+    /// Device runtime profile.
+    public let device: DeviceRuntimeProfile
+    /// Whether cloud fallback is permitted.
+    public let allowCloudFallback: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case capability
+        case routingPolicy = "routing_policy"
+        case device
+        case allowCloudFallback = "allow_cloud_fallback"
+    }
+
+    public init(
+        model: String,
+        capability: String,
+        routingPolicy: String? = nil,
+        device: DeviceRuntimeProfile,
+        allowCloudFallback: Bool? = nil
+    ) {
+        self.model = model
+        self.capability = capability
+        self.routingPolicy = routingPolicy
+        self.device = device
+        self.allowCloudFallback = allowCloudFallback
+    }
+}
+
 // MARK: - InstalledRuntime
 
 /// A locally-installed inference engine detected on this device.
@@ -331,5 +403,134 @@ public struct RuntimeSelection: Sendable, Equatable {
         self.source = source
         self.fallbackCandidates = fallbackCandidates
         self.reason = reason
+    }
+
+    /// Build a ``RouteMetadata`` summary from this selection.
+    public func routeMetadata() -> RouteMetadata {
+        RouteMetadata(
+            locality: locality == .local ? "on_device" : "cloud",
+            engine: engine,
+            plannerSource: source.isEmpty ? "offline" : source,
+            fallbackUsed: reason.hasPrefix("fallback"),
+            reason: reason
+        )
+    }
+}
+
+// MARK: - RouteMetadata
+
+/// Shared route metadata matching the Python SDK's RouteMetadata.
+///
+/// Provides a uniform summary of how a particular inference request
+/// was routed, regardless of which SDK is in use. This is useful for
+/// logging, telemetry, and debugging routing decisions.
+public struct RouteMetadata: Sendable, Equatable {
+    /// Where inference ran: "on_device" or "cloud".
+    public let locality: String
+    /// Engine used for inference, if local (e.g. "mlx-lm", "llama.cpp").
+    public let engine: String?
+    /// How the routing decision was obtained: "server", "cache", "offline".
+    public let plannerSource: String
+    /// Whether a fallback candidate was used instead of the primary.
+    public let fallbackUsed: Bool
+    /// Human-readable reason for this routing decision.
+    public let reason: String
+
+    public init(
+        locality: String,
+        engine: String? = nil,
+        plannerSource: String,
+        fallbackUsed: Bool = false,
+        reason: String = ""
+    ) {
+        self.locality = locality
+        self.engine = engine
+        self.plannerSource = plannerSource
+        self.fallbackUsed = fallbackUsed
+        self.reason = reason
+    }
+}
+
+// MARK: - RuntimeBenchmarkSubmission
+
+/// Privacy-safe benchmark submission for `POST /api/v2/runtime/benchmarks`.
+///
+/// This struct enforces that no prompts, user inputs, file paths, or other
+/// personally identifying information is included in benchmark telemetry.
+/// Only hardware/engine performance metrics are submitted.
+public struct RuntimeBenchmarkSubmission: Sendable, Equatable {
+    /// Model identifier.
+    public let model: String
+    /// Capability string (e.g. "text", "embeddings", "audio_transcription").
+    public let capability: String
+    /// Engine name (e.g. "mlx-lm", "llama.cpp", "coreml").
+    public let engine: String
+    /// Whether the benchmark completed successfully.
+    public let success: Bool
+    /// Tokens per second achieved (0 for non-token modalities).
+    public let tokensPerSecond: Double
+    /// Time to first token/chunk in milliseconds.
+    public let ttftMs: Double
+    /// Peak memory usage in bytes.
+    public let peakMemoryBytes: Int64
+    /// Additional privacy-safe metadata. Validated against ``bannedKeys``.
+    public let metadata: [String: String]
+
+    /// Keys that must NEVER appear in benchmark metadata.
+    ///
+    /// These keys could leak user data (prompts, file paths, personally
+    /// identifying information) and violate the privacy contract.
+    public static let bannedKeys: Set<String> = [
+        "prompt", "input", "output", "response", "file", "file_path",
+        "path", "user", "user_id", "email", "ip", "ip_address",
+        "token", "api_key", "secret", "password", "content",
+    ]
+
+    public init(
+        model: String,
+        capability: String,
+        engine: String,
+        success: Bool = true,
+        tokensPerSecond: Double = 0.0,
+        ttftMs: Double = 0.0,
+        peakMemoryBytes: Int64 = 0,
+        metadata: [String: String] = [:]
+    ) {
+        self.model = model
+        self.capability = capability
+        self.engine = RuntimeEngineID.canonical(engine)
+        self.success = success
+        self.tokensPerSecond = tokensPerSecond
+        self.ttftMs = ttftMs
+        self.peakMemoryBytes = peakMemoryBytes
+        // Strip any banned keys from metadata
+        self.metadata = metadata.filter { !Self.bannedKeys.contains($0.key.lowercased()) }
+    }
+
+    /// Validate that no banned keys are present in a metadata dictionary.
+    ///
+    /// - Parameter metadata: The metadata to validate.
+    /// - Returns: Set of banned key names found, empty if valid.
+    public static func validateMetadata(_ metadata: [String: String]) -> Set<String> {
+        let lowered = Set(metadata.keys.map { $0.lowercased() })
+        return lowered.intersection(bannedKeys)
+    }
+
+    /// Convert to a dictionary suitable for JSON serialization and upload.
+    public func toDictionary() -> [String: Any] {
+        var dict: [String: Any] = [
+            "source": "planner",
+            "model": model,
+            "capability": capability,
+            "engine": engine,
+            "success": success,
+            "tokens_per_second": tokensPerSecond,
+            "ttft_ms": ttftMs,
+            "peak_memory_bytes": peakMemoryBytes,
+        ]
+        if !metadata.isEmpty {
+            dict["metadata"] = metadata
+        }
+        return dict
     }
 }
