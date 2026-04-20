@@ -1,0 +1,83 @@
+{
+  "description": "Streaming inference fails after first token is emitted. Fallback is NOT allowed (output already sent to caller).",
+  "request": {
+    "model": "gemma-2b-it",
+    "capability": "chat",
+    "routing_policy": "local_first"
+  },
+  "planner_response": {
+    "model": "gemma-2b-it",
+    "capability": "chat",
+    "policy": "local_first",
+    "candidates": [
+      {
+        "locality": "local",
+        "priority": 0,
+        "confidence": 0.90,
+        "reason": "local streaming in progress",
+        "engine": "llama.cpp",
+        "artifact": {
+          "model_id": "gemma-2b-it",
+          "artifact_id": "art_gemma2b_stream_post",
+          "model_version": "1.0.0",
+          "format": "gguf",
+          "quantization": "q4_k_m",
+          "uri": "https://models.octomil.com/gemma-2b-it/q4_k_m.gguf",
+          "digest": "sha256:stream_post_token",
+          "size_bytes": 1500000000,
+          "min_ram_bytes": 3000000000
+        },
+        "benchmark_required": false,
+        "gates": [
+          {"code": "runtime_available", "required": true, "source": "server"},
+          {"code": "artifact_verified", "required": true, "source": "server"}
+        ]
+      },
+      {
+        "locality": "cloud",
+        "priority": 1,
+        "confidence": 0.99,
+        "reason": "cloud fallback (should NOT be reached post-output)",
+        "engine": null,
+        "artifact": null,
+        "benchmark_required": false,
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "plan_ttl_seconds": 604800,
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:08:00Z"
+  },
+  "expected_route_metadata": {
+    "status": "failed",
+    "execution": null,
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "llama.cpp",
+        "status": "failed",
+        "stage": "inference",
+        "gate_results": [
+          {"code": "runtime_available", "status": "passed"},
+          {"code": "artifact_verified", "status": "passed"}
+        ],
+        "reason": {
+          "code": "inference_error_after_first_output",
+          "message": "stream interrupted mid-generation"
+        }
+      }
+    ]
+  },
+  "expected_telemetry": {
+    "event_name": "inference.failed",
+    "forbidden_keys": ["prompt", "output", "messages", "completion"]
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": false
+  }
+}

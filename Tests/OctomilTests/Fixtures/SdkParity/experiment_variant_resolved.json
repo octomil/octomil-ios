@@ -1,0 +1,89 @@
+{
+  "description": "Experiment resolves to a specific model variant via server-side experiment assignment.",
+  "request": {
+    "model": "experiment:ab-chat-perf-v2",
+    "capability": "chat",
+    "routing_policy": "auto"
+  },
+  "planner_response": {
+    "model": "mistral-7b-instruct",
+    "capability": "chat",
+    "policy": "auto",
+    "candidates": [
+      {
+        "locality": "local",
+        "priority": 0,
+        "confidence": 0.88,
+        "reason": "experiment resolved to mistral-7b, device qualifies for local",
+        "engine": "llama.cpp",
+        "artifact": {
+          "model_id": "mistral-7b-instruct",
+          "artifact_id": "art_mistral7b_gguf_q4",
+          "model_version": "0.3.1",
+          "format": "gguf",
+          "quantization": "q4_k_m",
+          "uri": "https://models.octomil.com/mistral-7b-instruct/q4_k_m.gguf",
+          "digest": "sha256:experiment123",
+          "size_bytes": 4200000000,
+          "min_ram_bytes": 6000000000
+        },
+        "benchmark_required": true,
+        "gates": [
+          {"code": "runtime_available", "required": true, "source": "server"},
+          {"code": "artifact_verified", "required": true, "source": "server"},
+          {"code": "min_free_memory_bytes", "required": true, "threshold_number": 6000000000, "source": "server"},
+          {"code": "min_tokens_per_second", "required": true, "threshold_number": 5.0, "source": "server"},
+          {"code": "benchmark_fresh", "required": false, "threshold_number": 86400, "window_seconds": 86400, "source": "server"}
+        ]
+      },
+      {
+        "locality": "cloud",
+        "priority": 1,
+        "confidence": 0.97,
+        "reason": "cloud fallback for experiment variant",
+        "engine": null,
+        "artifact": null,
+        "benchmark_required": false,
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "plan_ttl_seconds": 3600,
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:04:00Z"
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": {
+      "locality": "local",
+      "mode": "sdk_runtime",
+      "engine": "llama.cpp"
+    },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "llama.cpp",
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          {"code": "runtime_available", "status": "passed"},
+          {"code": "artifact_verified", "status": "passed"},
+          {"code": "min_free_memory_bytes", "status": "passed"},
+          {"code": "min_tokens_per_second", "status": "passed"},
+          {"code": "benchmark_fresh", "status": "passed"}
+        ]
+      }
+    ]
+  },
+  "expected_telemetry": {
+    "event_name": "inference.completed",
+    "forbidden_keys": ["prompt", "output", "messages", "completion"]
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": true
+  }
+}

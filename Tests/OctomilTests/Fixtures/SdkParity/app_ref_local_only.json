@@ -1,0 +1,76 @@
+{
+  "description": "App references a model with local_only routing policy. Cloud fallback is disallowed.",
+  "request": {
+    "model": "gemma-2b-it",
+    "capability": "chat",
+    "routing_policy": "local_only"
+  },
+  "planner_response": {
+    "model": "gemma-2b-it",
+    "capability": "chat",
+    "policy": "local_only",
+    "candidates": [
+      {
+        "locality": "local",
+        "priority": 0,
+        "confidence": 0.95,
+        "reason": "local_only policy enforced",
+        "engine": "llama.cpp",
+        "engine_version_constraint": ">=0.2.0",
+        "artifact": {
+          "model_id": "gemma-2b-it",
+          "artifact_id": "art_gemma2b_gguf_q4",
+          "model_version": "1.0.0",
+          "format": "gguf",
+          "quantization": "q4_k_m",
+          "uri": "https://models.octomil.com/gemma-2b-it/q4_k_m.gguf",
+          "digest": "sha256:abcdef1234567890",
+          "size_bytes": 1500000000,
+          "min_ram_bytes": 3000000000
+        },
+        "benchmark_required": false,
+        "gates": [
+          {"code": "runtime_available", "required": true, "source": "server"},
+          {"code": "artifact_verified", "required": true, "source": "server"},
+          {"code": "min_free_memory_bytes", "required": true, "threshold_number": 3000000000, "source": "server"}
+        ]
+      }
+    ],
+    "fallback_candidates": [],
+    "plan_ttl_seconds": 604800,
+    "fallback_allowed": false,
+    "server_generated_at": "2026-04-20T10:00:00Z"
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": {
+      "locality": "local",
+      "mode": "sdk_runtime",
+      "engine": "llama.cpp"
+    },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "llama.cpp",
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          {"code": "runtime_available", "status": "passed"},
+          {"code": "artifact_verified", "status": "passed"},
+          {"code": "min_free_memory_bytes", "status": "passed"}
+        ]
+      }
+    ]
+  },
+  "expected_telemetry": {
+    "event_name": "inference.completed",
+    "forbidden_keys": ["prompt", "output", "messages", "completion"]
+  },
+  "expected_policy_result": {
+    "cloud_allowed": false,
+    "local_allowed": true,
+    "fallback_allowed": false
+  }
+}

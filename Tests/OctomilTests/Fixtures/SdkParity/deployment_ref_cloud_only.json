@@ -1,0 +1,59 @@
+{
+  "description": "Deployment references a cloud-only model. No local candidates.",
+  "request": {
+    "model": "gpt-4o-mini",
+    "capability": "chat",
+    "routing_policy": "cloud_only"
+  },
+  "planner_response": {
+    "model": "gpt-4o-mini",
+    "capability": "chat",
+    "policy": "cloud_only",
+    "candidates": [
+      {
+        "locality": "cloud",
+        "priority": 0,
+        "confidence": 1.0,
+        "reason": "cloud_only policy, model only available via hosted gateway",
+        "engine": null,
+        "artifact": null,
+        "benchmark_required": false,
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "plan_ttl_seconds": 604800,
+    "fallback_allowed": false,
+    "server_generated_at": "2026-04-20T10:03:00Z"
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": {
+      "locality": "cloud",
+      "mode": "hosted_gateway",
+      "engine": null
+    },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "cloud",
+        "mode": "hosted_gateway",
+        "engine": null,
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          {"code": "runtime_available", "status": "passed"}
+        ]
+      }
+    ]
+  },
+  "expected_telemetry": {
+    "event_name": "inference.completed",
+    "forbidden_keys": ["prompt", "output", "messages", "completion"]
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": false,
+    "fallback_allowed": false
+  }
+}

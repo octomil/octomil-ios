@@ -1,0 +1,97 @@
+{
+  "description": "App references a model with local_first routing. Local candidate fails gate, falls back to cloud.",
+  "request": {
+    "model": "phi-3-mini",
+    "capability": "chat",
+    "routing_policy": "local_first"
+  },
+  "planner_response": {
+    "model": "phi-3-mini",
+    "capability": "chat",
+    "policy": "local_first",
+    "candidates": [
+      {
+        "locality": "local",
+        "priority": 0,
+        "confidence": 0.85,
+        "reason": "local preferred, device capable",
+        "engine": "mlx-lm",
+        "artifact": {
+          "model_id": "phi-3-mini",
+          "artifact_id": "art_phi3_safetensors",
+          "model_version": "2.0.0",
+          "format": "safetensors",
+          "quantization": "int4",
+          "uri": "https://models.octomil.com/phi-3-mini/int4.safetensors",
+          "digest": "sha256:def456",
+          "size_bytes": 2200000000,
+          "min_ram_bytes": 4000000000
+        },
+        "benchmark_required": false,
+        "gates": [
+          {"code": "runtime_available", "required": true, "source": "server"},
+          {"code": "artifact_verified", "required": true, "source": "server"},
+          {"code": "min_free_memory_bytes", "required": true, "threshold_number": 4000000000, "source": "server"},
+          {"code": "max_ttft_ms", "required": true, "threshold_number": 3000, "source": "server"}
+        ]
+      },
+      {
+        "locality": "cloud",
+        "priority": 1,
+        "confidence": 0.99,
+        "reason": "cloud fallback available",
+        "engine": null,
+        "artifact": null,
+        "benchmark_required": false,
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "plan_ttl_seconds": 604800,
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:01:00Z"
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": {
+      "locality": "cloud",
+      "mode": "hosted_gateway",
+      "engine": null
+    },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "mlx-lm",
+        "status": "failed",
+        "stage": "gate",
+        "gate_results": [
+          {"code": "runtime_available", "status": "passed"},
+          {"code": "artifact_verified", "status": "passed"},
+          {"code": "min_free_memory_bytes", "status": "failed"}
+        ]
+      },
+      {
+        "index": 1,
+        "locality": "cloud",
+        "mode": "hosted_gateway",
+        "engine": null,
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          {"code": "runtime_available", "status": "passed"}
+        ]
+      }
+    ]
+  },
+  "expected_telemetry": {
+    "event_name": "inference.completed",
+    "forbidden_keys": ["prompt", "output", "messages", "completion"]
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": true
+  }
+}
