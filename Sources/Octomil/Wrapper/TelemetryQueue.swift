@@ -186,6 +186,10 @@ public final class TelemetryQueue: @unchecked Sendable {
 
         restorePersistedEvents()
         startFlushTimer()
+
+        if serverURL != nil {
+            TelemetryQueue.shared = self
+        }
     }
 
     deinit {

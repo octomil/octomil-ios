@@ -306,6 +306,38 @@ public struct AttemptLoopResult: Sendable {
     }
 }
 
+/// Result of an attempt loop that also executed inference for the selected candidate.
+public struct AttemptInferenceResult<Value: Sendable>: Sendable {
+    public let selectedAttempt: RouteAttempt?
+    public let attempts: [RouteAttempt]
+    public let fallbackUsed: Bool
+    public let fallbackTrigger: FallbackTrigger?
+    public let fromAttempt: Int?
+    public let toAttempt: Int?
+    public let value: Value?
+    public let error: Error?
+
+    public init(
+        selectedAttempt: RouteAttempt? = nil,
+        attempts: [RouteAttempt] = [],
+        fallbackUsed: Bool = false,
+        fallbackTrigger: FallbackTrigger? = nil,
+        fromAttempt: Int? = nil,
+        toAttempt: Int? = nil,
+        value: Value? = nil,
+        error: Error? = nil
+    ) {
+        self.selectedAttempt = selectedAttempt
+        self.attempts = attempts
+        self.fallbackUsed = fallbackUsed
+        self.fallbackTrigger = fallbackTrigger
+        self.fromAttempt = fromAttempt
+        self.toAttempt = toAttempt
+        self.value = value
+        self.error = error
+    }
+}
+
 // MARK: - Checker Protocols
 
 /// Protocol for checking runtime/engine availability.
@@ -431,6 +463,11 @@ public final class CandidateAttemptRunner: Sendable {
     public init(fallbackAllowed: Bool = true, streaming: Bool = false) {
         self.fallbackAllowed = fallbackAllowed
         self.streaming = streaming
+    }
+
+    /// Streaming may fall back only before any output is emitted to the caller.
+    public func shouldFallbackAfterInferenceError(firstOutputEmitted: Bool = false) -> Bool {
+        fallbackAllowed && !(streaming && firstOutputEmitted)
     }
 
     /// Run the attempt loop over candidates.
@@ -649,6 +686,129 @@ public final class CandidateAttemptRunner: Sendable {
             fallbackTrigger: hasFallback ? fallbackTrigger : nil,
             fromAttempt: hasFallback ? fromAttempt : nil,
             toAttempt: toAttempt
+        )
+    }
+
+    /// Run readiness checks and execute inference for the selected candidate.
+    ///
+    /// This product-path method records inference-stage failures instead of
+    /// declaring a candidate selected before the request actually runs.
+    public func runWithInference<Value: Sendable>(
+        candidates: [AttemptCandidateInput],
+        runtimeChecker: (any AttemptRuntimeChecker)? = nil,
+        artifactChecker: (any AttemptArtifactChecker)? = nil,
+        gateEvaluator: (any AttemptGateEvaluator)? = nil,
+        firstOutputEmitted: @Sendable () -> Bool = { false },
+        executeCandidate: @Sendable (AttemptCandidateInput, RouteAttempt) async throws -> Value
+    ) async -> AttemptInferenceResult<Value> {
+        var attempts: [RouteAttempt] = []
+        var fallbackTrigger: FallbackTrigger?
+        var fromAttempt: Int?
+        var toAttempt: Int?
+        var lastError: Error?
+
+        for (idx, input) in candidates.enumerated() {
+            let readiness = CandidateAttemptRunner(fallbackAllowed: false, streaming: streaming).run(
+                candidates: [input],
+                runtimeChecker: runtimeChecker,
+                artifactChecker: artifactChecker,
+                gateEvaluator: gateEvaluator
+            )
+
+            guard let selectedAttempt = readiness.selectedAttempt else {
+                if var failedAttempt = readiness.attempts.first {
+                    failedAttempt = RouteAttempt(
+                        index: idx,
+                        locality: failedAttempt.locality,
+                        mode: failedAttempt.mode,
+                        engine: failedAttempt.engine,
+                        artifact: failedAttempt.artifact,
+                        status: failedAttempt.status,
+                        stage: failedAttempt.stage,
+                        gateResults: failedAttempt.gateResults,
+                        reason: failedAttempt.reason
+                    )
+                    attempts.append(failedAttempt)
+                    if fallbackTrigger == nil {
+                        fallbackTrigger = FallbackTrigger(
+                            code: failedAttempt.reason.code,
+                            stage: failedAttempt.stage.rawValue,
+                            message: failedAttempt.reason.message
+                        )
+                        fromAttempt = idx
+                    }
+                }
+                if !fallbackAllowed { break }
+                continue
+            }
+
+            let indexedSelection = RouteAttempt(
+                index: idx,
+                locality: selectedAttempt.locality,
+                mode: selectedAttempt.mode,
+                engine: selectedAttempt.engine,
+                artifact: selectedAttempt.artifact,
+                status: selectedAttempt.status,
+                stage: selectedAttempt.stage,
+                gateResults: selectedAttempt.gateResults,
+                reason: selectedAttempt.reason
+            )
+
+            do {
+                let value = try await executeCandidate(input, indexedSelection)
+                attempts.append(indexedSelection)
+                if fallbackTrigger != nil { toAttempt = idx }
+                let hasFallback = fallbackTrigger != nil
+                return AttemptInferenceResult(
+                    selectedAttempt: indexedSelection,
+                    attempts: attempts,
+                    fallbackUsed: hasFallback,
+                    fallbackTrigger: hasFallback ? fallbackTrigger : nil,
+                    fromAttempt: hasFallback ? fromAttempt : nil,
+                    toAttempt: hasFallback ? toAttempt : nil,
+                    value: value
+                )
+            } catch {
+                lastError = error
+                let emitted = firstOutputEmitted()
+                let code: String
+                if streaming && emitted {
+                    code = "inference_error_after_first_output"
+                } else if streaming {
+                    code = "inference_error_before_first_output"
+                } else {
+                    code = "inference_error"
+                }
+                let failedAttempt = RouteAttempt(
+                    index: idx,
+                    locality: indexedSelection.locality,
+                    mode: indexedSelection.mode,
+                    engine: indexedSelection.engine,
+                    artifact: indexedSelection.artifact,
+                    status: .failed,
+                    stage: .inference,
+                    gateResults: indexedSelection.gateResults,
+                    reason: AttemptReason(code: code, message: error.localizedDescription)
+                )
+                attempts.append(failedAttempt)
+                if fallbackTrigger == nil {
+                    fallbackTrigger = FallbackTrigger(code: code, stage: AttemptStage.inference.rawValue, message: failedAttempt.reason.message)
+                    fromAttempt = idx
+                }
+                if idx >= candidates.count - 1 || !shouldFallbackAfterInferenceError(firstOutputEmitted: emitted) {
+                    break
+                }
+            }
+        }
+
+        return AttemptInferenceResult(
+            selectedAttempt: nil,
+            attempts: attempts,
+            fallbackUsed: false,
+            fallbackTrigger: nil,
+            fromAttempt: nil,
+            toAttempt: nil,
+            error: lastError
         )
     }
 

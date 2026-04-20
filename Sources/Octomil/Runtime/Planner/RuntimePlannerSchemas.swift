@@ -205,6 +205,8 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
     public let artifact: RuntimeArtifactPlan?
     /// Whether a local benchmark is required before using this candidate.
     public let benchmarkRequired: Bool
+    /// Per-request gates attached by the server planner.
+    public let gates: [CandidateGate]
 
     enum CodingKeys: String, CodingKey {
         case locality
@@ -215,6 +217,7 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
         case engineVersionConstraint = "engine_version_constraint"
         case artifact
         case benchmarkRequired = "benchmark_required"
+        case gates
     }
 
     public init(
@@ -225,7 +228,8 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
         engine: String? = nil,
         engineVersionConstraint: String? = nil,
         artifact: RuntimeArtifactPlan? = nil,
-        benchmarkRequired: Bool = false
+        benchmarkRequired: Bool = false,
+        gates: [CandidateGate] = []
     ) {
         self.locality = locality
         self.priority = priority
@@ -235,6 +239,7 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
         self.engineVersionConstraint = engineVersionConstraint
         self.artifact = artifact
         self.benchmarkRequired = benchmarkRequired
+        self.gates = gates
     }
 }
 
@@ -264,6 +269,8 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
     public let fallbackCandidates: [RuntimeCandidatePlan]
     /// How long this plan is valid, in seconds (default: 7 days).
     public let planTtlSeconds: Int
+    /// Whether SDK fallback is allowed for this request.
+    public let fallbackAllowed: Bool
     /// ISO 8601 timestamp of when the server generated this plan.
     public let serverGeneratedAt: String
 
@@ -274,6 +281,7 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         case candidates
         case fallbackCandidates = "fallback_candidates"
         case planTtlSeconds = "plan_ttl_seconds"
+        case fallbackAllowed = "fallback_allowed"
         case serverGeneratedAt = "server_generated_at"
     }
 
@@ -284,6 +292,7 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         candidates: [RuntimeCandidatePlan],
         fallbackCandidates: [RuntimeCandidatePlan] = [],
         planTtlSeconds: Int = 604_800,
+        fallbackAllowed: Bool = true,
         serverGeneratedAt: String = ""
     ) {
         self.model = model
@@ -292,6 +301,7 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         self.candidates = candidates
         self.fallbackCandidates = fallbackCandidates
         self.planTtlSeconds = planTtlSeconds
+        self.fallbackAllowed = fallbackAllowed
         self.serverGeneratedAt = serverGeneratedAt
     }
 }
