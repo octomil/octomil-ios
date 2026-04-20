@@ -37,7 +37,15 @@ public final class OctomilResponses: @unchecked Sendable {
         let runtime = try resolveRuntimeForRequest(request)
         let effectiveRequest = buildEffectiveRequest(request)
         let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
-        let runtimeResponse = try await runtime.run(request: runtimeRequest)
+        let attemptResult = await CandidateAttemptRunner(fallbackAllowed: false).runWithInference(
+            candidates: [Self.attemptCandidate(model: request.model)]
+        ) { _, _ in
+            try await runtime.run(request: runtimeRequest)
+        }
+        guard let runtimeResponse = attemptResult.value else {
+            if let error = attemptResult.error { throw error }
+            throw OctomilResponsesError.noRuntime(request.model)
+        }
         let response = buildResponse(model: request.model, runtimeResponse: runtimeResponse)
         cacheResponse(response)
         return response
@@ -57,41 +65,54 @@ public final class OctomilResponses: @unchecked Sendable {
                     let runtime = try self.resolveRuntimeForRequest(request)
 
                     let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
+                    let attemptRunner = CandidateAttemptRunner(fallbackAllowed: false, streaming: true)
+                    let attemptReadiness = attemptRunner.run(candidates: [Self.attemptCandidate(model: request.model)])
+                    guard attemptReadiness.selectedAttempt != nil else {
+                        throw OctomilResponsesError.noRuntime(request.model)
+                    }
                     let responseId = Self.generateId()
                     var textParts: [String] = []
                     var toolCallBuffers: [Int: ToolCallBuffer] = [:]
                     var lastUsage: RuntimeUsage?
                     var chunkIndex = 0
+                    var firstOutputEmitted = false
 
-                    for try await chunk in runtime.stream(request: runtimeRequest) {
-                        if let text = chunk.text {
-                            textParts.append(text)
-                            continuation.yield(.textDelta(text))
+                    do {
+                        for try await chunk in runtime.stream(request: runtimeRequest) {
+                            if let text = chunk.text {
+                                firstOutputEmitted = true
+                                textParts.append(text)
+                                continuation.yield(.textDelta(text))
+                            }
+
+                            if let delta = chunk.toolCallDelta {
+                                firstOutputEmitted = true
+                                var buffer = toolCallBuffers[delta.index] ?? ToolCallBuffer()
+                                if let id = delta.id { buffer.id = id }
+                                if let name = delta.name { buffer.name = name }
+                                if let args = delta.argumentsDelta { buffer.arguments += args }
+                                toolCallBuffers[delta.index] = buffer
+
+                                continuation.yield(.toolCallDelta(
+                                    index: delta.index,
+                                    id: delta.id,
+                                    name: delta.name,
+                                    argumentsDelta: delta.argumentsDelta
+                                ))
+                            }
+
+                            if let usage = chunk.usage { lastUsage = usage }
+
+                            // Report chunk telemetry
+                            TelemetryQueue.shared?.reportInferenceChunkProduced(
+                                modelId: effectiveRequest.model,
+                                chunkIndex: chunkIndex
+                            )
+                            chunkIndex += 1
                         }
-
-                        if let delta = chunk.toolCallDelta {
-                            var buffer = toolCallBuffers[delta.index] ?? ToolCallBuffer()
-                            if let id = delta.id { buffer.id = id }
-                            if let name = delta.name { buffer.name = name }
-                            if let args = delta.argumentsDelta { buffer.arguments += args }
-                            toolCallBuffers[delta.index] = buffer
-
-                            continuation.yield(.toolCallDelta(
-                                index: delta.index,
-                                id: delta.id,
-                                name: delta.name,
-                                argumentsDelta: delta.argumentsDelta
-                            ))
-                        }
-
-                        if let usage = chunk.usage { lastUsage = usage }
-
-                        // Report chunk telemetry
-                        TelemetryQueue.shared?.reportInferenceChunkProduced(
-                            modelId: effectiveRequest.model,
-                            chunkIndex: chunkIndex
-                        )
-                        chunkIndex += 1
+                    } catch {
+                        _ = attemptRunner.shouldFallbackAfterInferenceError(firstOutputEmitted: firstOutputEmitted)
+                        throw error
                     }
 
                     var output: [OutputItem] = []
@@ -133,6 +154,16 @@ public final class OctomilResponses: @unchecked Sendable {
     }
 
     // MARK: - Private
+
+    private static func attemptCandidate(model: String) -> AttemptCandidateInput {
+        AttemptCandidateInput(candidate: RuntimeCandidatePlan(
+            locality: .local,
+            priority: 0,
+            confidence: 1,
+            reason: "registered model runtime",
+            engine: "registered"
+        ))
+    }
 
     /// Resolve a runtime for a request, checking catalog first.
     ///

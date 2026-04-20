@@ -205,6 +205,8 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
     public let artifact: RuntimeArtifactPlan?
     /// Whether a local benchmark is required before using this candidate.
     public let benchmarkRequired: Bool
+    /// Per-request gates attached by the server planner.
+    public let gates: [CandidateGate]
 
     enum CodingKeys: String, CodingKey {
         case locality
@@ -215,6 +217,7 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
         case engineVersionConstraint = "engine_version_constraint"
         case artifact
         case benchmarkRequired = "benchmark_required"
+        case gates
     }
 
     public init(
@@ -225,7 +228,8 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
         engine: String? = nil,
         engineVersionConstraint: String? = nil,
         artifact: RuntimeArtifactPlan? = nil,
-        benchmarkRequired: Bool = false
+        benchmarkRequired: Bool = false,
+        gates: [CandidateGate] = []
     ) {
         self.locality = locality
         self.priority = priority
@@ -235,6 +239,23 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
         self.engineVersionConstraint = engineVersionConstraint
         self.artifact = artifact
         self.benchmarkRequired = benchmarkRequired
+        self.gates = gates
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        locality = try container.decode(RuntimeLocality.self, forKey: .locality)
+        priority = try container.decode(Int.self, forKey: .priority)
+        confidence = try container.decode(Double.self, forKey: .confidence)
+        reason = try container.decode(String.self, forKey: .reason)
+        engine = try container.decodeIfPresent(String.self, forKey: .engine).map(RuntimeEngineID.canonical)
+        engineVersionConstraint = try container.decodeIfPresent(
+            String.self,
+            forKey: .engineVersionConstraint
+        )
+        artifact = try container.decodeIfPresent(RuntimeArtifactPlan.self, forKey: .artifact)
+        benchmarkRequired = try container.decodeIfPresent(Bool.self, forKey: .benchmarkRequired) ?? false
+        gates = try container.decodeIfPresent([CandidateGate].self, forKey: .gates) ?? []
     }
 }
 
@@ -244,6 +265,63 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
 public enum RuntimeLocality: String, Codable, Sendable, Equatable {
     case local
     case cloud
+}
+
+// MARK: - AppResolution
+
+/// Server-resolved application context for `@app/{slug}/{capability}` model refs.
+public struct AppResolution: Codable, Sendable, Equatable {
+    public let appId: String
+    public let appSlug: String?
+    public let capability: String
+    public let routingPolicy: String
+    public let selectedModel: String
+    public let selectedModelVariantId: String?
+    public let selectedModelVersion: String?
+    public let artifactCandidates: [RuntimeArtifactPlan]
+    public let preferredEngines: [String]
+    public let fallbackPolicy: String?
+    public let planTtlSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case appId = "app_id"
+        case appSlug = "app_slug"
+        case capability
+        case routingPolicy = "routing_policy"
+        case selectedModel = "selected_model"
+        case selectedModelVariantId = "selected_model_variant_id"
+        case selectedModelVersion = "selected_model_version"
+        case artifactCandidates = "artifact_candidates"
+        case preferredEngines = "preferred_engines"
+        case fallbackPolicy = "fallback_policy"
+        case planTtlSeconds = "plan_ttl_seconds"
+    }
+
+    public init(
+        appId: String,
+        appSlug: String? = nil,
+        capability: String,
+        routingPolicy: String,
+        selectedModel: String,
+        selectedModelVariantId: String? = nil,
+        selectedModelVersion: String? = nil,
+        artifactCandidates: [RuntimeArtifactPlan] = [],
+        preferredEngines: [String] = [],
+        fallbackPolicy: String? = nil,
+        planTtlSeconds: Int = 604_800
+    ) {
+        self.appId = appId
+        self.appSlug = appSlug
+        self.capability = capability
+        self.routingPolicy = routingPolicy
+        self.selectedModel = selectedModel
+        self.selectedModelVariantId = selectedModelVariantId
+        self.selectedModelVersion = selectedModelVersion
+        self.artifactCandidates = artifactCandidates
+        self.preferredEngines = preferredEngines
+        self.fallbackPolicy = fallbackPolicy
+        self.planTtlSeconds = planTtlSeconds
+    }
 }
 
 // MARK: - RuntimePlanResponse
@@ -264,8 +342,12 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
     public let fallbackCandidates: [RuntimeCandidatePlan]
     /// How long this plan is valid, in seconds (default: 7 days).
     public let planTtlSeconds: Int
+    /// Whether SDK fallback is allowed for this request.
+    public let fallbackAllowed: Bool
     /// ISO 8601 timestamp of when the server generated this plan.
     public let serverGeneratedAt: String
+    /// App resolution details when the request used an app ref.
+    public let appResolution: AppResolution?
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -274,7 +356,9 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         case candidates
         case fallbackCandidates = "fallback_candidates"
         case planTtlSeconds = "plan_ttl_seconds"
+        case fallbackAllowed = "fallback_allowed"
         case serverGeneratedAt = "server_generated_at"
+        case appResolution = "app_resolution"
     }
 
     public init(
@@ -284,7 +368,9 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         candidates: [RuntimeCandidatePlan],
         fallbackCandidates: [RuntimeCandidatePlan] = [],
         planTtlSeconds: Int = 604_800,
-        serverGeneratedAt: String = ""
+        fallbackAllowed: Bool = true,
+        serverGeneratedAt: String = "",
+        appResolution: AppResolution? = nil
     ) {
         self.model = model
         self.capability = capability
@@ -292,7 +378,9 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         self.candidates = candidates
         self.fallbackCandidates = fallbackCandidates
         self.planTtlSeconds = planTtlSeconds
+        self.fallbackAllowed = fallbackAllowed
         self.serverGeneratedAt = serverGeneratedAt
+        self.appResolution = appResolution
     }
 }
 

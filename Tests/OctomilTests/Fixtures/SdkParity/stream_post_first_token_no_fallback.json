@@ -1,0 +1,106 @@
+{
+  "description": "Streaming: local inference fails after first token emitted. Fallback is disallowed by default after first token. Route status is failed.",
+  "request": {
+    "model": "gemma3-1b",
+    "capability": "chat",
+    "routing_policy": "local_first",
+    "stream": true,
+    "device": {
+      "platform": "macos",
+      "arch": "arm64",
+      "ram_bytes": 17179869184,
+      "engines": [{ "id": "llama.cpp", "version": "b4567" }]
+    }
+  },
+  "planner_response": {
+    "model": "gemma3-1b",
+    "capability": "chat",
+    "policy": "local_first",
+    "candidates": [
+      {
+        "locality": "local",
+        "engine": "llama.cpp",
+        "artifact": {
+          "model_id": "gemma3-1b",
+          "artifact_id": "art_800",
+          "format": "gguf",
+          "digest": "sha256:hhh888",
+          "size_bytes": 1200000000
+        },
+        "priority": 0,
+        "confidence": 0.9,
+        "reason": "local preferred",
+        "gates": [
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" }
+        ]
+      },
+      {
+        "locality": "cloud",
+        "engine": "cloud",
+        "priority": 1,
+        "confidence": 0.99,
+        "reason": "cloud fallback",
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
+  },
+  "expected_route_metadata": {
+    "status": "failed",
+    "execution": { "locality": "local", "mode": "sdk_runtime", "engine": "llama.cpp" },
+    "model": {
+      "requested": { "ref": "gemma3-1b", "kind": "model", "capability": "chat" }
+    },
+    "artifact": { "id": "art_800", "version": null, "format": "gguf", "digest": "sha256:hhh888", "cache": { "status": "hit", "managed_by": "octomil" } },
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "llama.cpp",
+        "artifact": { "id": "art_800", "digest": "sha256:hhh888", "cache": { "status": "hit", "managed_by": "octomil" } },
+        "status": "failed",
+        "stage": "inference",
+        "gate_results": [
+          { "code": "artifact_verified", "status": "passed" },
+          { "code": "runtime_available", "status": "passed" },
+          { "code": "model_loads", "status": "passed" }
+        ],
+        "reason": { "code": "inference_error_after_first_token", "message": "engine crashed after emitting 47 tokens; fallback disallowed after first token" }
+      }
+    ],
+    "reason": { "code": "inference_error_after_first_token", "message": "streaming failure after first token, fallback disallowed by default" }
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "capability": "chat",
+    "policy": "local_first",
+    "planner_source": "server",
+    "final_locality": "local",
+    "engine": "llama.cpp",
+    "artifact_id": "art_800",
+    "fallback_used": false,
+    "candidate_attempts": 1
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": true,
+    "private": false
+  },
+  "rules_tested": [
+    "streaming fallback after first token is disallowed by default",
+    "route status is 'failed' not 'unavailable' when inference started",
+    "execution is non-null because inference did start",
+    "no cloud attempt even though fallback_allowed=true and cloud candidate exists"
+  ]
+}
