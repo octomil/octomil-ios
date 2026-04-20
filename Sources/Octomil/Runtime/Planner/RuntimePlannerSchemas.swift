@@ -407,11 +407,12 @@ public struct RuntimeSelection: Sendable, Equatable {
 
     /// Build a ``RouteMetadata`` summary from this selection.
     public func routeMetadata() -> RouteMetadata {
-        RouteMetadata(
+        let isFallback = source == "fallback" || reason.hasPrefix("fallback")
+        return RouteMetadata(
             locality: locality == .local ? "on_device" : "cloud",
             engine: engine,
             plannerSource: source.isEmpty ? "offline" : source,
-            fallbackUsed: reason.hasPrefix("fallback"),
+            fallbackUsed: isFallback,
             reason: reason
         )
     }
