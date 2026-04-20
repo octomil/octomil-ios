@@ -85,30 +85,53 @@ final class RuntimePlannerParityTests: XCTestCase {
         }
     }
 
-    // MARK: - Route Metadata Fields Present
+    // MARK: - Route Metadata Nested Structure
 
-    func testRouteMetadataFieldsPresent() {
+    func testRouteMetadataNestedFieldsPresent() {
+        let model = RouteModel(
+            requested: RouteModelRequested(ref: "gemma-2b", kind: "model", capability: "text")
+        )
         let metadata = RouteMetadata(
-            locality: "on_device",
-            engine: "mlx-lm",
-            plannerSource: "server",
-            fallbackUsed: false,
-            reason: "test reason"
+            status: "selected",
+            execution: RouteExecution(locality: "local", mode: "sdk_runtime", engine: "mlx-lm"),
+            model: model,
+            planner: PlannerInfo(source: "server"),
+            fallback: FallbackInfo(used: false),
+            reason: RouteReason(code: "server_plan", message: "test reason")
         )
 
-        XCTAssertEqual(metadata.locality, "on_device")
-        XCTAssertEqual(metadata.engine, "mlx-lm")
-        XCTAssertEqual(metadata.plannerSource, "server")
-        XCTAssertFalse(metadata.fallbackUsed)
-        XCTAssertEqual(metadata.reason, "test reason")
+        XCTAssertEqual(metadata.status, "selected")
+        XCTAssertEqual(metadata.execution?.locality, "local")
+        XCTAssertEqual(metadata.execution?.mode, "sdk_runtime")
+        XCTAssertEqual(metadata.execution?.engine, "mlx-lm")
+        XCTAssertEqual(metadata.model.requested.ref, "gemma-2b")
+        XCTAssertEqual(metadata.model.requested.kind, "model")
+        XCTAssertEqual(metadata.model.requested.capability, "text")
+        XCTAssertEqual(metadata.planner.source, "server")
+        XCTAssertFalse(metadata.fallback.used)
+        XCTAssertEqual(metadata.reason.message, "test reason")
+        XCTAssertEqual(metadata.reason.code, "server_plan")
     }
 
     func testRouteMetadataLocalityValues() {
-        let local = RouteMetadata(locality: "on_device", plannerSource: "cache")
-        let cloud = RouteMetadata(locality: "cloud", plannerSource: "server")
+        let localModel = RouteModel(
+            requested: RouteModelRequested(ref: "test-model")
+        )
+        let local = RouteMetadata(
+            execution: RouteExecution(locality: "local", mode: "sdk_runtime"),
+            model: localModel,
+            planner: PlannerInfo(source: "cache")
+        )
+        let cloud = RouteMetadata(
+            execution: RouteExecution(locality: "cloud", mode: "hosted_gateway"),
+            model: localModel,
+            planner: PlannerInfo(source: "server")
+        )
 
-        XCTAssertEqual(local.locality, "on_device")
-        XCTAssertEqual(cloud.locality, "cloud")
+        XCTAssertEqual(local.execution?.locality, "local")
+        XCTAssertEqual(local.execution?.mode, "sdk_runtime")
+        XCTAssertEqual(cloud.execution?.locality, "cloud")
+        XCTAssertEqual(cloud.execution?.mode, "hosted_gateway")
     }
 
     func testRouteMetadataFromLocalSelection() {
@@ -116,16 +139,23 @@ final class RuntimePlannerParityTests: XCTestCase {
             locality: .local,
             engine: "llama.cpp",
             source: "server_plan",
-            reason: "best for this device"
+            reason: "best for this device",
+            model: "gemma-2b",
+            capability: "text"
         )
 
         let metadata = selection.routeMetadata()
 
-        XCTAssertEqual(metadata.locality, "on_device")
-        XCTAssertEqual(metadata.engine, "llama.cpp")
-        XCTAssertEqual(metadata.plannerSource, "server_plan")
-        XCTAssertFalse(metadata.fallbackUsed)
-        XCTAssertEqual(metadata.reason, "best for this device")
+        XCTAssertEqual(metadata.execution?.locality, "local")
+        XCTAssertEqual(metadata.execution?.mode, "sdk_runtime")
+        XCTAssertEqual(metadata.execution?.engine, "llama.cpp")
+        XCTAssertEqual(metadata.model.requested.ref, "gemma-2b")
+        XCTAssertEqual(metadata.model.requested.kind, "model")
+        XCTAssertEqual(metadata.model.requested.capability, "text")
+        XCTAssertEqual(metadata.planner.source, "server_plan")
+        XCTAssertFalse(metadata.fallback.used)
+        XCTAssertEqual(metadata.reason.message, "best for this device")
+        XCTAssertEqual(metadata.reason.code, "server_plan")
     }
 
     func testRouteMetadataFromCloudSelection() {
@@ -133,15 +163,18 @@ final class RuntimePlannerParityTests: XCTestCase {
             locality: .cloud,
             engine: nil,
             source: "fallback",
-            reason: "no local engine available -- falling back to cloud"
+            reason: "no local engine available -- falling back to cloud",
+            model: "llama-8b",
+            capability: "text"
         )
 
         let metadata = selection.routeMetadata()
 
-        XCTAssertEqual(metadata.locality, "cloud")
-        XCTAssertNil(metadata.engine)
-        XCTAssertEqual(metadata.plannerSource, "fallback")
-        XCTAssertTrue(metadata.fallbackUsed)
+        XCTAssertEqual(metadata.execution?.locality, "cloud")
+        XCTAssertEqual(metadata.execution?.mode, "hosted_gateway")
+        XCTAssertNil(metadata.execution?.engine)
+        XCTAssertEqual(metadata.planner.source, "fallback")
+        XCTAssertTrue(metadata.fallback.used)
     }
 
     func testRouteMetadataFromFallbackSelection() {
@@ -149,15 +182,18 @@ final class RuntimePlannerParityTests: XCTestCase {
             locality: .local,
             engine: "mlx-lm",
             source: "cache",
-            reason: "fallback: slow but works"
+            reason: "fallback: slow but works",
+            model: "phi-3",
+            capability: "text"
         )
 
         let metadata = selection.routeMetadata()
 
-        XCTAssertEqual(metadata.locality, "on_device")
-        XCTAssertEqual(metadata.engine, "mlx-lm")
-        XCTAssertEqual(metadata.plannerSource, "cache")
-        XCTAssertTrue(metadata.fallbackUsed)
+        XCTAssertEqual(metadata.execution?.locality, "local")
+        XCTAssertEqual(metadata.execution?.mode, "sdk_runtime")
+        XCTAssertEqual(metadata.execution?.engine, "mlx-lm")
+        XCTAssertEqual(metadata.planner.source, "cache")
+        XCTAssertTrue(metadata.fallback.used)
     }
 
     func testRouteMetadataFromEmptySourceSelection() {
@@ -165,8 +201,80 @@ final class RuntimePlannerParityTests: XCTestCase {
 
         let metadata = selection.routeMetadata()
 
-        XCTAssertEqual(metadata.plannerSource, "offline",
+        XCTAssertEqual(metadata.planner.source, "offline",
                        "Empty source should map to 'offline'")
+    }
+
+    func testRouteMetadataExecutionMode() {
+        let localSelection = RuntimeSelection(
+            locality: .local,
+            engine: "coreml",
+            source: "local_default",
+            model: "gemma-2b",
+            capability: "text"
+        )
+        let cloudSelection = RuntimeSelection(
+            locality: .cloud,
+            source: "fallback",
+            model: "gemma-2b",
+            capability: "text"
+        )
+
+        let localMeta = localSelection.routeMetadata()
+        let cloudMeta = cloudSelection.routeMetadata()
+
+        XCTAssertEqual(localMeta.execution?.mode, "sdk_runtime",
+                       "Local selections must use sdk_runtime mode")
+        XCTAssertEqual(cloudMeta.execution?.mode, "hosted_gateway",
+                       "Cloud selections must use hosted_gateway mode")
+    }
+
+    func testLocalityNeverOnDevice() {
+        // "on_device" must NEVER appear as a locality in RouteMetadata.
+        // Public API uses "local" for on-device inference.
+        let localSelection = RuntimeSelection(
+            locality: .local,
+            engine: "mlx-lm",
+            source: "server_plan",
+            model: "gemma-2b",
+            capability: "text"
+        )
+
+        let metadata = localSelection.routeMetadata()
+
+        XCTAssertEqual(metadata.execution?.locality, "local",
+                       "Locality must be 'local', never 'on_device'")
+        XCTAssertNotEqual(metadata.execution?.locality, "on_device",
+                          "'on_device' must never appear as a public locality value")
+    }
+
+    func testRouteMetadataModelInfo() {
+        let selection = RuntimeSelection(
+            locality: .local,
+            engine: "llama.cpp",
+            source: "server_plan",
+            reason: "best match",
+            model: "phi-3",
+            capability: "embeddings"
+        )
+
+        let metadata = selection.routeMetadata()
+
+        XCTAssertEqual(metadata.model.requested.ref, "phi-3")
+        XCTAssertEqual(metadata.model.requested.kind, "model")
+        XCTAssertEqual(metadata.model.requested.capability, "embeddings")
+        XCTAssertNil(metadata.model.resolved,
+                     "Resolved should be nil when planner does not resolve a specific version")
+    }
+
+    func testRouteMetadataEmptyModelKind() {
+        // When model is empty, kind should be "unknown"
+        let selection = RuntimeSelection(locality: .local)
+
+        let metadata = selection.routeMetadata()
+
+        XCTAssertEqual(metadata.model.requested.kind, "unknown")
+        XCTAssertNil(metadata.model.requested.capability)
     }
 
     // MARK: - Private Policy: No Cloud Candidates
@@ -188,7 +296,8 @@ final class RuntimePlannerParityTests: XCTestCase {
         )
 
         let metadata = selection.routeMetadata()
-        XCTAssertEqual(metadata.locality, "on_device")
+        XCTAssertEqual(metadata.execution?.locality, "local")
+        XCTAssertEqual(metadata.execution?.mode, "sdk_runtime")
     }
 
     func testPrivatePolicyWithLocalEvidenceSelectsLocal() async {
@@ -288,7 +397,8 @@ final class RuntimePlannerParityTests: XCTestCase {
         )
 
         let metadata = selection.routeMetadata()
-        XCTAssertEqual(metadata.locality, "cloud")
+        XCTAssertEqual(metadata.execution?.locality, "cloud")
+        XCTAssertEqual(metadata.execution?.mode, "hosted_gateway")
     }
 
     func testCloudOnlyIgnoresBenchmarkCache() async {

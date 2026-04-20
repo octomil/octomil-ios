@@ -386,6 +386,10 @@ public struct RuntimeSelection: Sendable, Equatable {
     public let fallbackCandidates: [RuntimeCandidatePlan]
     /// Human-readable reason for this selection.
     public let reason: String
+    /// Model identifier used in the request (e.g. "gemma-2b").
+    public let model: String
+    /// Capability used in the request (e.g. "text", "embeddings").
+    public let capability: String
 
     public init(
         locality: RuntimeLocality,
@@ -394,7 +398,9 @@ public struct RuntimeSelection: Sendable, Equatable {
         benchmarkRan: Bool = false,
         source: String = "",
         fallbackCandidates: [RuntimeCandidatePlan] = [],
-        reason: String = ""
+        reason: String = "",
+        model: String = "",
+        capability: String = ""
     ) {
         self.locality = locality
         self.engine = engine
@@ -403,51 +409,244 @@ public struct RuntimeSelection: Sendable, Equatable {
         self.source = source
         self.fallbackCandidates = fallbackCandidates
         self.reason = reason
+        self.model = model
+        self.capability = capability
     }
 
     /// Build a ``RouteMetadata`` summary from this selection.
+    ///
+    /// Maps the internal selection state to the canonical contract-backed
+    /// nested ``RouteMetadata`` shape shared across all SDKs.
     public func routeMetadata() -> RouteMetadata {
         let isFallback = source == "fallback" || reason.hasPrefix("fallback")
+        let localityString = locality == .local ? "local" : "cloud"
+        let modeString = locality == .local ? "sdk_runtime" : "hosted_gateway"
+        let plannerSourceString = source.isEmpty ? "offline" : source
+
+        let execution = RouteExecution(
+            locality: localityString,
+            mode: modeString,
+            engine: engine
+        )
+
+        let requested = RouteModelRequested(
+            ref: model,
+            kind: model.isEmpty ? "unknown" : "model",
+            capability: capability.isEmpty ? nil : capability
+        )
+        let routeModel = RouteModel(requested: requested, resolved: nil)
+
+        var routeArtifact: RouteArtifact?
+        if let artifact {
+            let cacheStatus: String
+            if source == "cache" {
+                cacheStatus = "hit"
+            } else if artifact.uri != nil {
+                cacheStatus = "miss"
+            } else {
+                cacheStatus = "not_applicable"
+            }
+            routeArtifact = RouteArtifact(
+                id: artifact.artifactId,
+                version: artifact.modelVersion,
+                format: artifact.format,
+                digest: artifact.digest,
+                cache: ArtifactCache(status: cacheStatus, managedBy: "octomil")
+            )
+        }
+
+        let plannerInfo = PlannerInfo(source: plannerSourceString)
+        let fallbackInfo = FallbackInfo(used: isFallback)
+
+        let reasonCode: String
+        switch source {
+        case "server_plan": reasonCode = "server_plan"
+        case "cache": reasonCode = "cached_plan"
+        case "local_default": reasonCode = "local_default"
+        case "fallback": reasonCode = "fallback"
+        default: reasonCode = source.isEmpty ? "offline" : source
+        }
+
+        let routeReason = RouteReason(code: reasonCode, message: reason)
+
         return RouteMetadata(
-            locality: locality == .local ? "on_device" : "cloud",
-            engine: engine,
-            plannerSource: source.isEmpty ? "offline" : source,
-            fallbackUsed: isFallback,
-            reason: reason
+            status: "selected",
+            execution: execution,
+            model: routeModel,
+            artifact: routeArtifact,
+            planner: plannerInfo,
+            fallback: fallbackInfo,
+            reason: routeReason
         )
     }
 }
 
-// MARK: - RouteMetadata
+// MARK: - RouteMetadata (Contract-Backed Nested Shape)
 
-/// Shared route metadata matching the Python SDK's RouteMetadata.
-///
-/// Provides a uniform summary of how a particular inference request
-/// was routed, regardless of which SDK is in use. This is useful for
-/// logging, telemetry, and debugging routing decisions.
-public struct RouteMetadata: Sendable, Equatable {
-    /// Where inference ran: "on_device" or "cloud".
+/// Execution details for a route decision.
+public struct RouteExecution: Sendable, Equatable {
+    /// Where inference runs: "local" or "cloud". Never "on_device".
     public let locality: String
-    /// Engine used for inference, if local (e.g. "mlx-lm", "llama.cpp").
+    /// Execution mode: "sdk_runtime" (local), "hosted_gateway" (cloud), "external_endpoint".
+    public let mode: String
+    /// Engine used, if any (e.g. "mlx-lm", "llama.cpp").
     public let engine: String?
-    /// How the routing decision was obtained: "server", "cache", "offline".
-    public let plannerSource: String
-    /// Whether a fallback candidate was used instead of the primary.
-    public let fallbackUsed: Bool
-    /// Human-readable reason for this routing decision.
-    public let reason: String
+
+    public init(locality: String, mode: String, engine: String? = nil) {
+        self.locality = locality
+        self.mode = mode
+        self.engine = engine
+    }
+}
+
+/// The model reference as requested by the caller.
+public struct RouteModelRequested: Sendable, Equatable {
+    /// Model reference string (e.g. "gemma-2b").
+    public let ref: String
+    /// Kind of reference: "model", "app", "deployment", "alias", "default", "unknown".
+    public let kind: String
+    /// Capability requested, if any (e.g. "text", "embeddings").
+    public let capability: String?
+
+    public init(ref: String, kind: String = "unknown", capability: String? = nil) {
+        self.ref = ref
+        self.kind = kind
+        self.capability = capability
+    }
+}
+
+/// Resolved model identity after planner resolution.
+public struct RouteModelResolved: Sendable, Equatable {
+    public let id: String?
+    public let slug: String?
+    public let versionId: String?
+    public let variantId: String?
+
+    public init(id: String? = nil, slug: String? = nil, versionId: String? = nil, variantId: String? = nil) {
+        self.id = id
+        self.slug = slug
+        self.versionId = versionId
+        self.variantId = variantId
+    }
+}
+
+/// Model information: what was requested and what was resolved.
+public struct RouteModel: Sendable, Equatable {
+    public let requested: RouteModelRequested
+    public let resolved: RouteModelResolved?
+
+    public init(requested: RouteModelRequested, resolved: RouteModelResolved? = nil) {
+        self.requested = requested
+        self.resolved = resolved
+    }
+}
+
+/// Cache status for a model artifact.
+public struct ArtifactCache: Sendable, Equatable {
+    /// Cache status: "hit", "miss", "downloaded", "not_applicable", "unavailable".
+    public let status: String
+    /// Who manages the cache: "octomil", "runtime", "external".
+    public let managedBy: String?
+
+    public init(status: String = "not_applicable", managedBy: String? = nil) {
+        self.status = status
+        self.managedBy = managedBy
+    }
+}
+
+/// Artifact metadata for the route decision.
+public struct RouteArtifact: Sendable, Equatable {
+    public let id: String?
+    public let version: String?
+    public let format: String?
+    public let digest: String?
+    public let cache: ArtifactCache
 
     public init(
-        locality: String,
-        engine: String? = nil,
-        plannerSource: String,
-        fallbackUsed: Bool = false,
-        reason: String = ""
+        id: String? = nil,
+        version: String? = nil,
+        format: String? = nil,
+        digest: String? = nil,
+        cache: ArtifactCache = ArtifactCache()
     ) {
-        self.locality = locality
-        self.engine = engine
-        self.plannerSource = plannerSource
-        self.fallbackUsed = fallbackUsed
+        self.id = id
+        self.version = version
+        self.format = format
+        self.digest = digest
+        self.cache = cache
+    }
+}
+
+/// How the routing plan was obtained.
+public struct PlannerInfo: Sendable, Equatable {
+    /// Plan source: "server", "cache", "offline".
+    public let source: String
+
+    public init(source: String = "offline") {
+        self.source = source
+    }
+}
+
+/// Whether a fallback route was used.
+public struct FallbackInfo: Sendable, Equatable {
+    public let used: Bool
+
+    public init(used: Bool = false) {
+        self.used = used
+    }
+}
+
+/// Machine-readable reason code and human-readable message.
+public struct RouteReason: Sendable, Equatable {
+    public let code: String
+    public let message: String
+
+    public init(code: String = "", message: String = "") {
+        self.code = code
+        self.message = message
+    }
+}
+
+/// Contract-backed route metadata shared across all SDKs.
+///
+/// Provides a uniform, nested summary of how a particular inference
+/// request was routed. Matches the canonical contract shape defined
+/// in `octomil-contracts`.
+///
+/// **Important:** Public locality values are "local" or "cloud".
+/// The value "on_device" must never appear. Telemetry adapters may
+/// map "local" to "on_device" internally if needed.
+public struct RouteMetadata: Sendable, Equatable {
+    /// Route status: "selected" or "unavailable".
+    public let status: String
+    /// Execution details (locality, mode, engine).
+    public let execution: RouteExecution?
+    /// Model requested and resolved.
+    public let model: RouteModel
+    /// Artifact details, if any.
+    public let artifact: RouteArtifact?
+    /// How the plan was obtained.
+    public let planner: PlannerInfo
+    /// Whether a fallback was used.
+    public let fallback: FallbackInfo
+    /// Reason code and message for this routing decision.
+    public let reason: RouteReason
+
+    public init(
+        status: String = "selected",
+        execution: RouteExecution? = nil,
+        model: RouteModel,
+        artifact: RouteArtifact? = nil,
+        planner: PlannerInfo = PlannerInfo(),
+        fallback: FallbackInfo = FallbackInfo(),
+        reason: RouteReason = RouteReason()
+    ) {
+        self.status = status
+        self.execution = execution
+        self.model = model
+        self.artifact = artifact
+        self.planner = planner
+        self.fallback = fallback
         self.reason = reason
     }
 }
