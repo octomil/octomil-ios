@@ -10,7 +10,7 @@ private struct SdkParityFixture: Decodable {
     let description: String
     let request: FixtureRequest
     let plannerResponse: FixturePlannerResponse
-    let expectedRouteMetadata: FixtureRouteMetadata
+    let expectedRouteMetadata: FixtureRouteMetadata?
     let expectedTelemetry: FixtureTelemetry
     let expectedPolicyResult: FixturePolicyResult
 
@@ -45,6 +45,7 @@ private struct FixturePlannerResponse: Decodable {
     let planTtlSeconds: Int
     let fallbackAllowed: Bool
     let serverGeneratedAt: String
+    let appResolution: FixtureAppResolution?
 
     enum CodingKeys: String, CodingKey {
         case model, capability, policy, candidates
@@ -52,6 +53,35 @@ private struct FixturePlannerResponse: Decodable {
         case planTtlSeconds = "plan_ttl_seconds"
         case fallbackAllowed = "fallback_allowed"
         case serverGeneratedAt = "server_generated_at"
+        case appResolution = "app_resolution"
+    }
+}
+
+private struct FixtureAppResolution: Decodable {
+    let appId: String
+    let appSlug: String?
+    let capability: String
+    let routingPolicy: String
+    let selectedModel: String
+    let selectedModelVariantId: String?
+    let selectedModelVersion: String?
+    let artifactCandidates: [FixtureArtifact]
+    let preferredEngines: [String]
+    let fallbackPolicy: String?
+    let planTtlSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case appId = "app_id"
+        case appSlug = "app_slug"
+        case capability
+        case routingPolicy = "routing_policy"
+        case selectedModel = "selected_model"
+        case selectedModelVariantId = "selected_model_variant_id"
+        case selectedModelVersion = "selected_model_version"
+        case artifactCandidates = "artifact_candidates"
+        case preferredEngines = "preferred_engines"
+        case fallbackPolicy = "fallback_policy"
+        case planTtlSeconds = "plan_ttl_seconds"
     }
 }
 
@@ -70,6 +100,19 @@ private struct FixtureCandidate: Decodable {
         case locality, priority, confidence, reason, engine, artifact, gates
         case engineVersionConstraint = "engine_version_constraint"
         case benchmarkRequired = "benchmark_required"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        locality = try container.decode(String.self, forKey: .locality)
+        priority = try container.decode(Int.self, forKey: .priority)
+        confidence = try container.decode(Double.self, forKey: .confidence)
+        reason = try container.decode(String.self, forKey: .reason)
+        engine = try container.decodeIfPresent(String.self, forKey: .engine)
+        engineVersionConstraint = try container.decodeIfPresent(String.self, forKey: .engineVersionConstraint)
+        artifact = try container.decodeIfPresent(FixtureArtifact.self, forKey: .artifact)
+        benchmarkRequired = try container.decodeIfPresent(Bool.self, forKey: .benchmarkRequired) ?? false
+        gates = try container.decodeIfPresent([FixtureGate].self, forKey: .gates) ?? []
     }
 }
 
@@ -149,14 +192,42 @@ private struct FixtureReason: Decodable {
 }
 
 private struct FixtureTelemetry: Decodable {
-    let eventName: String
+    let keys: Set<String>
+    let eventName: String?
     let forbiddenKeys: [String]
     let requiredKeys: [String]?
 
-    enum CodingKeys: String, CodingKey {
-        case eventName = "event_name"
-        case forbiddenKeys = "forbidden_keys"
-        case requiredKeys = "required_keys"
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DynamicCodingKey.self)
+        keys = Set(container.allKeys.map(\.stringValue))
+        eventName = try container.decodeIfPresent(String.self, forKey: DynamicCodingKey("event_name"))
+        forbiddenKeys = try container.decodeIfPresent(
+            [String].self,
+            forKey: DynamicCodingKey("forbidden_keys")
+        ) ?? []
+        requiredKeys = try container.decodeIfPresent(
+            [String].self,
+            forKey: DynamicCodingKey("required_keys")
+        )
+    }
+}
+
+private struct DynamicCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int?
+
+    init(_ stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(stringValue: String) {
+        self.init(stringValue)
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = "\(intValue)"
+        self.intValue = intValue
     }
 }
 
@@ -217,6 +288,15 @@ final class SdkParityConformanceTests: XCTestCase {
         return try decoder.decode(SdkParityFixture.self, from: data)
     }
 
+    private func loadPlannerResponse(named name: String) throws -> RuntimePlanResponse {
+        let url = fixturesDirectory().appendingPathComponent("\(name).json")
+        let data = try Data(contentsOf: url)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let plannerResponse = try XCTUnwrap(root["planner_response"] as? [String: Any])
+        let plannerData = try JSONSerialization.data(withJSONObject: plannerResponse)
+        return try JSONDecoder().decode(RuntimePlanResponse.self, from: plannerData)
+    }
+
     // MARK: - All Fixtures Load Successfully
 
     func testAllFixturesLoadAndDecode() throws {
@@ -235,8 +315,7 @@ final class SdkParityConformanceTests: XCTestCase {
         for name in Self.fixtureNames {
             let fixture = try loadFixture(named: name)
 
-            // Encode planner_response back to JSON and decode into SDK type
-            let planResponse = mapToRuntimePlanResponse(fixture.plannerResponse)
+            let planResponse = try loadPlannerResponse(named: name)
 
             XCTAssertEqual(planResponse.model, fixture.plannerResponse.model,
                            "[\(name)] model mismatch")
@@ -250,6 +329,8 @@ final class SdkParityConformanceTests: XCTestCase {
                            "[\(name)] fallbackAllowed mismatch")
             XCTAssertEqual(planResponse.planTtlSeconds, fixture.plannerResponse.planTtlSeconds,
                            "[\(name)] planTtlSeconds mismatch")
+            XCTAssertEqual(planResponse.appResolution?.selectedModel, fixture.plannerResponse.appResolution?.selectedModel,
+                           "[\(name)] appResolution selected model mismatch")
         }
     }
 
@@ -287,7 +368,8 @@ final class SdkParityConformanceTests: XCTestCase {
         for name in Self.fixtureNames {
             let fixture = try loadFixture(named: name)
 
-            for fixtureAttempt in fixture.expectedRouteMetadata.attempts {
+            guard let routeMetadata = fixture.expectedRouteMetadata else { continue }
+            for fixtureAttempt in routeMetadata.attempts {
                 // Verify the status and stage values are valid SDK enum cases
                 XCTAssertNotNil(AttemptStatus(rawValue: fixtureAttempt.status),
                                 "[\(name)] invalid attempt status: \(fixtureAttempt.status)")
@@ -310,7 +392,8 @@ final class SdkParityConformanceTests: XCTestCase {
         for name in Self.fixtureNames {
             let fixture = try loadFixture(named: name)
 
-            for attempt in fixture.expectedRouteMetadata.attempts {
+            guard let routeMetadata = fixture.expectedRouteMetadata else { continue }
+            for attempt in routeMetadata.attempts {
                 for gr in attempt.gateResults {
                     XCTAssertTrue(knownCodes.contains(gr.code),
                                   "[\(name)] unrecognized gate code: \(gr.code)")
@@ -343,9 +426,9 @@ final class SdkParityConformanceTests: XCTestCase {
                 runtimeChecker = FixtureRuntimeChecker(unavailableEngines: ["mlx-lm"])
                 gateEvaluator = nil
             case "app_ref_local_first_cloud_fallback":
-                // Simulate memory gate failure on local candidate to trigger cloud fallback
-                runtimeChecker = nil
-                gateEvaluator = FixtureGateEvaluator(failingGates: ["min_free_memory_bytes"])
+                // Simulate the fixture's local Core ML runtime being unavailable.
+                runtimeChecker = FixtureRuntimeChecker(unavailableEngines: ["coreml"])
+                gateEvaluator = nil
             default:
                 runtimeChecker = nil
                 gateEvaluator = nil
@@ -360,12 +443,13 @@ final class SdkParityConformanceTests: XCTestCase {
                 gateEvaluator: gateEvaluator
             )
 
-            let expectedStatus = fixture.expectedRouteMetadata.status
+            guard let routeMetadata = fixture.expectedRouteMetadata else { continue }
+            let expectedStatus = routeMetadata.status
             if expectedStatus == "selected" {
                 XCTAssertTrue(result.succeeded, "[\(name)] expected selected but got no selection")
                 XCTAssertNotNil(result.selectedAttempt, "[\(name)] selectedAttempt should not be nil")
 
-                if let execution = fixture.expectedRouteMetadata.execution {
+                if let execution = routeMetadata.execution {
                     XCTAssertEqual(result.selectedAttempt?.locality, execution.locality,
                                    "[\(name)] selected locality mismatch")
                     XCTAssertEqual(result.selectedAttempt?.mode, execution.mode,
@@ -382,18 +466,18 @@ final class SdkParityConformanceTests: XCTestCase {
     func testLocalFirstCloudFallbackScenario() throws {
         let fixture = try loadFixture(named: "app_ref_local_first_cloud_fallback")
 
-        // Simulate memory gate failure on local candidate
-        let gateEval = FixtureGateEvaluator(failingGates: ["min_free_memory_bytes"])
+        // Simulate the local Core ML runtime being unavailable.
+        let runtimeChecker = FixtureRuntimeChecker(unavailableEngines: ["coreml"])
         let runner = CandidateAttemptRunner(fallbackAllowed: fixture.plannerResponse.fallbackAllowed)
         let inputs = fixture.plannerResponse.candidates.map { mapToAttemptCandidateInput($0) }
 
-        let result = runner.run(candidates: inputs, gateEvaluator: gateEval)
+        let result = runner.run(candidates: inputs, runtimeChecker: runtimeChecker)
 
         XCTAssertTrue(result.succeeded, "Should fall back to cloud")
         XCTAssertEqual(result.selectedAttempt?.locality, "cloud")
         XCTAssertEqual(result.selectedAttempt?.mode, "hosted_gateway")
         XCTAssertTrue(result.fallbackUsed)
-        XCTAssertEqual(result.fallbackTrigger?.code, "gate_failed")
+        XCTAssertEqual(result.fallbackTrigger?.code, "runtime_unavailable")
     }
 
     // MARK: - Streaming Fallback Behavior
@@ -427,21 +511,9 @@ final class SdkParityConformanceTests: XCTestCase {
             let fixture = try loadFixture(named: name)
             let policy = fixture.expectedPolicyResult
 
-            // For streaming post-first-output scenarios, the planner may allow fallback
-            // but the runtime disallows it after output is emitted. The expected_policy_result
-            // reflects the effective runtime behavior, not just the planner flag.
-            let isPostOutputStreaming = name == "stream_post_first_token_no_fallback"
-            if !isPostOutputStreaming {
-                let fallbackAllowed = fixture.plannerResponse.fallbackAllowed
-                XCTAssertEqual(fallbackAllowed, policy.fallbackAllowed,
-                               "[\(name)] fallbackAllowed mismatch between planner_response and expected_policy_result")
-            } else {
-                // Planner says fallback_allowed=true, but runtime blocks fallback after first output
-                XCTAssertTrue(fixture.plannerResponse.fallbackAllowed,
-                              "[\(name)] planner should allow fallback (runtime blocks it post-output)")
-                XCTAssertFalse(policy.fallbackAllowed,
-                               "[\(name)] effective policy should block fallback after first output")
-            }
+            let fallbackAllowed = fixture.plannerResponse.fallbackAllowed
+            XCTAssertEqual(fallbackAllowed, policy.fallbackAllowed,
+                           "[\(name)] fallbackAllowed mismatch between planner_response and expected_policy_result")
 
             // Verify policy constraints are internally consistent
             let hasLocalCandidate = fixture.plannerResponse.candidates.contains { $0.locality == "local" }
@@ -471,17 +543,22 @@ final class SdkParityConformanceTests: XCTestCase {
 
         for name in Self.fixtureNames {
             let fixture = try loadFixture(named: name)
+            let telemetryKeys = fixture.expectedTelemetry.keys
             let forbiddenSet = Set(fixture.expectedTelemetry.forbiddenKeys)
 
             for key in mandatoryForbiddenKeys {
-                XCTAssertTrue(forbiddenSet.contains(key),
-                              "[\(name)] mandatory forbidden key '\(key)' missing from fixture telemetry spec")
+                XCTAssertFalse(telemetryKeys.contains(key),
+                               "[\(name)] forbidden telemetry key '\(key)' was present")
+            }
+            for key in forbiddenSet {
+                XCTAssertFalse(telemetryKeys.contains(key),
+                               "[\(name)] fixture-specific forbidden telemetry key '\(key)' was present")
             }
         }
     }
 
-    /// Validate telemetry event names are from the known contract set.
-    func testTelemetryEventNamesAreValid() throws {
+    /// Validate telemetry payloads expose the route-event fields the server ingests.
+    func testTelemetryPayloadShapeIsValid() throws {
         let validEventNames: Set<String> = [
             "inference.started",
             "inference.completed",
@@ -490,11 +567,25 @@ final class SdkParityConformanceTests: XCTestCase {
             "deploy.started",
             "deploy.completed",
         ]
+        let requiredRouteKeys: Set<String> = [
+            "route_id",
+            "request_id",
+            "capability",
+            "policy",
+            "planner_source",
+            "final_locality",
+            "fallback_used",
+            "candidate_attempts",
+        ]
 
         for name in Self.fixtureNames {
             let fixture = try loadFixture(named: name)
-            XCTAssertTrue(validEventNames.contains(fixture.expectedTelemetry.eventName),
-                          "[\(name)] unknown telemetry event name: \(fixture.expectedTelemetry.eventName)")
+            if let eventName = fixture.expectedTelemetry.eventName {
+                XCTAssertTrue(validEventNames.contains(eventName),
+                              "[\(name)] unknown telemetry event name: \(eventName)")
+            }
+            XCTAssertTrue(requiredRouteKeys.isSubset(of: fixture.expectedTelemetry.keys),
+                          "[\(name)] missing required route telemetry keys")
         }
     }
 
@@ -591,7 +682,24 @@ final class SdkParityConformanceTests: XCTestCase {
             fallbackCandidates: response.fallbackCandidates.map { mapToRuntimeCandidatePlan($0) },
             planTtlSeconds: response.planTtlSeconds,
             fallbackAllowed: response.fallbackAllowed,
-            serverGeneratedAt: response.serverGeneratedAt
+            serverGeneratedAt: response.serverGeneratedAt,
+            appResolution: response.appResolution.map { mapToAppResolution($0) }
+        )
+    }
+
+    private func mapToAppResolution(_ resolution: FixtureAppResolution) -> AppResolution {
+        AppResolution(
+            appId: resolution.appId,
+            appSlug: resolution.appSlug,
+            capability: resolution.capability,
+            routingPolicy: resolution.routingPolicy,
+            selectedModel: resolution.selectedModel,
+            selectedModelVariantId: resolution.selectedModelVariantId,
+            selectedModelVersion: resolution.selectedModelVersion,
+            artifactCandidates: resolution.artifactCandidates.map { mapToRuntimeArtifactPlan($0) },
+            preferredEngines: resolution.preferredEngines,
+            fallbackPolicy: resolution.fallbackPolicy,
+            planTtlSeconds: resolution.planTtlSeconds
         )
     }
 
@@ -599,17 +707,7 @@ final class SdkParityConformanceTests: XCTestCase {
         let locality = RuntimeLocality(rawValue: candidate.locality) ?? .cloud
         let artifact: RuntimeArtifactPlan?
         if let art = candidate.artifact {
-            artifact = RuntimeArtifactPlan(
-                modelId: art.modelId,
-                artifactId: art.artifactId,
-                modelVersion: art.modelVersion,
-                format: art.format,
-                quantization: art.quantization,
-                uri: art.uri,
-                digest: art.digest,
-                sizeBytes: art.sizeBytes,
-                minRamBytes: art.minRamBytes
-            )
+            artifact = mapToRuntimeArtifactPlan(art)
         } else {
             artifact = nil
         }
@@ -624,6 +722,20 @@ final class SdkParityConformanceTests: XCTestCase {
             artifact: artifact,
             benchmarkRequired: candidate.benchmarkRequired,
             gates: candidate.gates.map { mapToCandidateGate($0) }
+        )
+    }
+
+    private func mapToRuntimeArtifactPlan(_ art: FixtureArtifact) -> RuntimeArtifactPlan {
+        RuntimeArtifactPlan(
+            modelId: art.modelId,
+            artifactId: art.artifactId,
+            modelVersion: art.modelVersion,
+            format: art.format,
+            quantization: art.quantization,
+            uri: art.uri,
+            digest: art.digest,
+            sizeBytes: art.sizeBytes,
+            minRamBytes: art.minRamBytes
         )
     }
 

@@ -1,69 +1,94 @@
 {
-  "description": "Private policy disallows cloud fallback. Local candidate fails, request fails entirely.",
+  "description": "Private policy: local candidate fails, cloud fallback disallowed. Route unavailable.",
   "request": {
-    "model": "phi-3-mini",
+    "model": "gemma3-1b",
     "capability": "chat",
-    "routing_policy": "private"
+    "routing_policy": "private",
+    "device": {
+      "platform": "macos",
+      "arch": "arm64",
+      "ram_bytes": 17179869184,
+      "engines": []
+    }
   },
   "planner_response": {
-    "model": "phi-3-mini",
+    "model": "gemma3-1b",
     "capability": "chat",
     "policy": "private",
     "candidates": [
       {
         "locality": "local",
-        "priority": 0,
-        "confidence": 0.80,
-        "reason": "private policy, local execution only",
         "engine": "mlx-lm",
         "artifact": {
-          "model_id": "phi-3-mini",
-          "artifact_id": "art_phi3_mlx",
-          "model_version": "2.0.0",
-          "format": "safetensors",
-          "quantization": "int4",
-          "uri": "https://models.octomil.com/phi-3-mini/mlx_int4.safetensors",
-          "digest": "sha256:private_digest",
-          "size_bytes": 2200000000,
-          "min_ram_bytes": 4000000000
+          "model_id": "gemma3-1b",
+          "artifact_id": "art_600",
+          "format": "mlx",
+          "digest": "sha256:fff666",
+          "size_bytes": 1200000000
         },
-        "benchmark_required": false,
+        "priority": 0,
+        "confidence": 0.8,
+        "reason": "private policy: local only",
         "gates": [
-          {"code": "runtime_available", "required": true, "source": "server"},
-          {"code": "artifact_verified", "required": true, "source": "server"},
-          {"code": "min_free_memory_bytes", "required": true, "threshold_number": 4000000000, "source": "server"}
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" }
         ]
       }
     ],
     "fallback_candidates": [],
-    "plan_ttl_seconds": 604800,
     "fallback_allowed": false,
-    "server_generated_at": "2026-04-20T10:06:00Z"
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
   },
   "expected_route_metadata": {
-    "status": "failed",
+    "status": "unavailable",
     "execution": null,
+    "model": {
+      "requested": { "ref": "gemma3-1b", "kind": "model", "capability": "chat" }
+    },
+    "artifact": null,
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
     "attempts": [
       {
         "index": 0,
         "locality": "local",
         "mode": "sdk_runtime",
         "engine": "mlx-lm",
+        "artifact": null,
         "status": "failed",
         "stage": "prepare",
         "gate_results": [
-          {"code": "runtime_available", "status": "failed"}
-        ]
+          { "code": "runtime_available", "status": "failed", "reason_code": "engine_not_installed" }
+        ],
+        "reason": { "code": "runtime_unavailable", "message": "mlx-lm engine not installed" }
       }
-    ]
+    ],
+    "reason": { "code": "no_viable_candidate", "message": "private policy: local failed, cloud fallback disallowed" }
   },
   "expected_telemetry": {
-    "event_name": "inference.failed",
-    "forbidden_keys": ["prompt", "output", "messages", "completion"]
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "capability": "chat",
+    "policy": "private",
+    "planner_source": "server",
+    "final_locality": null,
+    "engine": null,
+    "artifact_id": null,
+    "fallback_used": false,
+    "candidate_attempts": 1
   },
   "expected_policy_result": {
     "cloud_allowed": false,
     "local_allowed": true,
-    "fallback_allowed": false
-  }
+    "fallback_allowed": false,
+    "private": true
+  },
+  "rules_tested": [
+    "private never uses cloud",
+    "cloud fallback disallowed means route goes unavailable",
+    "route metadata status=unavailable with execution=null"
+  ]
 }
