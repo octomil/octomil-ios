@@ -1,0 +1,110 @@
+{
+  "description": "Capability reference resolves default chat model from config. No explicit model passed.",
+  "request": {
+    "model": "@capability/chat",
+    "capability": "chat",
+    "routing_policy": "local_first",
+    "device": {
+      "platform": "macos",
+      "arch": "arm64",
+      "ram_bytes": 34359738368,
+      "engines": [
+        { "id": "mlx-lm", "version": "0.22.0" },
+        { "id": "llama.cpp", "version": "b4567" }
+      ]
+    }
+  },
+  "planner_response": {
+    "model": "llama-8b",
+    "capability": "chat",
+    "policy": "local_first",
+    "candidates": [
+      {
+        "locality": "local",
+        "engine": "mlx-lm",
+        "artifact": {
+          "model_id": "llama-8b",
+          "artifact_id": "art_300",
+          "format": "mlx",
+          "digest": "sha256:ccc333",
+          "size_bytes": 4500000000
+        },
+        "priority": 0,
+        "confidence": 0.92,
+        "reason": "mlx-lm preferred on Apple Silicon",
+        "gates": [
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" },
+          { "code": "min_tokens_per_second", "required": false, "threshold_number": 10.0, "source": "server" }
+        ]
+      },
+      {
+        "locality": "cloud",
+        "engine": "cloud",
+        "priority": 1,
+        "confidence": 0.99,
+        "reason": "cloud fallback",
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": { "locality": "local", "mode": "sdk_runtime", "engine": "mlx-lm" },
+    "model": {
+      "requested": { "ref": "@capability/chat", "kind": "default", "capability": "chat" },
+      "resolved": { "id": "llama-8b", "slug": null, "version_id": null, "variant_id": null }
+    },
+    "artifact": { "id": "art_300", "version": null, "format": "mlx", "digest": "sha256:ccc333", "cache": { "status": "hit", "managed_by": "octomil" } },
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "mlx-lm",
+        "artifact": { "id": "art_300", "digest": "sha256:ccc333", "cache": { "status": "hit", "managed_by": "octomil" } },
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          { "code": "artifact_verified", "status": "passed" },
+          { "code": "runtime_available", "status": "passed" },
+          { "code": "model_loads", "status": "passed" },
+          { "code": "min_tokens_per_second", "status": "passed", "observed_number": 45.0, "threshold_number": 10.0 }
+        ],
+        "reason": { "code": "selected", "message": "all gates passed, local inference succeeded" }
+      }
+    ],
+    "reason": { "code": "attempt_selected", "message": "capability default resolved to llama-8b, local selected" }
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "capability": "chat",
+    "policy": "local_first",
+    "planner_source": "server",
+    "final_locality": "local",
+    "engine": "mlx-lm",
+    "artifact_id": "art_300",
+    "fallback_used": false,
+    "candidate_attempts": 1
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": true,
+    "private": false
+  },
+  "rules_tested": [
+    "capability ref resolves to default model from config/server",
+    "local_first prefers local when available",
+    "advisory gates (required=false) do not block selection"
+  ]
+}

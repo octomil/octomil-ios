@@ -1,0 +1,83 @@
+{
+  "description": "Deployment reference with cloud_only policy. Local is never attempted.",
+  "request": {
+    "model": "deploy_abc123",
+    "capability": "chat",
+    "routing_policy": "cloud_only",
+    "device": {
+      "platform": "linux",
+      "arch": "x86_64",
+      "ram_bytes": 68719476736,
+      "engines": []
+    }
+  },
+  "planner_response": {
+    "model": "llama-70b",
+    "capability": "chat",
+    "policy": "cloud_only",
+    "candidates": [
+      {
+        "locality": "cloud",
+        "engine": "cloud",
+        "priority": 0,
+        "confidence": 0.99,
+        "reason": "cloud_only policy: cloud is sole candidate",
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": false,
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": { "locality": "cloud", "mode": "hosted_gateway", "engine": null },
+    "model": {
+      "requested": { "ref": "deploy_abc123", "kind": "deployment", "capability": "chat" },
+      "resolved": { "id": "llama-70b", "slug": null, "version_id": null, "variant_id": null }
+    },
+    "artifact": null,
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "cloud",
+        "mode": "hosted_gateway",
+        "engine": null,
+        "artifact": null,
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [],
+        "reason": { "code": "selected", "message": "cloud_only policy, cloud selected" }
+      }
+    ],
+    "reason": { "code": "attempt_selected", "message": "deployment cloud_only, cloud gateway selected" }
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "deployment_id": "deploy_abc123",
+    "capability": "chat",
+    "policy": "cloud_only",
+    "planner_source": "server",
+    "final_locality": "cloud",
+    "engine": null,
+    "artifact_id": null,
+    "fallback_used": false,
+    "candidate_attempts": 1
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": false,
+    "fallback_allowed": false,
+    "private": false
+  },
+  "rules_tested": [
+    "cloud_only never attempts local",
+    "deployment ref resolves through server",
+    "no local candidate emitted under cloud_only"
+  ]
+}

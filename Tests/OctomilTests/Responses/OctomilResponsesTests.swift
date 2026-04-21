@@ -96,6 +96,36 @@ final class OctomilResponsesTests: XCTestCase {
         }
     }
 
+    func testCreateEmitsRouteDecisionTelemetry() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let queue = TelemetryQueue(
+            modelId: "test",
+            serverURL: URL(string: "https://test.local")!,
+            apiKey: nil,
+            batchSize: 100,
+            flushInterval: 0,
+            persistenceURL: tempDir.appendingPathComponent("events.json")
+        )
+
+        let runtime = MockModelRuntime(response: RuntimeResponse(text: "Hello world"))
+        let responses = OctomilResponses(runtimeResolver: { _ in runtime })
+
+        _ = try await responses.create(
+            ResponseRequest(model: "test", input: [.text("Hi")])
+        )
+
+        let routeEvents = queue.bufferedEvents.filter { $0.name == "route.decision" }
+        XCTAssertEqual(routeEvents.count, 1)
+        let attrs = routeEvents[0].attributes
+        XCTAssertEqual(attrs["route.capability"], .string("chat"))
+        XCTAssertEqual(attrs["route.final_locality"], .string("local"))
+        XCTAssertEqual(attrs["route.candidate_attempts"], .int(1))
+    }
+
     func testStreamEmitsChunkTelemetryEvents() async throws {
         // Create a TelemetryQueue with a serverURL so it becomes TelemetryQueue.shared.
         // Using the internal init with a temp persistence URL to avoid disk side-effects.
@@ -142,6 +172,41 @@ final class OctomilResponsesTests: XCTestCase {
             XCTAssertEqual(event.attributes["model.id"], .string("phi-4-mini"))
             XCTAssertEqual(event.attributes["inference.chunk_index"], .int(i))
         }
+    }
+
+    func testStreamEmitsRouteDecisionTelemetry() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let queue = TelemetryQueue(
+            modelId: "test",
+            serverURL: URL(string: "https://test.local")!,
+            apiKey: nil,
+            batchSize: 100,
+            flushInterval: 0,
+            persistenceURL: tempDir.appendingPathComponent("events.json")
+        )
+
+        let runtime = StreamingMockRuntime(chunks: [
+            RuntimeChunk(text: "Hello"),
+            RuntimeChunk(text: " world"),
+        ])
+        let responses = OctomilResponses(runtimeResolver: { _ in runtime })
+
+        for try await _ in responses.stream(
+            ResponseRequest(model: "phi-4-mini", input: [.text("Hi")])
+        ) {
+            // exhaust stream
+        }
+
+        let routeEvents = queue.bufferedEvents.filter { $0.name == "route.decision" }
+        XCTAssertEqual(routeEvents.count, 1)
+        let attrs = routeEvents[0].attributes
+        XCTAssertEqual(attrs["route.capability"], .string("chat"))
+        XCTAssertEqual(attrs["route.final_locality"], .string("local"))
+        XCTAssertEqual(attrs["route.candidate_attempts"], .int(1))
     }
 }
 
