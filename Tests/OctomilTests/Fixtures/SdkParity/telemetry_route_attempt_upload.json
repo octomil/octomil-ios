@@ -1,0 +1,120 @@
+{
+  "description": "Telemetry upload payload from a route with fallback. Validates that only safe fields are present and no prompt/output/audio/paths leak.",
+  "request": {
+    "model": "gemma3-1b",
+    "capability": "chat",
+    "routing_policy": "local_first",
+    "device": {
+      "platform": "macos",
+      "arch": "arm64",
+      "ram_bytes": 17179869184,
+      "engines": [{ "id": "mlx-lm", "version": "0.22.0" }]
+    }
+  },
+  "planner_response": {
+    "model": "gemma3-1b",
+    "capability": "chat",
+    "policy": "local_first",
+    "candidates": [
+      {
+        "locality": "local",
+        "engine": "mlx-lm",
+        "artifact": {
+          "model_id": "gemma3-1b",
+          "artifact_id": "art_900",
+          "format": "mlx",
+          "digest": "sha256:iii999",
+          "size_bytes": 1200000000
+        },
+        "priority": 0,
+        "confidence": 0.9,
+        "reason": "local preferred",
+        "gates": [
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" },
+          { "code": "max_ttft_ms", "required": true, "threshold_number": 2000, "source": "server" }
+        ]
+      },
+      {
+        "locality": "cloud",
+        "engine": "cloud",
+        "priority": 1,
+        "confidence": 0.99,
+        "reason": "cloud fallback",
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "capability": "chat",
+    "policy": "local_first",
+    "planner_source": "server",
+    "final_locality": "cloud",
+    "engine": null,
+    "artifact_id": null,
+    "fallback_used": true,
+    "fallback_trigger_code": "gate_failed",
+    "fallback_trigger_stage": "gate",
+    "candidate_attempts": 2,
+    "attempt_details": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "mlx-lm",
+        "status": "failed",
+        "stage": "gate",
+        "gate_summary": {
+          "passed": ["artifact_verified", "runtime_available", "model_loads"],
+          "failed": ["max_ttft_ms"]
+        },
+        "reason_code": "gate_failed"
+      },
+      {
+        "index": 1,
+        "locality": "cloud",
+        "mode": "hosted_gateway",
+        "engine": null,
+        "status": "selected",
+        "stage": "inference",
+        "gate_summary": { "passed": [], "failed": [] },
+        "reason_code": "selected"
+      }
+    ]
+  },
+  "forbidden_telemetry_keys": [
+    "prompt",
+    "input",
+    "output",
+    "completion",
+    "audio",
+    "audio_bytes",
+    "file_path",
+    "text",
+    "content",
+    "messages",
+    "system_prompt",
+    "documents"
+  ],
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": true,
+    "private": false
+  },
+  "rules_tested": [
+    "telemetry never contains prompt/input/output/audio/file paths",
+    "telemetry includes route_id, plan_id, request_id for correlation",
+    "telemetry includes structured attempt details with gate summaries",
+    "telemetry uses reason codes not human-readable messages for alerting",
+    "server can correlate fallback events by route_id"
+  ]
+}

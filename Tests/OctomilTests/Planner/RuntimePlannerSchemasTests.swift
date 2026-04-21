@@ -25,7 +25,7 @@ final class RuntimePlannerSchemasTests: XCTestCase {
 
     func testInstalledRuntimeCodableRoundTrip() throws {
         let runtime = InstalledRuntime(
-            engine: "mlx",
+            engine: "mlx-lm",
             version: "0.30.0",
             available: true,
             accelerator: "metal",
@@ -130,7 +130,7 @@ final class RuntimePlannerSchemasTests: XCTestCase {
             priority: 1,
             confidence: 0.95,
             reason: "Best engine for this device",
-            engine: "mlx",
+            engine: "mlx-lm",
             engineVersionConstraint: ">=0.30.0",
             artifact: RuntimeArtifactPlan(modelId: "llama-8b", format: "safetensors"),
             benchmarkRequired: true
@@ -166,7 +166,7 @@ final class RuntimePlannerSchemasTests: XCTestCase {
                     priority: 1,
                     confidence: 0.9,
                     reason: "High confidence local",
-                    engine: "mlx"
+                    engine: "mlx-lm"
                 ),
                 RuntimeCandidatePlan(
                     locality: .cloud,
@@ -273,7 +273,7 @@ final class RuntimePlannerSchemasTests: XCTestCase {
 
         XCTAssertEqual(plan.model, "llama-8b")
         XCTAssertEqual(plan.candidates.count, 1)
-        XCTAssertEqual(plan.candidates[0].engine, "mlx")
+        XCTAssertEqual(plan.candidates[0].engine, "mlx-lm")
         XCTAssertEqual(plan.candidates[0].locality, .local)
         XCTAssertEqual(plan.candidates[0].artifact?.format, "safetensors")
         XCTAssertEqual(plan.candidates[0].artifact?.sizeBytes, 4_294_967_296)
