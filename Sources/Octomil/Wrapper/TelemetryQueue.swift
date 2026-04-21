@@ -313,6 +313,46 @@ public final class TelemetryQueue: @unchecked Sendable {
         recordEvent(event)
     }
 
+    // MARK: - Route Events
+
+    /// Reports a `route.completed` telemetry event after a routed request finishes.
+    ///
+    /// Privacy-safe: contains only operational metadata, never prompt/output/content.
+    ///
+    /// - Parameter event: The canonical ``RouteEvent`` built from the routing decision.
+    public func reportRouteEvent(_ event: RouteEvent) {
+        var attrs: [String: TelemetryValue] = [
+            "route.id": .string(event.routeId),
+            "request.id": .string(event.requestId),
+            "route.capability": .string(event.capability),
+            "route.final_locality": .string(event.finalLocality),
+            "route.fallback_used": .bool(event.fallbackUsed),
+            "route.candidate_attempts": .int(event.candidateAttempts),
+            "route.model_ref_kind": .string(event.modelRefKind),
+        ]
+        if let planId = event.planId {
+            attrs["route.plan_id"] = .string(planId)
+        }
+        if let policy = event.policy {
+            attrs["route.policy"] = .string(policy)
+        }
+        if let plannerSource = event.plannerSource {
+            attrs["route.planner_source"] = .string(plannerSource)
+        }
+        if let engine = event.engine {
+            attrs["route.engine"] = .string(engine)
+        }
+        if let triggerCode = event.fallbackTriggerCode {
+            attrs["route.fallback_trigger_code"] = .string(triggerCode)
+        }
+
+        let telemetryEvent = TelemetryEvent(
+            name: "route.completed",
+            attributes: attrs
+        )
+        recordEvent(telemetryEvent)
+    }
+
     // MARK: - Training Events
 
     /// Records a `training.started` event.
