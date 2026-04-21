@@ -1,0 +1,112 @@
+{
+  "description": "App reference with local_only policy. Cloud is never attempted regardless of availability.",
+  "request": {
+    "model": "@app/my-assistant/chat",
+    "capability": "chat",
+    "routing_policy": "local_only",
+    "device": {
+      "platform": "macos",
+      "arch": "arm64",
+      "ram_bytes": 17179869184,
+      "engines": [{ "id": "mlx-lm", "version": "0.22.0" }]
+    }
+  },
+  "planner_response": {
+    "model": "gemma3-1b",
+    "capability": "chat",
+    "policy": "local_only",
+    "candidates": [
+      {
+        "locality": "local",
+        "engine": "mlx-lm",
+        "artifact": {
+          "model_id": "gemma3-1b",
+          "artifact_id": "art_100",
+          "format": "mlx",
+          "digest": "sha256:aaa111",
+          "size_bytes": 1200000000
+        },
+        "priority": 0,
+        "confidence": 0.95,
+        "reason": "app policy requires local execution",
+        "gates": [
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" }
+        ]
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": false,
+    "app_resolution": {
+      "app_id": "app_001",
+      "app_slug": "my-assistant",
+      "capability": "chat",
+      "routing_policy": "local_only",
+      "selected_model": "gemma3-1b",
+      "selected_model_variant_id": "var_001",
+      "selected_model_version": "1.0.0",
+      "artifact_candidates": [],
+      "preferred_engines": ["mlx-lm"],
+      "fallback_policy": null,
+      "plan_ttl_seconds": 604800
+    },
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": { "locality": "local", "mode": "sdk_runtime", "engine": "mlx-lm" },
+    "model": {
+      "requested": { "ref": "@app/my-assistant/chat", "kind": "app", "capability": "chat" },
+      "resolved": { "id": "gemma3-1b", "slug": null, "version_id": "1.0.0", "variant_id": "var_001" }
+    },
+    "artifact": { "id": "art_100", "version": "1.0.0", "format": "mlx", "digest": "sha256:aaa111", "cache": { "status": "hit", "managed_by": "octomil" } },
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "mlx-lm",
+        "artifact": { "id": "art_100", "digest": "sha256:aaa111", "cache": { "status": "hit", "managed_by": "octomil" } },
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          { "code": "artifact_verified", "status": "passed" },
+          { "code": "runtime_available", "status": "passed" },
+          { "code": "model_loads", "status": "passed" }
+        ],
+        "reason": { "code": "selected", "message": "all gates passed, local inference succeeded" }
+      }
+    ],
+    "reason": { "code": "attempt_selected", "message": "local mlx-lm selected via app local_only policy" }
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "app_id": "app_001",
+    "app_slug": "my-assistant",
+    "capability": "chat",
+    "policy": "local_only",
+    "planner_source": "server",
+    "final_locality": "local",
+    "engine": "mlx-lm",
+    "artifact_id": "art_100",
+    "fallback_used": false,
+    "candidate_attempts": 1
+  },
+  "expected_policy_result": {
+    "cloud_allowed": false,
+    "local_allowed": true,
+    "fallback_allowed": false,
+    "private": false
+  },
+  "rules_tested": [
+    "local_only never uses cloud",
+    "app ref resolves to concrete model",
+    "fallback_allowed=false prevents cloud attempt"
+  ]
+}

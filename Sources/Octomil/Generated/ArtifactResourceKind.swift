@@ -14,6 +14,4 @@ public enum ArtifactResourceKind: String, Codable, Sendable {
     case signature = "signature"
     case projector = "projector"
     case metadata = "metadata"
-    case config = "config"
-    case embeddings = "embeddings"
 }

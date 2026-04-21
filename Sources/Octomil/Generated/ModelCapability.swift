@@ -7,4 +7,6 @@ public enum ContractModelCapability: String, Codable, Sendable {
     case keyboardPrediction = "keyboard_prediction"
     case embedding = "embedding"
     case classification = "classification"
+    case reasoning = "reasoning"
+    case vision = "vision"
 }

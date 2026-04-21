@@ -68,3 +68,32 @@ extension EngineRegistry {
         registerMLX(loader: MLXModelLoader())
     }
 }
+
+// MARK: - Runtime Evidence
+
+extension InstalledRuntime {
+
+    /// Create runtime evidence for a locally-available MLX text model.
+    ///
+    /// Call this only when a concrete MLX model directory (with safetensors
+    /// weights and config.json) exists on disk. Framework availability alone
+    /// is not sufficient evidence.
+    ///
+    /// - Parameters:
+    ///   - model: Model identifier (e.g. "llama-3.2-1b", "gemma-2b").
+    ///   - artifactDigest: SHA-256 hex digest of the model directory, if known.
+    /// - Returns: An ``InstalledRuntime`` with model evidence metadata.
+    public static func mlxEvidence(
+        model: String,
+        artifactDigest: String? = nil
+    ) -> InstalledRuntime {
+        modelCapable(
+            engine: "mlx-lm",
+            model: model,
+            capabilities: ["text"],
+            accelerator: "metal",
+            artifactDigest: artifactDigest,
+            artifactFormat: "mlx"
+        )
+    }
+}

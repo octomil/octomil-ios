@@ -14,17 +14,24 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     private let modelPath: URL
 
+    /// Optional model identifier for benchmark reporting.
+    var modelId: String?
+
     init(modelPath: URL) {
         self.modelPath = modelPath
     }
 
     func generate(input: Any, modality: Modality, config _: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let path = modelPath.path
+        let reportModelId = self.modelId
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                let inferenceStart = CFAbsoluteTimeGetCurrent()
+
                 do {
                     let samples = try Self.extractSamples(from: input)
+                    let audioDurationSeconds = Double(samples.count) / 16000.0
                     NSLog("[Whisper] samples count: \(samples.count), first 5: \(Array(samples.prefix(5)))")
 
                     var params = whisper_context_default_params()
@@ -67,6 +74,7 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
                     // Emit one chunk per segment
                     let nSegments = whisper_full_n_segments(ctx)
                     NSLog("[Whisper] nSegments: \(nSegments)")
+                    var emittedSegments = 0
                     for i in 0..<nSegments {
                         if Task.isCancelled { break }
 
@@ -82,6 +90,27 @@ final class WhisperBatchEngine: StreamingInferenceEngine, @unchecked Sendable {
                             latencyMs: 0
                         )
                         continuation.yield(chunk)
+                        emittedSegments += 1
+                    }
+
+                    // Record real benchmark after successful transcription
+                    if let modelId = reportModelId, emittedSegments > 0 {
+                        let wallClockSeconds = CFAbsoluteTimeGetCurrent() - inferenceStart
+                        // Audio throughput: ratio of audio duration to processing time
+                        // A value > 1.0 means faster-than-realtime processing
+                        let throughput = wallClockSeconds > 0
+                            ? audioDurationSeconds / wallClockSeconds
+                            : 0
+                        let ttftMs = wallClockSeconds * 1000 // batch mode: all at once
+
+                        RuntimeBenchmarkReporter.shared.report(
+                            model: modelId,
+                            capability: "audio_transcription",
+                            engineName: "whisper.cpp",
+                            tokensPerSecond: throughput, // audio throughput ratio, not token rate
+                            ttftMs: ttftMs,
+                            memoryMb: 0
+                        )
                     }
 
                     continuation.finish()

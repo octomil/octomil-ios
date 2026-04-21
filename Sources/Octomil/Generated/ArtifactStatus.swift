@@ -18,4 +18,5 @@ public enum ArtifactStatus: String, Codable, Sendable {
     case failedCorrupt = "failed_corrupt"
     case failedHealthcheck = "failed_healthcheck"
     case rollbackPending = "rollback_pending"
+    case rolledBack = "rolled_back"
 }

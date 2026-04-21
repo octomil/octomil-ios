@@ -1,3 +1,4 @@
+#if canImport(sherpa_onnx)
 import Foundation
 import Octomil
 
@@ -27,3 +28,31 @@ extension EngineRegistry {
         }
     }
 }
+
+// MARK: - Runtime Evidence
+
+extension InstalledRuntime {
+
+    /// Create runtime evidence for a locally-available sherpa-onnx ASR model.
+    ///
+    /// Call this only when a concrete sherpa-onnx model directory exists on disk.
+    /// Framework availability alone is not sufficient evidence.
+    ///
+    /// - Parameters:
+    ///   - model: Model identifier (e.g. "sherpa-streaming-zipformer").
+    ///   - artifactDigest: SHA-256 hex digest of the model directory, if known.
+    /// - Returns: An ``InstalledRuntime`` with model evidence metadata.
+    public static func sherpaEvidence(
+        model: String,
+        artifactDigest: String? = nil
+    ) -> InstalledRuntime {
+        modelCapable(
+            engine: "whisper.cpp",
+            model: model,
+            capabilities: ["audio_transcription"],
+            artifactDigest: artifactDigest,
+            artifactFormat: "onnx"
+        )
+    }
+}
+#endif

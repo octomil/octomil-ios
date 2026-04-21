@@ -6,7 +6,9 @@
 @_exported import Octomil
 
 import OctomilRuntimeLlama
+#if canImport(sherpa_onnx)
 import OctomilRuntimeSherpa
+#endif
 import OctomilRuntimeWhisper
 import OctomilMLX
 
@@ -17,7 +19,9 @@ import OctomilMLX
 private let _bootstrapEngines: Void = {
     let registry = EngineRegistry.shared
     registry.registerLlamaCpp()
+    #if canImport(sherpa_onnx)
     registry.registerSherpa()
+    #endif
     registry.registerWhisper()
     registry.registerMLX()
 }()

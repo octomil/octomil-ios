@@ -45,6 +45,7 @@ public final class MLXDeployedModel: @unchecked Sendable {
         result: @Sendable () -> StreamingInferenceResult?
     ) {
         let engine = MLXLLMEngine(modelContainer: modelContainer)
+        engine.modelId = name
         let config = GenerationConfig(
             maxTokens: maxTokens,
             temperature: Double(temperature)
@@ -62,6 +63,7 @@ public final class MLXDeployedModel: @unchecked Sendable {
         result: @Sendable () -> StreamingInferenceResult?
     ) {
         let engine = MLXLLMEngine(modelContainer: modelContainer)
+        engine.modelId = name
         let config = GenerationConfig(
             maxTokens: maxTokens,
             temperature: Double(temperature)
