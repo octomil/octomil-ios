@@ -279,4 +279,173 @@ final class RuntimePlannerSchemasTests: XCTestCase {
         XCTAssertEqual(plan.candidates[0].artifact?.sizeBytes, 4_294_967_296)
         XCTAssertFalse(plan.candidates[0].benchmarkRequired)
     }
+
+    // MARK: - ModelResolution
+
+    func testModelResolutionCodableRoundTrip() throws {
+        let resolution = ModelResolution(
+            refKind: "deployment",
+            originalRef: "deploy_abc123",
+            resolvedModel: "llama-8b",
+            deploymentId: "dep_001",
+            deploymentKey: "production-llama",
+            experimentId: nil,
+            variantId: "var_xyz",
+            variantName: "primary",
+            capability: "text",
+            routingPolicy: "local_first"
+        )
+
+        let data = try encoder.encode(resolution)
+        let decoded = try decoder.decode(ModelResolution.self, from: data)
+
+        XCTAssertEqual(decoded, resolution)
+    }
+
+    func testModelResolutionMinimalFields() throws {
+        let resolution = ModelResolution(
+            refKind: "model",
+            originalRef: "gemma-2b",
+            resolvedModel: "gemma-2b"
+        )
+
+        let data = try encoder.encode(resolution)
+        let decoded = try decoder.decode(ModelResolution.self, from: data)
+
+        XCTAssertEqual(decoded.refKind, "model")
+        XCTAssertEqual(decoded.originalRef, "gemma-2b")
+        XCTAssertEqual(decoded.resolvedModel, "gemma-2b")
+        XCTAssertNil(decoded.deploymentId)
+        XCTAssertNil(decoded.deploymentKey)
+        XCTAssertNil(decoded.experimentId)
+        XCTAssertNil(decoded.variantId)
+        XCTAssertNil(decoded.variantName)
+        XCTAssertNil(decoded.capability)
+        XCTAssertNil(decoded.routingPolicy)
+    }
+
+    func testDeserializeDeploymentResolutionFromServerJSON() throws {
+        let json = """
+        {
+            "model": "llama-8b",
+            "capability": "text",
+            "policy": "local_first",
+            "candidates": [
+                {
+                    "locality": "local",
+                    "priority": 1,
+                    "confidence": 0.9,
+                    "reason": "Deployment resolved candidate",
+                    "engine": "coreml",
+                    "benchmark_required": false,
+                    "gates": []
+                }
+            ],
+            "fallback_candidates": [],
+            "plan_ttl_seconds": 604800,
+            "fallback_allowed": true,
+            "server_generated_at": "2026-04-21T00:00:00Z",
+            "resolution": {
+                "ref_kind": "deployment",
+                "original_ref": "deploy_abc123",
+                "resolved_model": "llama-8b",
+                "deployment_id": "dep_001",
+                "deployment_key": "production-llama",
+                "variant_id": "var_xyz",
+                "variant_name": "primary",
+                "capability": "text",
+                "routing_policy": "local_first"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let plan = try decoder.decode(RuntimePlanResponse.self, from: json)
+
+        XCTAssertNotNil(plan.resolution)
+        XCTAssertEqual(plan.resolution?.refKind, "deployment")
+        XCTAssertEqual(plan.resolution?.originalRef, "deploy_abc123")
+        XCTAssertEqual(plan.resolution?.resolvedModel, "llama-8b")
+        XCTAssertEqual(plan.resolution?.deploymentId, "dep_001")
+        XCTAssertEqual(plan.resolution?.deploymentKey, "production-llama")
+        XCTAssertNil(plan.resolution?.experimentId)
+        XCTAssertEqual(plan.resolution?.variantId, "var_xyz")
+        XCTAssertEqual(plan.resolution?.variantName, "primary")
+        XCTAssertEqual(plan.resolution?.capability, "text")
+        XCTAssertEqual(plan.resolution?.routingPolicy, "local_first")
+    }
+
+    func testDeserializeExperimentResolutionFromServerJSON() throws {
+        let json = """
+        {
+            "model": "gemma-2b",
+            "capability": "text",
+            "policy": "cloud_first",
+            "candidates": [
+                {
+                    "locality": "cloud",
+                    "priority": 1,
+                    "confidence": 0.85,
+                    "reason": "Experiment variant resolved",
+                    "benchmark_required": false,
+                    "gates": []
+                }
+            ],
+            "fallback_candidates": [],
+            "plan_ttl_seconds": 604800,
+            "fallback_allowed": true,
+            "server_generated_at": "2026-04-21T00:00:00Z",
+            "resolution": {
+                "ref_kind": "experiment",
+                "original_ref": "exp_test123/control",
+                "resolved_model": "gemma-2b",
+                "experiment_id": "exp_test123",
+                "variant_id": "var_control",
+                "variant_name": "control",
+                "capability": "text"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let plan = try decoder.decode(RuntimePlanResponse.self, from: json)
+
+        XCTAssertNotNil(plan.resolution)
+        XCTAssertEqual(plan.resolution?.refKind, "experiment")
+        XCTAssertEqual(plan.resolution?.experimentId, "exp_test123")
+        XCTAssertEqual(plan.resolution?.variantId, "var_control")
+        XCTAssertEqual(plan.resolution?.variantName, "control")
+        XCTAssertNil(plan.resolution?.deploymentId)
+        XCTAssertNil(plan.resolution?.deploymentKey)
+    }
+
+    func testPlanResponseWithoutResolutionField() throws {
+        // Server response without resolution (older server or model ref)
+        let json = """
+        {
+            "model": "gemma-2b",
+            "capability": "text",
+            "policy": "local_first",
+            "candidates": [],
+            "fallback_candidates": [],
+            "plan_ttl_seconds": 604800,
+            "fallback_allowed": true,
+            "server_generated_at": "2026-04-21T00:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let plan = try decoder.decode(RuntimePlanResponse.self, from: json)
+
+        XCTAssertNil(plan.resolution)
+        XCTAssertNil(plan.appResolution)
+    }
+
+    func testPlanResponseResolutionDefaultsToNil() {
+        let plan = RuntimePlanResponse(
+            model: "test",
+            capability: "text",
+            policy: "local_first",
+            candidates: []
+        )
+
+        XCTAssertNil(plan.resolution)
+    }
 }
