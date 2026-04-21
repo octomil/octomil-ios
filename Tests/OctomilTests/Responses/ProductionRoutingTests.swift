@@ -27,7 +27,7 @@ final class ProductionRoutingTests: XCTestCase {
 
         let meta = response.routeMetadata!
         XCTAssertFalse(meta.routeId.isEmpty, "routeId must be non-empty")
-        XCTAssertEqual(meta.modelRefKind, "plain_id")
+        XCTAssertEqual(meta.modelRefKind, "model")
         XCTAssertFalse(meta.finalLocality.isEmpty)
         XCTAssertGreaterThanOrEqual(meta.candidateAttempts, 0)
     }
@@ -53,7 +53,7 @@ final class ProductionRoutingTests: XCTestCase {
 
         let meta = doneResponse!.routeMetadata!
         XCTAssertFalse(meta.routeId.isEmpty)
-        XCTAssertEqual(meta.modelRefKind, "plain_id")
+        XCTAssertEqual(meta.modelRefKind, "model")
     }
 
     func testRouteMetadataContainsPlannerSource() async throws {
@@ -149,32 +149,32 @@ final class ProductionRoutingTests: XCTestCase {
     // MARK: - 3. Deployment/experiment refs route correctly
 
     func testDeploymentRefParsedCorrectly() {
-        let ref = ParsedModelRef.parse("dep_abc123")
-        XCTAssertEqual(ref.kind, .deploymentRef)
-        XCTAssertEqual(ref.raw, "dep_abc123")
+        let ref = ParsedModelRef.parse("deploy_abc123")
+        XCTAssertEqual(ref.kind, .deployment)
+        XCTAssertEqual(ref.raw, "deploy_abc123")
     }
 
     func testExperimentRefParsedCorrectly() {
         let ref = ParsedModelRef.parse("exp_variant_42")
-        XCTAssertEqual(ref.kind, .experimentRef)
+        XCTAssertEqual(ref.kind, .experiment)
         XCTAssertEqual(ref.raw, "exp_variant_42")
     }
 
     func testAppRefParsedCorrectly() {
         let ref = ParsedModelRef.parse("@app/myapp/chat")
-        XCTAssertEqual(ref.kind, .appRef)
+        XCTAssertEqual(ref.kind, .app)
         XCTAssertEqual(ref.raw, "@app/myapp/chat")
     }
 
     func testCapabilityRefParsedCorrectly() {
         let ref = ParsedModelRef.parse("@capability/chat")
-        XCTAssertEqual(ref.kind, .capabilityRef)
+        XCTAssertEqual(ref.kind, .capability)
         XCTAssertEqual(ref.raw, "@capability/chat")
     }
 
     func testPlainIdParsedCorrectly() {
         let ref = ParsedModelRef.parse("phi-4-mini")
-        XCTAssertEqual(ref.kind, .plainId)
+        XCTAssertEqual(ref.kind, .model)
         XCTAssertEqual(ref.raw, "phi-4-mini")
     }
 
@@ -183,11 +183,11 @@ final class ProductionRoutingTests: XCTestCase {
         let responses = OctomilResponses(runtimeResolver: { _ in runtime })
 
         let response = try await responses.create(
-            ResponseRequest(model: "dep_deployment_123", input: [.text("Hi")])
+            ResponseRequest(model: "deploy_deployment_123", input: [.text("Hi")])
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.modelRefKind, "deployment_ref",
+            response.routeMetadata?.modelRefKind, "deployment",
             "Route metadata must reflect the deployment ref kind"
         )
     }
@@ -201,7 +201,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.modelRefKind, "experiment_ref",
+            response.routeMetadata?.modelRefKind, "experiment",
             "Route metadata must reflect the experiment ref kind"
         )
     }
@@ -215,7 +215,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.modelRefKind, "app_ref",
+            response.routeMetadata?.modelRefKind, "app",
             "Route metadata must reflect the app ref kind"
         )
     }
@@ -223,14 +223,14 @@ final class ProductionRoutingTests: XCTestCase {
     func testDeploymentRefRoutesViaRequestRouter() {
         let router = RequestRouter()
         let context = RequestRoutingContext(
-            model: "dep_deploy_456",
+            model: "deploy_deploy_456",
             capability: "chat",
             streaming: false
         )
         let decision = router.resolve(context: context)
 
         // Without a plan, should fall back to hosted gateway
-        XCTAssertEqual(decision.routeMetadata.modelRefKind, "deployment_ref")
+        XCTAssertEqual(decision.routeMetadata.modelRefKind, "deployment")
         XCTAssertEqual(decision.locality, "cloud")
         XCTAssertEqual(decision.mode, "hosted_gateway")
     }
@@ -244,7 +244,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
         let decision = router.resolve(context: context)
 
-        XCTAssertEqual(decision.routeMetadata.modelRefKind, "experiment_ref")
+        XCTAssertEqual(decision.routeMetadata.modelRefKind, "experiment")
     }
 
     // MARK: - 4. Telemetry event matches contract shape
@@ -257,7 +257,7 @@ final class ProductionRoutingTests: XCTestCase {
             policy: "local_first",
             finalLocality: "local",
             engine: "coreml",
-            modelRefKind: "deployment_ref",
+            modelRefKind: "deployment",
             fallbackUsed: true,
             fallbackTriggerCode: "gate_failed",
             candidateAttempts: 3
@@ -289,7 +289,7 @@ final class ProductionRoutingTests: XCTestCase {
         XCTAssertTrue(routeEvent.fallbackUsed)
         XCTAssertEqual(routeEvent.fallbackTriggerCode, "gate_failed")
         XCTAssertEqual(routeEvent.candidateAttempts, 3)
-        XCTAssertEqual(routeEvent.modelRefKind, "deployment_ref")
+        XCTAssertEqual(routeEvent.modelRefKind, "deployment")
     }
 
     func testRouteEventEncodesAsJSON() throws {
@@ -304,7 +304,7 @@ final class ProductionRoutingTests: XCTestCase {
             engine: nil,
             fallbackUsed: false,
             candidateAttempts: 1,
-            modelRefKind: "plain_id"
+            modelRefKind: "model"
         )
 
         let data = try JSONEncoder().encode(routeEvent)
@@ -317,7 +317,7 @@ final class ProductionRoutingTests: XCTestCase {
         XCTAssertEqual(json["final_locality"] as? String, "cloud")
         XCTAssertEqual(json["fallback_used"] as? Bool, false)
         XCTAssertEqual(json["candidate_attempts"] as? Int, 1)
-        XCTAssertEqual(json["model_ref_kind"] as? String, "plain_id")
+        XCTAssertEqual(json["model_ref_kind"] as? String, "model")
     }
 
     func testRouteEventNeverContainsPromptOrOutput() throws {
@@ -327,7 +327,7 @@ final class ProductionRoutingTests: XCTestCase {
             requestId: "req_privacy",
             capability: "chat",
             finalLocality: "local",
-            modelRefKind: "plain_id"
+            modelRefKind: "model"
         )
 
         let data = try JSONEncoder().encode(routeEvent)
@@ -369,7 +369,7 @@ final class ProductionRoutingTests: XCTestCase {
             engine: "coreml",
             fallbackUsed: false,
             candidateAttempts: 2,
-            modelRefKind: "plain_id"
+            modelRefKind: "model"
         )
 
         queue.reportRouteEvent(routeEvent)
@@ -389,7 +389,7 @@ final class ProductionRoutingTests: XCTestCase {
         XCTAssertEqual(attrs["route.engine"], .string("coreml"))
         XCTAssertEqual(attrs["route.fallback_used"], .bool(false))
         XCTAssertEqual(attrs["route.candidate_attempts"], .int(2))
-        XCTAssertEqual(attrs["route.model_ref_kind"], .string("plain_id"))
+        XCTAssertEqual(attrs["route.model_ref_kind"], .string("model"))
 
         // Privacy check: no content fields in telemetry attributes
         let forbiddenPrefixes = ["prompt", "input", "output", "content", "audio", "file"]

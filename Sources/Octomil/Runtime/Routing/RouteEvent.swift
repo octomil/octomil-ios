@@ -58,6 +58,8 @@ public struct RouteEvent: Codable, Sendable, Equatable {
     public let variantId: String?
     /// Artifact ID of the model artifact used.
     public let artifactId: String?
+    /// Cache status for the route decision: "hit", "miss", or "not_applicable".
+    public let cacheStatus: String?
 
     enum CodingKeys: String, CodingKey {
         case routeId = "route_id"
@@ -82,6 +84,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         case experimentId = "experiment_id"
         case variantId = "variant_id"
         case artifactId = "artifact_id"
+        case cacheStatus = "cache_status"
     }
 
     public init(
@@ -144,7 +147,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         fallbackUsed: Bool = false,
         fallbackTriggerCode: String? = nil,
         candidateAttempts: Int = 0,
-        modelRefKind: String = "plain_id"
+        modelRefKind: String = "model"
     ) {
         self.init(
             routeId: routeId,

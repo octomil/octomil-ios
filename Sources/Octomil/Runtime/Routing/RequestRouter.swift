@@ -12,16 +12,16 @@ import os.log
 /// Supported formats:
 /// - `@app/<slug>/<capability>` — app-scoped capability
 /// - `@capability/<cap>` — global capability
-/// - `dep_<id>` — deployment ID
-/// - `exp_<id>` — experiment variant ref
+/// - `deploy_<id>` — deployment ID
+/// - `exp_<id>/<variant>` — experiment variant ref
 /// - anything else — plain model ID (passed through to the runtime)
 public struct ParsedModelRef: Sendable, Equatable {
     public enum Kind: String, Sendable, Equatable {
-        case appRef = "app_ref"
-        case capabilityRef = "capability_ref"
-        case deploymentRef = "deployment_ref"
-        case experimentRef = "experiment_ref"
-        case plainId = "plain_id"
+        case app = "app"
+        case capability = "capability"
+        case deployment = "deployment"
+        case experiment = "experiment"
+        case model = "model"
     }
 
     public let kind: Kind
@@ -32,18 +32,18 @@ public struct ParsedModelRef: Sendable, Equatable {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmed.hasPrefix("@app/") {
-            return ParsedModelRef(kind: .appRef, raw: trimmed)
+            return ParsedModelRef(kind: .app, raw: trimmed)
         }
         if trimmed.hasPrefix("@capability/") {
-            return ParsedModelRef(kind: .capabilityRef, raw: trimmed)
+            return ParsedModelRef(kind: .capability, raw: trimmed)
         }
-        if trimmed.hasPrefix("dep_") {
-            return ParsedModelRef(kind: .deploymentRef, raw: trimmed)
+        if trimmed.hasPrefix("deploy_") {
+            return ParsedModelRef(kind: .deployment, raw: trimmed)
         }
-        if trimmed.hasPrefix("exp_") {
-            return ParsedModelRef(kind: .experimentRef, raw: trimmed)
+        if trimmed.hasPrefix("exp_") || trimmed.hasPrefix("exp/") {
+            return ParsedModelRef(kind: .experiment, raw: trimmed)
         }
-        return ParsedModelRef(kind: .plainId, raw: trimmed)
+        return ParsedModelRef(kind: .model, raw: trimmed)
     }
 }
 
@@ -112,7 +112,7 @@ public struct RouteMetadata: Sendable, Equatable {
         policy: String? = nil,
         finalLocality: String,
         engine: String? = nil,
-        modelRefKind: String = "plain_id",
+        modelRefKind: String = "model",
         fallbackUsed: Bool = false,
         fallbackTriggerCode: String? = nil,
         candidateAttempts: Int = 0
