@@ -289,6 +289,9 @@ public final class TelemetryQueue: @unchecked Sendable {
         if let artifactId = event.artifactId {
             attributes["route.artifact_id"] = .string(artifactId)
         }
+        if let cacheStatus = event.cacheStatus {
+            attributes["route.cache_status"] = .string(cacheStatus)
+        }
 
         recordEvent(
             TelemetryEvent(
