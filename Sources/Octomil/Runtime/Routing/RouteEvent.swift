@@ -24,7 +24,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
     public let capability: String
     /// Routing policy applied (auto, local_only, cloud_only, private).
     public let policy: String?
-    /// Source of the routing plan (server, local, none).
+    /// Source of the routing plan (server, local_default, cached).
     public let plannerSource: String?
     /// The locality where inference was ultimately executed.
     public let selectedLocality: String
@@ -38,13 +38,13 @@ public struct RouteEvent: Codable, Sendable, Equatable {
     public let fallbackUsed: Bool
     /// The code that triggered fallback (if applicable).
     public let fallbackTriggerCode: String?
-    /// The stage at which fallback was triggered (prepare, gate, inference).
+    /// The stage at which fallback was triggered (prepare, verify, gate, inference).
     public let fallbackTriggerStage: String?
     /// Number of candidates evaluated during routing.
     public let candidateAttempts: Int
     /// Model reference string as provided by the caller.
     public let modelRef: String?
-    /// Kind of model reference (slug, deployment, app, etc.).
+    /// Kind of model reference: model|app|capability|deployment|experiment|alias|default|unknown.
     public let modelRefKind: String?
     /// App slug for @app references.
     public let appSlug: String?
@@ -58,6 +58,8 @@ public struct RouteEvent: Codable, Sendable, Equatable {
     public let variantId: String?
     /// Artifact ID of the model artifact used.
     public let artifactId: String?
+    /// Cache status for the route decision: "hit", "miss", or "not_applicable".
+    public let cacheStatus: String?
 
     enum CodingKeys: String, CodingKey {
         case routeId = "route_id"
@@ -82,6 +84,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         case experimentId = "experiment_id"
         case variantId = "variant_id"
         case artifactId = "artifact_id"
+        case cacheStatus = "cache_status"
     }
 
     public init(
@@ -105,7 +108,8 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         deploymentId: String? = nil,
         experimentId: String? = nil,
         variantId: String? = nil,
-        artifactId: String? = nil
+        artifactId: String? = nil,
+        cacheStatus: String? = nil
     ) {
         self.routeId = routeId
         self.requestId = requestId
@@ -129,6 +133,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         self.experimentId = experimentId
         self.variantId = variantId
         self.artifactId = artifactId
+        self.cacheStatus = cacheStatus
     }
 
     /// Backward-compatible initializer for the earlier production-routing surface.
@@ -144,7 +149,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         fallbackUsed: Bool = false,
         fallbackTriggerCode: String? = nil,
         candidateAttempts: Int = 0,
-        modelRefKind: String = "plain_id"
+        modelRefKind: String = "model"
     ) {
         self.init(
             routeId: routeId,
@@ -215,6 +220,10 @@ public let forbiddenTelemetryKeys: Set<String> = [
     "messages",
     "system_prompt",
     "documents",
+    "image",
+    "image_url",
+    "embedding",
+    "embeddings",
 ]
 
 // MARK: - Validation & Stripping
