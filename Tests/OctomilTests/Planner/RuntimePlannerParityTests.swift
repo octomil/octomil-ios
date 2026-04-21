@@ -85,13 +85,13 @@ final class RuntimePlannerParityTests: XCTestCase {
         }
     }
 
-    // MARK: - Route Metadata Nested Structure
+    // MARK: - Planner Route Metadata Nested Structure
 
     func testRouteMetadataNestedFieldsPresent() {
         let model = RouteModel(
             requested: RouteModelRequested(ref: "gemma-2b", kind: "model", capability: "text")
         )
-        let metadata = RouteMetadata(
+        let metadata = PlannerRouteMetadata(
             status: "selected",
             execution: RouteExecution(locality: "local", mode: "sdk_runtime", engine: "mlx-lm"),
             model: model,
@@ -117,12 +117,12 @@ final class RuntimePlannerParityTests: XCTestCase {
         let localModel = RouteModel(
             requested: RouteModelRequested(ref: "test-model")
         )
-        let local = RouteMetadata(
+        let local = PlannerRouteMetadata(
             execution: RouteExecution(locality: "local", mode: "sdk_runtime"),
             model: localModel,
             planner: PlannerInfo(source: "cache")
         )
-        let cloud = RouteMetadata(
+        let cloud = PlannerRouteMetadata(
             execution: RouteExecution(locality: "cloud", mode: "hosted_gateway"),
             model: localModel,
             planner: PlannerInfo(source: "server")
@@ -232,7 +232,7 @@ final class RuntimePlannerParityTests: XCTestCase {
     }
 
     func testLocalityNeverOnDevice() {
-        // "on_device" must NEVER appear as a locality in RouteMetadata.
+        // "on_device" must NEVER appear as a locality in PlannerRouteMetadata.
         // Public API uses "local" for on-device inference.
         let localSelection = RuntimeSelection(
             locality: .local,

@@ -501,10 +501,10 @@ public struct RuntimeSelection: Sendable, Equatable {
         self.capability = capability
     }
 
-    /// Build a ``RouteMetadata`` summary from this selection.
+    /// Build a ``PlannerRouteMetadata`` summary from this selection.
     ///
     /// Maps the internal selection state to the canonical contract-backed
-    /// nested ``RouteMetadata`` shape shared across all SDKs.
+    /// nested ``PlannerRouteMetadata`` shape shared across all SDKs.
     ///
     /// The contract allows only three planner source values:
     /// - `"server"` — live plan from the server planner API
@@ -515,7 +515,7 @@ public struct RuntimeSelection: Sendable, Equatable {
     /// - `"server_plan"` → `"server"`
     /// - `"cache"` → `"cache"`
     /// - `"local_default"`, `"fallback"`, `"empty"`, `""` → `"offline"`
-    public func routeMetadata() -> RouteMetadata {
+    public func routeMetadata() -> PlannerRouteMetadata {
         let isFallback = source == "fallback" || reason.hasPrefix("fallback")
         let localityString = locality == .local ? "local" : "cloud"
         let modeString = locality == .local ? "sdk_runtime" : "hosted_gateway"
@@ -578,7 +578,7 @@ public struct RuntimeSelection: Sendable, Equatable {
 
         let routeReason = RouteReason(code: reasonCode, message: reason)
 
-        return RouteMetadata(
+        return PlannerRouteMetadata(
             status: "selected",
             execution: execution,
             model: routeModel,
@@ -590,7 +590,7 @@ public struct RuntimeSelection: Sendable, Equatable {
     }
 }
 
-// MARK: - RouteMetadata (Contract-Backed Nested Shape)
+// MARK: - PlannerRouteMetadata (Contract-Backed Nested Shape)
 
 /// Execution details for a route decision.
 public struct RouteExecution: Sendable, Equatable {
@@ -725,7 +725,7 @@ public struct RouteReason: Sendable, Equatable {
 /// **Important:** Public locality values are "local" or "cloud".
 /// The value "on_device" must never appear. Telemetry adapters may
 /// map "local" to "on_device" internally if needed.
-public struct RouteMetadata: Sendable, Equatable {
+public struct PlannerRouteMetadata: Sendable, Equatable {
     /// Route status: "selected" or "unavailable".
     public let status: String
     /// Execution details (locality, mode, engine).
