@@ -61,12 +61,16 @@ public final class OctomilResponses: @unchecked Sendable {
         let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
 
         // Resolve routing decision
-        let routingContext = buildRoutingContext(request, streaming: false)
+        let routingContext = await buildRoutingContext(request, streaming: false)
         let decision = router.resolve(context: routingContext)
         let fallbackAllowed = RequestRouter.isFallbackAllowed(request.routing)
 
         // Build candidates from plan-based routing, or use a single registered-runtime candidate.
-        let candidates = buildProductionCandidates(decision: decision, model: request.model)
+        let candidates = buildProductionCandidates(
+            decision: decision,
+            context: routingContext,
+            model: request.model
+        )
 
         let attemptResult = await CandidateAttemptRunner(
             fallbackAllowed: fallbackAllowed
@@ -114,11 +118,15 @@ public final class OctomilResponses: @unchecked Sendable {
                         throw OctomilResponsesError.noRuntime(effectiveRequest.model)
                     }
 
-                    let routingContext = self.buildRoutingContext(request, streaming: true)
+                    let routingContext = await self.buildRoutingContext(request, streaming: true)
                     let decision = self.router.resolve(context: routingContext)
                     let fallbackAllowed = RequestRouter.isFallbackAllowed(request.routing)
 
-                    let candidates = self.buildProductionCandidates(decision: decision, model: request.model)
+                    let candidates = self.buildProductionCandidates(
+                        decision: decision,
+                        context: routingContext,
+                        model: request.model
+                    )
 
                     let attemptRunner = CandidateAttemptRunner(
                         fallbackAllowed: fallbackAllowed,
@@ -129,9 +137,10 @@ public final class OctomilResponses: @unchecked Sendable {
                         throw OctomilResponsesError.noRuntime(request.model)
                     }
 
+                    var selectedAttempt = attemptReadiness.selectedAttempt!
                     let runtime = try self.resolveRuntimeForAttempt(
                         request: request,
-                        attempt: attemptReadiness.selectedAttempt!
+                        attempt: selectedAttempt
                     )
 
                     let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
@@ -142,6 +151,9 @@ public final class OctomilResponses: @unchecked Sendable {
                     var chunkIndex = 0
                     var firstOutputEmitted = false
 
+                    var fallbackUsed = false
+                    var fallbackTriggerCode: String?
+                    var candidateAttemptCount = attemptReadiness.attempts.count
                     do {
                         for try await chunk in runtime.stream(request: runtimeRequest) {
                             if let text = chunk.text {
@@ -177,8 +189,58 @@ public final class OctomilResponses: @unchecked Sendable {
                         }
                     } catch {
                         // First-token lockout: after first output, fallback is forbidden for streaming.
-                        _ = attemptRunner.shouldFallbackAfterInferenceError(firstOutputEmitted: firstOutputEmitted)
-                        throw error
+                        guard attemptRunner.shouldFallbackAfterInferenceError(firstOutputEmitted: firstOutputEmitted),
+                              let selectedIndex = attemptReadiness.selectedAttempt?.index,
+                              selectedIndex + 1 < candidates.count else {
+                            throw error
+                        }
+
+                        fallbackUsed = true
+                        fallbackTriggerCode = "inference_error_before_first_output"
+                        let fallbackCandidates = Array(candidates.dropFirst(selectedIndex + 1))
+                        let fallbackReadiness = CandidateAttemptRunner(
+                            fallbackAllowed: false,
+                            streaming: true
+                        ).run(candidates: fallbackCandidates)
+                        guard let fallbackAttempt = fallbackReadiness.selectedAttempt else {
+                            throw error
+                        }
+                        selectedAttempt = fallbackAttempt
+                        candidateAttemptCount += fallbackReadiness.attempts.count
+                        let fallbackRuntime = try self.resolveRuntimeForAttempt(
+                            request: request,
+                            attempt: fallbackAttempt
+                        )
+                        for try await chunk in fallbackRuntime.stream(request: runtimeRequest) {
+                            if let text = chunk.text {
+                                firstOutputEmitted = true
+                                textParts.append(text)
+                                continuation.yield(.textDelta(text))
+                            }
+
+                            if let delta = chunk.toolCallDelta {
+                                firstOutputEmitted = true
+                                var buffer = toolCallBuffers[delta.index] ?? ToolCallBuffer()
+                                if let id = delta.id { buffer.id = id }
+                                if let name = delta.name { buffer.name = name }
+                                if let args = delta.argumentsDelta { buffer.arguments += args }
+                                toolCallBuffers[delta.index] = buffer
+
+                                continuation.yield(.toolCallDelta(
+                                    index: delta.index,
+                                    id: delta.id,
+                                    name: delta.name,
+                                    argumentsDelta: delta.argumentsDelta
+                                ))
+                            }
+
+                            if let usage = chunk.usage { lastUsage = usage }
+                            TelemetryQueue.shared?.reportInferenceChunkProduced(
+                                modelId: effectiveRequest.model,
+                                chunkIndex: chunkIndex
+                            )
+                            chunkIndex += 1
+                        }
                     }
 
                     var output: [OutputItem] = []
@@ -206,12 +268,12 @@ public final class OctomilResponses: @unchecked Sendable {
                         planId: decision.routeMetadata.planId,
                         plannerSource: decision.routeMetadata.plannerSource,
                         policy: decision.routeMetadata.policy,
-                        finalLocality: attemptReadiness.selectedAttempt?.locality ?? decision.locality,
-                        engine: attemptReadiness.selectedAttempt?.engine ?? decision.engine,
+                        finalLocality: selectedAttempt.locality,
+                        engine: selectedAttempt.engine,
                         modelRefKind: decision.routeMetadata.modelRefKind,
-                        fallbackUsed: attemptReadiness.fallbackUsed,
-                        fallbackTriggerCode: attemptReadiness.fallbackTrigger?.code,
-                        candidateAttempts: attemptReadiness.attempts.count
+                        fallbackUsed: fallbackUsed || attemptReadiness.fallbackUsed,
+                        fallbackTriggerCode: fallbackTriggerCode ?? attemptReadiness.fallbackTrigger?.code,
+                        candidateAttempts: candidateAttemptCount
                     )
 
                     let response = Response(
@@ -245,7 +307,7 @@ public final class OctomilResponses: @unchecked Sendable {
     // MARK: - Routing Context
 
     /// Build a ``RequestRoutingContext`` from the request and available plan cache.
-    private func buildRoutingContext(_ request: ResponseRequest, streaming: Bool) -> RequestRoutingContext {
+    private func buildRoutingContext(_ request: ResponseRequest, streaming: Bool) async -> RequestRoutingContext {
         // Try to look up a cached plan from the planner store
         var cachedPlan: RuntimePlanResponse?
         if let store = plannerStore {
@@ -258,6 +320,33 @@ public final class OctomilResponses: @unchecked Sendable {
             cachedPlan = store.getPlan(cacheKey: cacheKey)
         }
 
+        if cachedPlan == nil, let planner {
+            let policy = request.routing?.rawValue ?? "local_first"
+            let selection = await planner.resolve(
+                model: request.model,
+                capability: "chat",
+                routingPolicy: policy,
+                allowNetwork: request.routing != .private
+            )
+            let primary = RuntimeCandidatePlan(
+                locality: selection.locality,
+                priority: 0,
+                confidence: 1.0,
+                reason: selection.reason.isEmpty ? "runtime planner selection" : selection.reason,
+                engine: selection.engine,
+                artifact: selection.artifact
+            )
+            cachedPlan = RuntimePlanResponse(
+                model: request.model,
+                capability: "chat",
+                policy: policy,
+                candidates: [primary],
+                fallbackCandidates: selection.fallbackCandidates,
+                fallbackAllowed: Self.isPolicyFallbackAllowed(request.routing),
+                serverGeneratedAt: selection.source
+            )
+        }
+
         return RequestRoutingContext(
             model: request.model,
             capability: "chat",
@@ -267,14 +356,29 @@ public final class OctomilResponses: @unchecked Sendable {
         )
     }
 
+    private static func isPolicyFallbackAllowed(_ policy: AppRoutingPolicy?) -> Bool {
+        guard let policy else { return true }
+        switch policy {
+        case .private, .localOnly:
+            return false
+        case .auto, .cloudFirst, .cloudOnly, .localFirst, .performanceFirst:
+            return true
+        }
+    }
+
     /// Build production candidates from the routing decision.
     ///
     /// If the router produced candidates from a plan, use those. Otherwise,
     /// build a single synthetic candidate from the registered runtime.
     private func buildProductionCandidates(
         decision: RoutingDecisionResult,
+        context: RequestRoutingContext,
         model: String
     ) -> [AttemptCandidateInput] {
+        if let plan = context.cachedPlan {
+            return RequestRouter.candidatesFromPlan(plan)
+        }
+
         let attempts = decision.attemptResult.attempts
         if !attempts.isEmpty {
             // Re-derive candidates from the plan if available
