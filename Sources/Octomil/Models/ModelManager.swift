@@ -231,6 +231,66 @@ public actor ModelManager {
         downloadTasks[key] = nil
     }
 
+    // MARK: - Asset Status
+
+    /// Checks the readiness of a local model asset without triggering a download.
+    ///
+    /// Use this to determine what action is needed before inference can proceed.
+    /// The result is idempotent: calling this a second time after a successful
+    /// download returns `.ready` without re-downloading.
+    ///
+    /// - Parameters:
+    ///   - modelId: Model identifier.
+    ///   - version: Model version.
+    /// - Returns: The current ``LocalAssetStatus`` for the model.
+    public func checkAssetStatus(modelId: String, version: String) async -> LocalAssetStatus {
+        // Check if currently downloading
+        let cacheKey = "\(modelId)_\(version)"
+        if downloadTasks[cacheKey] != nil {
+            return .preparing(progress: nil)
+        }
+
+        // Check memory + disk cache
+        if let cached = modelCache.get(modelId: modelId, version: version) {
+            return .ready(localURL: cached.compiledModelURL)
+        }
+
+        // Not cached — determine if a download is possible
+        do {
+            let metadata = try await apiClient.getModelMetadata(modelId: modelId, version: version)
+            let sizeBytes = Int64(metadata.fileSize)
+
+            let resolveRequest = ModelResolveRequest(
+                platform: "ios",
+                model: deviceMetadata.model,
+                manufacturer: deviceMetadata.manufacturer,
+                cpuArchitecture: deviceMetadata.cpuArchitecture,
+                osVersion: deviceMetadata.osVersion,
+                totalMemoryMb: deviceMetadata.totalMemoryMB,
+                gpuAvailable: deviceMetadata.gpuAvailable,
+                npuAvailable: deviceMetadata.gpuAvailable,
+                supportedRuntimes: ["coreml"],
+                computeUnits: "all"
+            )
+            let resolution = try await apiClient.resolveModelFormat(
+                modelId: modelId,
+                version: version,
+                capabilities: resolveRequest
+            )
+            let downloadInfo = try await apiClient.getDownloadURL(
+                modelId: modelId,
+                version: resolution.version,
+                format: resolution.format
+            )
+            guard let downloadURL = URL(string: downloadInfo.url) else {
+                return .unavailable(reason: "Invalid download URL for model \(modelId)@\(version)")
+            }
+            return .downloadRequired(url: downloadURL, sizeBytes: sizeBytes)
+        } catch {
+            return .unavailable(reason: "Cannot resolve model \(modelId)@\(version): \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Cache Access
 
     /// Gets a cached model.
