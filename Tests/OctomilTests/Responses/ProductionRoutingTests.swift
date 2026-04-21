@@ -374,17 +374,18 @@ final class ProductionRoutingTests: XCTestCase {
 
         queue.reportRouteEvent(routeEvent)
 
-        let events = queue.bufferedEvents.filter { $0.name == "route.completed" }
-        XCTAssertEqual(events.count, 1, "Must record exactly one route.completed event")
+        let events = queue.bufferedEvents.filter { $0.name == "route.decision" }
+        XCTAssertEqual(events.count, 1, "Must record exactly one route.decision event")
 
         let attrs = events[0].attributes
         XCTAssertEqual(attrs["route.id"], .string("route_tel"))
-        XCTAssertEqual(attrs["request.id"], .string("req_tel"))
+        XCTAssertEqual(attrs["route.request_id"], .string("req_tel"))
         XCTAssertEqual(attrs["route.plan_id"], .string("plan_tel"))
         XCTAssertEqual(attrs["route.capability"], .string("chat"))
         XCTAssertEqual(attrs["route.policy"], .string("local_first"))
         XCTAssertEqual(attrs["route.planner_source"], .string("cache"))
         XCTAssertEqual(attrs["route.final_locality"], .string("local"))
+        XCTAssertEqual(attrs["route.selected_locality"], .string("local"))
         XCTAssertEqual(attrs["route.engine"], .string("coreml"))
         XCTAssertEqual(attrs["route.fallback_used"], .bool(false))
         XCTAssertEqual(attrs["route.candidate_attempts"], .int(2))

@@ -394,6 +394,16 @@ public final class OctomilResponses: @unchecked Sendable {
             }
         }
 
+        if shouldPreferLocalRuntimeWithoutPlan(context.routingPolicy), hasLocalRuntime(for: model) {
+            return [AttemptCandidateInput(candidate: RuntimeCandidatePlan(
+                locality: .local,
+                priority: 0,
+                confidence: 0.7,
+                reason: "offline local runtime available",
+                engine: "registered"
+            ))]
+        }
+
         // Fallback: single candidate from the decision locality
         let locality: RuntimeLocality = decision.locality == "cloud" ? .cloud : .local
         return [AttemptCandidateInput(candidate: RuntimeCandidatePlan(
@@ -403,6 +413,26 @@ public final class OctomilResponses: @unchecked Sendable {
             reason: "direct routing: \(decision.routeMetadata.plannerSource)",
             engine: decision.engine ?? "registered"
         ))]
+    }
+
+    private func shouldPreferLocalRuntimeWithoutPlan(_ policy: AppRoutingPolicy?) -> Bool {
+        guard let policy else { return true }
+        switch policy {
+        case .cloudOnly, .cloudFirst:
+            return false
+        case .private, .localOnly, .localFirst, .performanceFirst, .auto:
+            return true
+        }
+    }
+
+    private func hasLocalRuntime(for model: String) -> Bool {
+        if let resolver = runtimeResolver, resolver(model) != nil {
+            return true
+        }
+        if ModelRuntimeRegistry.shared.resolve(modelId: model) != nil {
+            return true
+        }
+        return false
     }
 
     /// Resolve a runtime for a specific attempt, respecting the locality and engine.

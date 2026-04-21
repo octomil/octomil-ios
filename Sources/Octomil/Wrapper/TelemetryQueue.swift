@@ -153,7 +153,7 @@ public final class TelemetryQueue: @unchecked Sendable {
         restorePersistedEvents()
         startFlushTimer()
 
-        if serverURL != nil && TelemetryQueue.shared == nil {
+        if serverURL != nil {
             TelemetryQueue.shared = self
         }
     }
@@ -219,10 +219,20 @@ public final class TelemetryQueue: @unchecked Sendable {
 
     /// Records a v2 telemetry event.
     ///
+    /// Forbidden telemetry keys are stripped from attributes before buffering.
     /// When the buffer reaches ``batchSize`` the queue is flushed automatically.
     public func recordEvent(_ event: TelemetryEvent) {
+        // Strip forbidden keys to prevent user content leakage into telemetry
+        let sanitized = TelemetryEvent(
+            name: event.name,
+            timestamp: event.timestamp,
+            attributes: stripForbiddenTelemetryKeys(event.attributes),
+            traceId: event.traceId,
+            spanId: event.spanId
+        )
+
         lock.lock()
-        buffer.append(event)
+        buffer.append(sanitized)
         let shouldFlush = buffer.count >= batchSize
         lock.unlock()
 
@@ -234,6 +244,58 @@ public final class TelemetryQueue: @unchecked Sendable {
     /// Records a legacy v1 inference event by converting it to v2 format.
     public func record(_ event: InferenceTelemetryEvent) {
         recordEvent(event.toV2Event())
+    }
+
+    /// Records a canonical route decision event for runtime monitoring correlation.
+    public func reportRouteEvent(_ event: RouteEvent) {
+        var attributes: [String: TelemetryValue] = [
+            "route.id": .string(event.routeId),
+            "route.request_id": .string(event.requestId),
+            "route.capability": .string(event.capability),
+            "route.final_locality": .string(event.finalLocality),
+            "route.selected_locality": .string(event.selectedLocality),
+            "route.final_mode": .string(event.finalMode),
+            "route.fallback_used": .bool(event.fallbackUsed),
+            "route.candidate_attempts": .int(event.candidateAttempts),
+        ]
+
+        if let planId = event.planId { attributes["route.plan_id"] = .string(planId) }
+        if let policy = event.policy { attributes["route.policy"] = .string(policy) }
+        if let plannerSource = event.plannerSource {
+            attributes["route.planner_source"] = .string(plannerSource)
+        }
+        if let engine = event.engine { attributes["route.engine"] = .string(engine) }
+        if let code = event.fallbackTriggerCode {
+            attributes["route.fallback_trigger_code"] = .string(code)
+        }
+        if let stage = event.fallbackTriggerStage {
+            attributes["route.fallback_trigger_stage"] = .string(stage)
+        }
+        if let modelRef = event.modelRef { attributes["route.model_ref"] = .string(modelRef) }
+        if let modelRefKind = event.modelRefKind {
+            attributes["route.model_ref_kind"] = .string(modelRefKind)
+        }
+        if let appSlug = event.appSlug { attributes["route.app_slug"] = .string(appSlug) }
+        if let appId = event.appId { attributes["route.app_id"] = .string(appId) }
+        if let deploymentId = event.deploymentId {
+            attributes["route.deployment_id"] = .string(deploymentId)
+        }
+        if let experimentId = event.experimentId {
+            attributes["route.experiment_id"] = .string(experimentId)
+        }
+        if let variantId = event.variantId {
+            attributes["route.variant_id"] = .string(variantId)
+        }
+        if let artifactId = event.artifactId {
+            attributes["route.artifact_id"] = .string(artifactId)
+        }
+
+        recordEvent(
+            TelemetryEvent(
+                name: "route.decision",
+                attributes: stripForbiddenTelemetryKeys(attributes)
+            )
+        )
     }
 
     /// Convenience to report a completed inference.
@@ -311,46 +373,6 @@ public final class TelemetryQueue: @unchecked Sendable {
             ]
         )
         recordEvent(event)
-    }
-
-    // MARK: - Route Events
-
-    /// Reports a `route.completed` telemetry event after a routed request finishes.
-    ///
-    /// Privacy-safe: contains only operational metadata, never prompt/output/content.
-    ///
-    /// - Parameter event: The canonical ``RouteEvent`` built from the routing decision.
-    public func reportRouteEvent(_ event: RouteEvent) {
-        var attrs: [String: TelemetryValue] = [
-            "route.id": .string(event.routeId),
-            "request.id": .string(event.requestId),
-            "route.capability": .string(event.capability),
-            "route.final_locality": .string(event.finalLocality),
-            "route.fallback_used": .bool(event.fallbackUsed),
-            "route.candidate_attempts": .int(event.candidateAttempts),
-            "route.model_ref_kind": .string(event.modelRefKind),
-        ]
-        if let planId = event.planId {
-            attrs["route.plan_id"] = .string(planId)
-        }
-        if let policy = event.policy {
-            attrs["route.policy"] = .string(policy)
-        }
-        if let plannerSource = event.plannerSource {
-            attrs["route.planner_source"] = .string(plannerSource)
-        }
-        if let engine = event.engine {
-            attrs["route.engine"] = .string(engine)
-        }
-        if let triggerCode = event.fallbackTriggerCode {
-            attrs["route.fallback_trigger_code"] = .string(triggerCode)
-        }
-
-        let telemetryEvent = TelemetryEvent(
-            name: "route.completed",
-            attributes: attrs
-        )
-        recordEvent(telemetryEvent)
     }
 
     // MARK: - Training Events
