@@ -90,7 +90,9 @@ public final class RuntimePlanner: @unchecked Sendable {
                 locality: .cloud,
                 engine: nil,
                 source: "fallback",
-                reason: "cloud_only policy -- no local engines attempted"
+                reason: "cloud_only policy -- no local engines attempted",
+                model: model,
+                capability: capability
             )
         }
 
@@ -251,7 +253,9 @@ public final class RuntimePlanner: @unchecked Sendable {
                     benchmarkRan: false,
                     source: context.source,
                     fallbackCandidates: context.fallbackCandidates,
-                    reason: "\(context.fallbackPrefix ?? "")\(candidate.reason)"
+                    reason: "\(context.fallbackPrefix ?? "")\(candidate.reason)",
+                    model: context.model,
+                    capability: context.capability
                 )
             case .cloud:
                 return RuntimeSelection(
@@ -261,7 +265,9 @@ public final class RuntimePlanner: @unchecked Sendable {
                     benchmarkRan: false,
                     source: context.source,
                     fallbackCandidates: context.fallbackCandidates,
-                    reason: "\(context.fallbackPrefix ?? "")\(candidate.reason)"
+                    reason: "\(context.fallbackPrefix ?? "")\(candidate.reason)",
+                    model: context.model,
+                    capability: context.capability
                 )
             }
         }
@@ -316,7 +322,9 @@ public final class RuntimePlanner: @unchecked Sendable {
                 locality: .cloud,
                 engine: nil,
                 source: "fallback",
-                reason: "cloud_only policy -- no local engines attempted"
+                reason: "cloud_only policy -- no local engines attempted",
+                model: model,
+                capability: capability
             )
         }
 
@@ -335,7 +343,9 @@ public final class RuntimePlanner: @unchecked Sendable {
                 engine: engine,
                 benchmarkRan: false,
                 source: "cache",
-                reason: "cached benchmark: \(String(format: "%.1f", cached.tokensPerSecond)) tok/s"
+                reason: "cached benchmark: \(String(format: "%.1f", cached.tokensPerSecond)) tok/s",
+                model: model,
+                capability: capability
             )
         }
 
@@ -354,7 +364,9 @@ public final class RuntimePlanner: @unchecked Sendable {
                 engine: engine,
                 benchmarkRan: false,
                 source: "local_default",
-                reason: "selected explicitly reported local engine: \(engine)"
+                reason: "selected explicitly reported local engine: \(engine)",
+                model: model,
+                capability: capability
             )
         }
 
@@ -364,7 +376,9 @@ public final class RuntimePlanner: @unchecked Sendable {
                 locality: .local,
                 engine: nil,
                 source: "fallback",
-                reason: "no local engine available"
+                reason: "no local engine available",
+                model: model,
+                capability: capability
             )
         }
 
@@ -372,7 +386,9 @@ public final class RuntimePlanner: @unchecked Sendable {
             locality: .cloud,
             engine: nil,
             source: "fallback",
-            reason: "no local engine available -- falling back to cloud"
+            reason: "no local engine available -- falling back to cloud",
+            model: model,
+            capability: capability
         )
     }
 

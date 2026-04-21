@@ -120,7 +120,7 @@ final class RuntimePlannerClientTests: XCTestCase {
         XCTAssertEqual(result?.model, "llama-8b")
         XCTAssertEqual(result?.capability, "text")
         XCTAssertEqual(result?.candidates.count, 1)
-        XCTAssertEqual(result?.candidates.first?.engine, "mlx")
+        XCTAssertEqual(result?.candidates.first?.engine, "mlx-lm")
         XCTAssertEqual(result?.candidates.first?.locality, .local)
     }
 
