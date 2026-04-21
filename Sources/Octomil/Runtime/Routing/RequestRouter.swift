@@ -12,38 +12,86 @@ import os.log
 /// Supported formats:
 /// - `@app/<slug>/<capability>` — app-scoped capability
 /// - `@capability/<cap>` — global capability
-/// - `dep_<id>` — deployment ID
-/// - `exp_<id>` — experiment variant ref
+/// - `deploy_<id>` — deployment ID
+/// - `exp_<id>/<variant>` — experiment variant ref
+/// - `alias:<name>` — model alias
 /// - anything else — plain model ID (passed through to the runtime)
 public struct ParsedModelRef: Sendable, Equatable {
     public enum Kind: String, Sendable, Equatable {
-        case appRef = "app_ref"
-        case capabilityRef = "capability_ref"
-        case deploymentRef = "deployment_ref"
-        case experimentRef = "experiment_ref"
-        case plainId = "plain_id"
+        case model
+        case app
+        case capability
+        case deployment
+        case experiment
+        case alias
+        case `default`
+        case unknown
     }
 
     public let kind: Kind
     public let raw: String
+    public let appSlug: String?
+    public let capability: String?
+    public let deploymentId: String?
+    public let experimentId: String?
+    public let variantId: String?
+
+    public init(
+        kind: Kind,
+        raw: String,
+        appSlug: String? = nil,
+        capability: String? = nil,
+        deploymentId: String? = nil,
+        experimentId: String? = nil,
+        variantId: String? = nil
+    ) {
+        self.kind = kind
+        self.raw = raw
+        self.appSlug = appSlug
+        self.capability = capability
+        self.deploymentId = deploymentId
+        self.experimentId = experimentId
+        self.variantId = variantId
+    }
 
     /// Parse a model string into a typed reference.
     public static func parse(_ model: String) -> ParsedModelRef {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        if trimmed.isEmpty {
+            return ParsedModelRef(kind: .default, raw: trimmed)
+        }
         if trimmed.hasPrefix("@app/") {
-            return ParsedModelRef(kind: .appRef, raw: trimmed)
+            let parts = trimmed.dropFirst("@app/".count).split(separator: "/", maxSplits: 1).map(String.init)
+            if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty {
+                return ParsedModelRef(kind: .app, raw: trimmed, appSlug: parts[0], capability: parts[1])
+            }
+            return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
         if trimmed.hasPrefix("@capability/") {
-            return ParsedModelRef(kind: .capabilityRef, raw: trimmed)
+            let cap = String(trimmed.dropFirst("@capability/".count))
+            return cap.isEmpty
+                ? ParsedModelRef(kind: .unknown, raw: trimmed)
+                : ParsedModelRef(kind: .capability, raw: trimmed, capability: cap)
         }
-        if trimmed.hasPrefix("dep_") {
-            return ParsedModelRef(kind: .deploymentRef, raw: trimmed)
+        if trimmed.hasPrefix("deploy_"), trimmed.count > "deploy_".count {
+            return ParsedModelRef(kind: .deployment, raw: trimmed, deploymentId: trimmed)
         }
-        if trimmed.hasPrefix("exp_") {
-            return ParsedModelRef(kind: .experimentRef, raw: trimmed)
+        if trimmed.hasPrefix("exp_"), let slash = trimmed.firstIndex(of: "/") {
+            let experimentId = String(trimmed[..<slash])
+            let variantId = String(trimmed[trimmed.index(after: slash)...])
+            if !experimentId.isEmpty, !variantId.isEmpty {
+                return ParsedModelRef(kind: .experiment, raw: trimmed, experimentId: experimentId, variantId: variantId)
+            }
+            return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
-        return ParsedModelRef(kind: .plainId, raw: trimmed)
+        if trimmed.hasPrefix("alias:"), trimmed.count > "alias:".count {
+            return ParsedModelRef(kind: .alias, raw: trimmed)
+        }
+        if trimmed.hasPrefix("@") || trimmed.contains("://") {
+            return ParsedModelRef(kind: .unknown, raw: trimmed)
+        }
+        return ParsedModelRef(kind: .model, raw: trimmed)
     }
 }
 
@@ -98,6 +146,18 @@ public struct RouteMetadata: Sendable, Equatable {
     public let engine: String?
     /// The parsed model reference kind.
     public let modelRefKind: String
+    /// Model reference string as supplied by the caller.
+    public let modelRef: String?
+    /// App slug, when the model ref is app-scoped.
+    public let appSlug: String?
+    /// Deployment ID or key, when the model ref is deployment-scoped.
+    public let deploymentId: String?
+    /// Experiment ID, when the model ref is experiment-scoped.
+    public let experimentId: String?
+    /// Variant ID, when the model ref is experiment-scoped.
+    public let variantId: String?
+    /// Artifact cache status for the selected local attempt.
+    public let cacheStatus: String?
     /// Whether fallback was triggered during this request.
     public let fallbackUsed: Bool
     /// Machine-readable code for what triggered the fallback.
@@ -112,7 +172,13 @@ public struct RouteMetadata: Sendable, Equatable {
         policy: String? = nil,
         finalLocality: String,
         engine: String? = nil,
-        modelRefKind: String = "plain_id",
+        modelRefKind: String = "model",
+        modelRef: String? = nil,
+        appSlug: String? = nil,
+        deploymentId: String? = nil,
+        experimentId: String? = nil,
+        variantId: String? = nil,
+        cacheStatus: String? = nil,
         fallbackUsed: Bool = false,
         fallbackTriggerCode: String? = nil,
         candidateAttempts: Int = 0
@@ -124,6 +190,12 @@ public struct RouteMetadata: Sendable, Equatable {
         self.finalLocality = finalLocality
         self.engine = engine
         self.modelRefKind = modelRefKind
+        self.modelRef = modelRef
+        self.appSlug = appSlug
+        self.deploymentId = deploymentId
+        self.experimentId = experimentId
+        self.variantId = variantId
+        self.cacheStatus = cacheStatus
         self.fallbackUsed = fallbackUsed
         self.fallbackTriggerCode = fallbackTriggerCode
         self.candidateAttempts = candidateAttempts
@@ -235,6 +307,12 @@ public final class RequestRouter: @unchecked Sendable {
                     finalLocality: selected.locality,
                     engine: selected.engine,
                     modelRefKind: parsedRef.kind.rawValue,
+                    modelRef: parsedRef.raw,
+                    appSlug: parsedRef.appSlug,
+                    deploymentId: parsedRef.deploymentId,
+                    experimentId: parsedRef.experimentId,
+                    variantId: parsedRef.variantId,
+                    cacheStatus: selected.artifact?.cache.status,
                     fallbackUsed: loopResult.fallbackUsed,
                     fallbackTriggerCode: loopResult.fallbackTrigger?.code,
                     candidateAttempts: loopResult.attempts.count
@@ -268,6 +346,11 @@ public final class RequestRouter: @unchecked Sendable {
                 policy: policyString,
                 finalLocality: "local",
                 modelRefKind: parsedRef.kind.rawValue,
+                modelRef: parsedRef.raw,
+                appSlug: parsedRef.appSlug,
+                deploymentId: parsedRef.deploymentId,
+                experimentId: parsedRef.experimentId,
+                variantId: parsedRef.variantId,
                 fallbackUsed: false,
                 candidateAttempts: loopResult.attempts.count
             )
@@ -338,6 +421,11 @@ public final class RequestRouter: @unchecked Sendable {
             policy: policy,
             finalLocality: "cloud",
             modelRefKind: parsedRef.kind.rawValue,
+            modelRef: parsedRef.raw,
+            appSlug: parsedRef.appSlug,
+            deploymentId: parsedRef.deploymentId,
+            experimentId: parsedRef.experimentId,
+            variantId: parsedRef.variantId,
             fallbackUsed: attemptResult?.fallbackUsed ?? false,
             fallbackTriggerCode: attemptResult?.fallbackTrigger?.code,
             candidateAttempts: attemptResult?.attempts.count ?? 0

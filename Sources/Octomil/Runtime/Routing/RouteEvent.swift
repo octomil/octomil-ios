@@ -149,7 +149,15 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         fallbackUsed: Bool = false,
         fallbackTriggerCode: String? = nil,
         candidateAttempts: Int = 0,
-        modelRefKind: String = "model"
+        modelRef: String? = nil,
+        modelRefKind: String = "model",
+        appSlug: String? = nil,
+        appId: String? = nil,
+        deploymentId: String? = nil,
+        experimentId: String? = nil,
+        variantId: String? = nil,
+        artifactId: String? = nil,
+        cacheStatus: String? = nil
     ) {
         self.init(
             routeId: routeId,
@@ -165,7 +173,15 @@ public struct RouteEvent: Codable, Sendable, Equatable {
             fallbackTriggerCode: fallbackTriggerCode,
             fallbackTriggerStage: nil,
             candidateAttempts: candidateAttempts,
-            modelRefKind: modelRefKind
+            modelRef: modelRef,
+            modelRefKind: modelRefKind,
+            appSlug: appSlug,
+            appId: appId,
+            deploymentId: deploymentId,
+            experimentId: experimentId,
+            variantId: variantId,
+            artifactId: artifactId,
+            cacheStatus: cacheStatus
         )
     }
 
@@ -189,7 +205,13 @@ public struct RouteEvent: Codable, Sendable, Equatable {
             fallbackTriggerCode: decision.routeMetadata.fallbackTriggerCode,
             fallbackTriggerStage: nil,
             candidateAttempts: decision.routeMetadata.candidateAttempts,
-            modelRefKind: decision.routeMetadata.modelRefKind
+            modelRef: decision.routeMetadata.modelRef,
+            modelRefKind: decision.routeMetadata.modelRefKind,
+            appSlug: decision.routeMetadata.appSlug,
+            deploymentId: decision.routeMetadata.deploymentId,
+            experimentId: decision.routeMetadata.experimentId,
+            variantId: decision.routeMetadata.variantId,
+            cacheStatus: decision.routeMetadata.cacheStatus
         )
     }
 

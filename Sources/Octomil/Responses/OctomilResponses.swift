@@ -476,6 +476,12 @@ public final class OctomilResponses: @unchecked Sendable {
             finalLocality: selected?.locality ?? decision.locality,
             engine: selected?.engine ?? decision.engine,
             modelRefKind: decision.routeMetadata.modelRefKind,
+            modelRef: decision.routeMetadata.modelRef,
+            appSlug: decision.routeMetadata.appSlug,
+            deploymentId: decision.routeMetadata.deploymentId,
+            experimentId: decision.routeMetadata.experimentId,
+            variantId: decision.routeMetadata.variantId,
+            cacheStatus: selected?.artifact?.cache.status ?? decision.routeMetadata.cacheStatus,
             fallbackUsed: attemptResult.fallbackUsed,
             fallbackTriggerCode: attemptResult.fallbackTrigger?.code,
             candidateAttempts: attemptResult.attempts.count
@@ -496,7 +502,13 @@ public final class OctomilResponses: @unchecked Sendable {
             fallbackUsed: metadata.fallbackUsed,
             fallbackTriggerCode: metadata.fallbackTriggerCode,
             candidateAttempts: metadata.candidateAttempts,
-            modelRefKind: metadata.modelRefKind
+            modelRef: metadata.modelRef,
+            modelRefKind: metadata.modelRefKind,
+            appSlug: metadata.appSlug,
+            deploymentId: metadata.deploymentId,
+            experimentId: metadata.experimentId,
+            variantId: metadata.variantId,
+            cacheStatus: metadata.cacheStatus
         )
         TelemetryQueue.shared?.reportRouteEvent(routeEvent)
     }
