@@ -231,6 +231,100 @@ public actor ModelManager {
         downloadTasks[key] = nil
     }
 
+    // MARK: - Local Asset Status
+
+    /// Check the local asset status for a model without triggering a download.
+    ///
+    /// This is idempotent: calling it a second time after a successful download
+    /// returns `.ready` immediately from the cache.
+    ///
+    /// Use this to build UI that shows whether a model is ready, needs to be
+    /// downloaded, or is currently being prepared — without blocking the app.
+    ///
+    /// - Parameters:
+    ///   - modelId: Model identifier.
+    ///   - version: Model version. Pass `nil` to check the latest cached version.
+    /// - Returns: A ``LocalAssetStatus`` describing the current state.
+    public func checkAssetStatus(modelId: String, version: String? = nil) async -> LocalAssetStatus {
+        // 1. Check if the model is currently being downloaded
+        let cacheKey: String
+        if let version = version {
+            cacheKey = "\(modelId)_\(version)"
+        } else {
+            cacheKey = modelId
+        }
+        if downloadTasks[cacheKey] != nil || downloadTasks[modelId] != nil {
+            return .preparing(progress: nil)
+        }
+
+        // 2. Check cache — if found, it's ready
+        if let version = version {
+            if let cached = modelCache.get(modelId: modelId, version: version) {
+                return .ready(localURL: cached.compiledModelURL)
+            }
+        } else {
+            if let cached = modelCache.getLatest(modelId: modelId) {
+                return .ready(localURL: cached.compiledModelURL)
+            }
+        }
+
+        // 3. Not cached — try to resolve the download URL from the server
+        do {
+            let resolvedVersion: String
+            if let v = version {
+                resolvedVersion = v
+            } else {
+                let versionInfo = try await apiClient.getModelMetadata(modelId: modelId, version: "latest")
+                resolvedVersion = versionInfo.version
+            }
+
+            let deviceMeta = DeviceMetadata()
+            let resolveRequest = ModelResolveRequest(
+                platform: "ios",
+                model: deviceMeta.model,
+                manufacturer: deviceMeta.manufacturer,
+                cpuArchitecture: deviceMeta.cpuArchitecture,
+                osVersion: deviceMeta.osVersion,
+                totalMemoryMb: deviceMeta.totalMemoryMB,
+                gpuAvailable: deviceMeta.gpuAvailable,
+                npuAvailable: deviceMeta.gpuAvailable,
+                supportedRuntimes: ["coreml"],
+                computeUnits: "all"
+            )
+
+            let resolution = try await apiClient.resolveModelFormat(
+                modelId: modelId,
+                version: resolvedVersion,
+                capabilities: resolveRequest
+            )
+
+            let downloadInfo = try await apiClient.getDownloadURL(
+                modelId: modelId,
+                version: resolution.version,
+                format: resolution.format
+            )
+
+            guard let downloadURL = URL(string: downloadInfo.url) else {
+                return .unavailable(reason: "Server returned an invalid download URL for model '\(modelId)'.")
+            }
+
+            return .downloadRequired(url: downloadURL, sizeBytes: Int64(downloadInfo.fileSize))
+        } catch let error as OctomilError {
+            switch error {
+            case .networkUnavailable:
+                return .unavailable(reason: "Network unavailable. Connect to the internet to download model '\(modelId)'.")
+            case .modelNotFound:
+                return .unavailable(reason: "Model '\(modelId)' not found on the server.")
+            case .forbidden, .invalidAPIKey, .authenticationFailed:
+                return .unavailable(reason: "Authentication error. Check your API key or device registration.")
+            default:
+                return .unavailable(reason: error.localizedDescription)
+            }
+        } catch {
+            return .unavailable(reason: "Failed to check model status: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Cache Access
 
     /// Gets a cached model.
