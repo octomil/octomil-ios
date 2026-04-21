@@ -209,11 +209,13 @@ private class MockPlanURLProtocol: URLProtocol {
                     "confidence": 0.9,
                     "reason": "Best for this device",
                     "engine": "mlx",
-                    "benchmark_required": false
+                    "benchmark_required": false,
+                    "gates": []
                 }
             ],
             "fallback_candidates": [],
             "plan_ttl_seconds": 604800,
+            "fallback_allowed": true,
             "server_generated_at": "2026-04-12T00:00:00Z"
         }
         """.data(using: .utf8)!

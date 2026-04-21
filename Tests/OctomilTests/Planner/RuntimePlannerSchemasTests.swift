@@ -258,11 +258,13 @@ final class RuntimePlannerSchemasTests: XCTestCase {
                         "size_bytes": 4294967296,
                         "min_ram_bytes": 6442450944
                     },
-                    "benchmark_required": false
+                    "benchmark_required": false,
+                    "gates": []
                 }
             ],
             "fallback_candidates": [],
             "plan_ttl_seconds": 604800,
+            "fallback_allowed": true,
             "server_generated_at": "2026-04-12T10:00:00Z"
         }
         """.data(using: .utf8)!
