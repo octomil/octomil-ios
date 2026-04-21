@@ -37,6 +37,7 @@ public final class OctomilResponses: @unchecked Sendable {
         let runtime = try resolveRuntimeForRequest(request)
         let effectiveRequest = buildEffectiveRequest(request)
         let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
+        let requestId = Self.generateRequestId()
         let attemptResult = await CandidateAttemptRunner(fallbackAllowed: false).runWithInference(
             candidates: [Self.attemptCandidate(model: request.model)]
         ) { _, _ in
@@ -48,6 +49,7 @@ public final class OctomilResponses: @unchecked Sendable {
         }
         let response = buildResponse(model: request.model, runtimeResponse: runtimeResponse)
         cacheResponse(response)
+        emitRouteEvent(for: request, requestId: requestId, attemptResult: attemptResult)
         return response
     }
 
@@ -66,6 +68,7 @@ public final class OctomilResponses: @unchecked Sendable {
 
                     let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
                     let attemptRunner = CandidateAttemptRunner(fallbackAllowed: false, streaming: true)
+                    let requestId = Self.generateRequestId()
                     let attemptReadiness = attemptRunner.run(candidates: [Self.attemptCandidate(model: request.model)])
                     guard attemptReadiness.selectedAttempt != nil else {
                         throw OctomilResponsesError.noRuntime(request.model)
@@ -142,6 +145,7 @@ public final class OctomilResponses: @unchecked Sendable {
                         usage: usage
                     )
                     self.cacheResponse(response)
+                    self.emitRouteEvent(for: request, requestId: requestId, attemptResult: attemptReadiness)
                     continuation.yield(.done(response))
                     continuation.finish()
                 } catch {
@@ -154,6 +158,79 @@ public final class OctomilResponses: @unchecked Sendable {
     }
 
     // MARK: - Private
+
+    private func emitRouteEvent(
+        for request: ResponseRequest,
+        requestId: String,
+        attemptResult: AttemptLoopResult
+    ) {
+        emitRouteEvent(
+            for: request,
+            requestId: requestId,
+            selectedAttempt: attemptResult.selectedAttempt,
+            attempts: attemptResult.attempts,
+            fallbackUsed: attemptResult.fallbackUsed,
+            fallbackTrigger: attemptResult.fallbackTrigger
+        )
+    }
+
+    private func emitRouteEvent(
+        for request: ResponseRequest,
+        requestId: String,
+        attemptResult: AttemptInferenceResult<RuntimeResponse>
+    ) {
+        emitRouteEvent(
+            for: request,
+            requestId: requestId,
+            selectedAttempt: attemptResult.selectedAttempt,
+            attempts: attemptResult.attempts,
+            fallbackUsed: attemptResult.fallbackUsed,
+            fallbackTrigger: attemptResult.fallbackTrigger
+        )
+    }
+
+    private func emitRouteEvent(
+        for request: ResponseRequest,
+        requestId: String,
+        selectedAttempt: RouteAttempt?,
+        attempts: [RouteAttempt],
+        fallbackUsed: Bool,
+        fallbackTrigger: FallbackTrigger?
+    ) {
+        guard selectedAttempt != nil else { return }
+        TelemetryQueue.shared?.reportRouteEvent(
+            RouteEvent(
+                requestId: requestId,
+                capability: "responses",
+                policy: request.routing?.rawValue,
+                plannerSource: "offline",
+                selectedLocality: selectedAttempt?.locality ?? "unknown",
+                finalMode: selectedAttempt?.mode ?? "unknown",
+                engine: selectedAttempt?.engine,
+                fallbackUsed: fallbackUsed,
+                fallbackTriggerCode: fallbackTrigger?.code,
+                fallbackTriggerStage: fallbackTrigger?.stage,
+                candidateAttempts: attempts.count,
+                modelRef: request.model,
+                modelRefKind: modelRefKind(request.modelRef),
+                artifactId: selectedAttempt?.artifact?.id
+            )
+        )
+    }
+
+    private func modelRefKind(_ ref: ModelRef?) -> String? {
+        guard let ref else { return nil }
+        switch ref {
+        case .id:
+            return "id"
+        case .capability:
+            return "capability"
+        }
+    }
+
+    private static func generateRequestId() -> String {
+        "req_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12))"
+    }
 
     private static func attemptCandidate(model: String) -> AttemptCandidateInput {
         AttemptCandidateInput(candidate: RuntimeCandidatePlan(

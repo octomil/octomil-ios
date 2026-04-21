@@ -163,26 +163,24 @@ public let forbiddenTelemetryKeys: Set<String> = [
 /// - Parameter attributes: Key-value map to validate.
 /// - Throws: `RouteEventValidationError.forbiddenKeyPresent` if a forbidden key is found.
 public func validateRouteEventAttributes(_ attributes: [String: Any]) throws {
-    for key in attributes.keys {
-        if forbiddenTelemetryKeys.contains(key) {
-            throw RouteEventValidationError.forbiddenKeyPresent(key)
-        }
+    if let first = findForbiddenTelemetryKeys(attributes).first {
+        throw RouteEventValidationError.forbiddenKeyPresent(first)
     }
 }
 
-/// Strips any forbidden telemetry keys from a dictionary.
+/// Strips any forbidden telemetry keys from a nested dictionary.
 ///
-/// Returns a new dictionary with forbidden keys removed.
+/// Returns a new dictionary with forbidden keys removed at any depth.
 /// Use before uploading custom metadata alongside route events.
-public func stripForbiddenKeys<V>(_ attributes: [String: V]) -> [String: V] {
-    attributes.filter { !forbiddenTelemetryKeys.contains($0.key) }
+public func stripForbiddenKeys(_ attributes: [String: Any]) -> [String: Any] {
+    scrubForbiddenTelemetryValue(attributes) as? [String: Any] ?? [:]
 }
 
 /// Strips forbidden keys from a `TelemetryValue` attribute map.
 ///
 /// Convenience overload for the telemetry pipeline.
 public func stripForbiddenTelemetryKeys(_ attributes: [String: TelemetryValue]) -> [String: TelemetryValue] {
-    attributes.filter { !forbiddenTelemetryKeys.contains($0.key) }
+    scrubForbiddenTelemetryValue(attributes) as? [String: TelemetryValue] ?? [:]
 }
 
 /// Errors raised during route event validation.
@@ -195,4 +193,44 @@ public enum RouteEventValidationError: Error, LocalizedError {
             return "RouteEvent contains forbidden telemetry key: \"\(key)\". Route events must never include user content."
         }
     }
+}
+
+private func findForbiddenTelemetryKeys(_ value: Any, path: String = "") -> [String] {
+    if let array = value as? [Any] {
+        return array.enumerated().flatMap { index, item in
+            findForbiddenTelemetryKeys(item, path: "\(path)[\(index)]")
+        }
+    }
+    guard let dictionary = value as? [String: Any] else {
+        return []
+    }
+
+    var violations: [String] = []
+    for (key, child) in dictionary {
+        let fullPath = path.isEmpty ? key : "\(path).\(key)"
+        if forbiddenTelemetryKeys.contains(key) {
+            violations.append(fullPath)
+            continue
+        }
+        violations.append(contentsOf: findForbiddenTelemetryKeys(child, path: fullPath))
+    }
+    return violations
+}
+
+private func scrubForbiddenTelemetryValue(_ value: Any) -> Any {
+    if let array = value as? [Any] {
+        return array.map(scrubForbiddenTelemetryValue)
+    }
+    guard let dictionary = value as? [String: Any] else {
+        return value
+    }
+
+    var scrubbed: [String: Any] = [:]
+    for (key, child) in dictionary {
+        if forbiddenTelemetryKeys.contains(key) {
+            continue
+        }
+        scrubbed[key] = scrubForbiddenTelemetryValue(child)
+    }
+    return scrubbed
 }
