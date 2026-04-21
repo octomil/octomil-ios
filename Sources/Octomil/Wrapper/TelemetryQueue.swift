@@ -219,10 +219,20 @@ public final class TelemetryQueue: @unchecked Sendable {
 
     /// Records a v2 telemetry event.
     ///
+    /// Forbidden telemetry keys are stripped from attributes before buffering.
     /// When the buffer reaches ``batchSize`` the queue is flushed automatically.
     public func recordEvent(_ event: TelemetryEvent) {
+        // Strip forbidden keys to prevent user content leakage into telemetry
+        let sanitized = TelemetryEvent(
+            name: event.name,
+            timestamp: event.timestamp,
+            attributes: stripForbiddenTelemetryKeys(event.attributes),
+            traceId: event.traceId,
+            spanId: event.spanId
+        )
+
         lock.lock()
-        buffer.append(event)
+        buffer.append(sanitized)
         let shouldFlush = buffer.count >= batchSize
         lock.unlock()
 
