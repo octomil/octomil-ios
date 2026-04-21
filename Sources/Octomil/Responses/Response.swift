@@ -8,12 +8,27 @@ public struct Response: Sendable {
     public let finishReason: String
     public let usage: ResponseUsage?
 
-    public init(id: String, model: String, output: [OutputItem], finishReason: String, usage: ResponseUsage? = nil) {
+    /// Privacy-safe routing metadata describing how this request was routed.
+    ///
+    /// Contains operational metadata only: route ID, planner source, locality,
+    /// engine, fallback info, and model ref kind.
+    /// NEVER contains: prompt, input, output, audio, filePath, or content.
+    public let routeMetadata: RouteMetadata?
+
+    public init(
+        id: String,
+        model: String,
+        output: [OutputItem],
+        finishReason: String,
+        usage: ResponseUsage? = nil,
+        routeMetadata: RouteMetadata? = nil
+    ) {
         self.id = id
         self.model = model
         self.output = output
         self.finishReason = finishReason
         self.usage = usage
+        self.routeMetadata = routeMetadata
     }
 
     /// Concatenated text from all `.text` output items.

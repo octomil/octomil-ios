@@ -13,7 +13,7 @@ import Foundation
 /// - `selectedLocality`, `finalMode` — where and how inference ran
 /// - `fallbackUsed`, `fallbackTriggerCode`, `fallbackTriggerStage` — fallback info
 /// - `candidateAttempts` — how many candidates were evaluated
-public struct RouteEvent: Codable, Sendable {
+public struct RouteEvent: Codable, Sendable, Equatable {
     /// Unique route identifier (generated per routing decision).
     public let routeId: String
     /// Unique request identifier for correlation.
@@ -28,6 +28,8 @@ public struct RouteEvent: Codable, Sendable {
     public let plannerSource: String?
     /// The locality where inference was ultimately executed.
     public let selectedLocality: String
+    /// Backward-compatible route metadata locality alias.
+    public let finalLocality: String
     /// The execution mode used (sdk_runtime, hosted_gateway, external_endpoint).
     public let finalMode: String
     /// Engine used for inference (e.g. coreml, llamacpp, cloud).
@@ -64,6 +66,7 @@ public struct RouteEvent: Codable, Sendable {
         case capability
         case policy
         case plannerSource = "planner_source"
+        case finalLocality = "final_locality"
         case selectedLocality = "selected_locality"
         case finalMode = "final_mode"
         case engine
@@ -111,6 +114,7 @@ public struct RouteEvent: Codable, Sendable {
         self.policy = policy
         self.plannerSource = plannerSource
         self.selectedLocality = selectedLocality
+        self.finalLocality = selectedLocality
         self.finalMode = finalMode
         self.engine = engine
         self.fallbackUsed = fallbackUsed
@@ -125,6 +129,63 @@ public struct RouteEvent: Codable, Sendable {
         self.experimentId = experimentId
         self.variantId = variantId
         self.artifactId = artifactId
+    }
+
+    /// Backward-compatible initializer for the earlier production-routing surface.
+    public init(
+        routeId: String,
+        requestId: String,
+        planId: String? = nil,
+        capability: String,
+        policy: String? = nil,
+        plannerSource: String? = nil,
+        finalLocality: String,
+        engine: String? = nil,
+        fallbackUsed: Bool = false,
+        fallbackTriggerCode: String? = nil,
+        candidateAttempts: Int = 0,
+        modelRefKind: String = "plain_id"
+    ) {
+        self.init(
+            routeId: routeId,
+            requestId: requestId,
+            planId: planId,
+            capability: capability,
+            policy: policy,
+            plannerSource: plannerSource,
+            selectedLocality: finalLocality,
+            finalMode: finalLocality == "cloud" ? "hosted_gateway" : "sdk_runtime",
+            engine: engine,
+            fallbackUsed: fallbackUsed,
+            fallbackTriggerCode: fallbackTriggerCode,
+            fallbackTriggerStage: nil,
+            candidateAttempts: candidateAttempts,
+            modelRefKind: modelRefKind
+        )
+    }
+
+    /// Build a RouteEvent from a routing decision and request ID.
+    public static func from(
+        decision: RoutingDecisionResult,
+        requestId: String,
+        capability: String
+    ) -> RouteEvent {
+        RouteEvent(
+            routeId: decision.routeMetadata.routeId,
+            requestId: requestId,
+            planId: decision.routeMetadata.planId,
+            capability: capability,
+            policy: decision.routeMetadata.policy,
+            plannerSource: decision.routeMetadata.plannerSource,
+            selectedLocality: decision.routeMetadata.finalLocality,
+            finalMode: decision.mode,
+            engine: decision.routeMetadata.engine,
+            fallbackUsed: decision.routeMetadata.fallbackUsed,
+            fallbackTriggerCode: decision.routeMetadata.fallbackTriggerCode,
+            fallbackTriggerStage: nil,
+            candidateAttempts: decision.routeMetadata.candidateAttempts,
+            modelRefKind: decision.routeMetadata.modelRefKind
+        )
     }
 
     /// Generate a unique route ID.

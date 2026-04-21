@@ -121,7 +121,7 @@ final class OctomilResponsesTests: XCTestCase {
         let routeEvents = queue.bufferedEvents.filter { $0.name == "route.decision" }
         XCTAssertEqual(routeEvents.count, 1)
         let attrs = routeEvents[0].attributes
-        XCTAssertEqual(attrs["route.capability"], .string("responses"))
+        XCTAssertEqual(attrs["route.capability"], .string("chat"))
         XCTAssertEqual(attrs["route.final_locality"], .string("local"))
         XCTAssertEqual(attrs["route.candidate_attempts"], .int(1))
     }
@@ -204,7 +204,7 @@ final class OctomilResponsesTests: XCTestCase {
         let routeEvents = queue.bufferedEvents.filter { $0.name == "route.decision" }
         XCTAssertEqual(routeEvents.count, 1)
         let attrs = routeEvents[0].attributes
-        XCTAssertEqual(attrs["route.capability"], .string("responses"))
+        XCTAssertEqual(attrs["route.capability"], .string("chat"))
         XCTAssertEqual(attrs["route.final_locality"], .string("local"))
         XCTAssertEqual(attrs["route.candidate_attempts"], .int(1))
     }
