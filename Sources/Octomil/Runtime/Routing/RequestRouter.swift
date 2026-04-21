@@ -14,14 +14,18 @@ import os.log
 /// - `@capability/<cap>` — global capability
 /// - `deploy_<id>` — deployment ID
 /// - `exp_<id>/<variant>` — experiment variant ref
+/// - empty/whitespace — default (no model specified)
 /// - anything else — plain model ID (passed through to the runtime)
 public struct ParsedModelRef: Sendable, Equatable {
     public enum Kind: String, Sendable, Equatable {
+        case model = "model"
         case app = "app"
         case capability = "capability"
         case deployment = "deployment"
         case experiment = "experiment"
-        case model = "model"
+        case alias = "alias"
+        case `default` = "default"
+        case unknown = "unknown"
     }
 
     public let kind: Kind
@@ -31,6 +35,9 @@ public struct ParsedModelRef: Sendable, Equatable {
     public static func parse(_ model: String) -> ParsedModelRef {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        if trimmed.isEmpty {
+            return ParsedModelRef(kind: .default, raw: trimmed)
+        }
         if trimmed.hasPrefix("@app/") {
             return ParsedModelRef(kind: .app, raw: trimmed)
         }
