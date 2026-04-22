@@ -1,0 +1,112 @@
+{
+  "description": "Capability reference for embeddings. Resolves default embeddings model. Local execution with llama.cpp.",
+  "request": {
+    "model": "@capability/embeddings",
+    "capability": "embeddings",
+    "routing_policy": "local_first",
+    "device": {
+      "platform": "linux",
+      "arch": "x86_64",
+      "ram_bytes": 34359738368,
+      "engines": [{ "id": "llama.cpp", "version": "b4567" }]
+    }
+  },
+  "planner_response": {
+    "model": "nomic-embed-text-v1.5",
+    "capability": "embeddings",
+    "policy": "local_first",
+    "candidates": [
+      {
+        "locality": "local",
+        "engine": "llama.cpp",
+        "artifact": {
+          "model_id": "nomic-embed-text-v1.5",
+          "artifact_id": "art_1100",
+          "format": "gguf",
+          "quantization": "f16",
+          "digest": "sha256:kkk111",
+          "size_bytes": 274000000
+        },
+        "priority": 0,
+        "confidence": 0.95,
+        "reason": "embeddings model fits in memory, llama.cpp supports embedding mode",
+        "gates": [
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" }
+        ]
+      },
+      {
+        "locality": "cloud",
+        "engine": "cloud",
+        "priority": 1,
+        "confidence": 0.99,
+        "reason": "cloud fallback for embeddings",
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800,
+    "resolution": {
+      "ref_kind": "capability",
+      "original_ref": "@capability/embeddings",
+      "resolved_model": "nomic-embed-text-v1.5",
+      "capability": "embeddings"
+    }
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": { "locality": "local", "mode": "sdk_runtime", "engine": "llama.cpp" },
+    "model": {
+      "requested": { "ref": "@capability/embeddings", "kind": "capability", "capability": "embeddings" },
+      "resolved": { "id": "nomic-embed-text-v1.5", "slug": null, "version_id": null, "variant_id": null }
+    },
+    "artifact": { "id": "art_1100", "version": null, "format": "gguf", "digest": "sha256:kkk111", "cache": { "status": "hit", "managed_by": "octomil" } },
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "llama.cpp",
+        "artifact": { "id": "art_1100", "digest": "sha256:kkk111", "cache": { "status": "hit", "managed_by": "octomil" } },
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          { "code": "artifact_verified", "status": "passed" },
+          { "code": "runtime_available", "status": "passed" },
+          { "code": "model_loads", "status": "passed" }
+        ],
+        "reason": { "code": "selected", "message": "all gates passed, local embeddings inference succeeded" }
+      }
+    ],
+    "reason": { "code": "attempt_selected", "message": "capability embeddings resolved to nomic-embed-text, local selected" }
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "capability": "embeddings",
+    "policy": "local_first",
+    "planner_source": "server",
+    "final_locality": "local",
+    "engine": "llama.cpp",
+    "artifact_id": "art_1100",
+    "fallback_used": false,
+    "candidate_attempts": 1
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": true,
+    "private": false
+  },
+  "rules_tested": [
+    "capability ref resolves default embeddings model",
+    "embeddings capability uses same routing logic as chat",
+    "non-chat capabilities produce valid route_metadata"
+  ]
+}

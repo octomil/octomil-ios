@@ -1,0 +1,101 @@
+{
+  "description": "Audio transcription with private policy. Local whisper.cpp engine. No cloud fallback permitted.",
+  "request": {
+    "model": "whisper-large-v3-turbo",
+    "capability": "transcription",
+    "routing_policy": "private",
+    "device": {
+      "platform": "macos",
+      "arch": "arm64",
+      "ram_bytes": 34359738368,
+      "engines": [{ "id": "whisper.cpp", "version": "1.7.0" }]
+    }
+  },
+  "planner_response": {
+    "model": "whisper-large-v3-turbo",
+    "capability": "transcription",
+    "policy": "private",
+    "candidates": [
+      {
+        "locality": "local",
+        "engine": "whisper.cpp",
+        "artifact": {
+          "model_id": "whisper-large-v3-turbo",
+          "artifact_id": "art_1200",
+          "format": "ggml",
+          "digest": "sha256:lll222",
+          "size_bytes": 1600000000
+        },
+        "priority": 0,
+        "confidence": 0.92,
+        "reason": "private policy: local whisper.cpp only",
+        "gates": [
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" },
+          { "code": "modality_supported", "required": true, "threshold_string": "audio", "source": "server" }
+        ]
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": false,
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": { "locality": "local", "mode": "sdk_runtime", "engine": "whisper.cpp" },
+    "model": {
+      "requested": { "ref": "whisper-large-v3-turbo", "kind": "model", "capability": "transcription" },
+      "resolved": { "id": "whisper-large-v3-turbo", "slug": null, "version_id": null, "variant_id": null }
+    },
+    "artifact": { "id": "art_1200", "version": null, "format": "ggml", "digest": "sha256:lll222", "cache": { "status": "hit", "managed_by": "octomil" } },
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "whisper.cpp",
+        "artifact": { "id": "art_1200", "digest": "sha256:lll222", "cache": { "status": "hit", "managed_by": "octomil" } },
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          { "code": "artifact_verified", "status": "passed" },
+          { "code": "runtime_available", "status": "passed" },
+          { "code": "model_loads", "status": "passed" },
+          { "code": "modality_supported", "status": "passed" }
+        ],
+        "reason": { "code": "selected", "message": "all gates passed, local whisper transcription succeeded" }
+      }
+    ],
+    "reason": { "code": "attempt_selected", "message": "private policy: local whisper.cpp transcription selected" }
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "capability": "transcription",
+    "policy": "private",
+    "planner_source": "server",
+    "final_locality": "local",
+    "engine": "whisper.cpp",
+    "artifact_id": "art_1200",
+    "fallback_used": false,
+    "candidate_attempts": 1
+  },
+  "expected_policy_result": {
+    "cloud_allowed": false,
+    "local_allowed": true,
+    "fallback_allowed": false,
+    "private": true
+  },
+  "forbidden_telemetry_keys": ["audio", "audio_bytes", "file_path"],
+  "rules_tested": [
+    "private policy never uses cloud for audio",
+    "transcription capability uses same routing logic",
+    "modality_supported gate validates audio capability",
+    "audio content (audio_bytes, file_path) never appears in telemetry"
+  ]
+}

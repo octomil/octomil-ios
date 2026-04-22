@@ -1,0 +1,23 @@
+{
+  "contract_version": "1.18.0",
+  "fixtures_hash": "sha256:ad97dddaedf29987af77a8aaec0ab467ad3b9e4b3611f6715378aaab63a04cec",
+  "synced_at": "2026-04-22T18:58:42Z",
+  "files": [
+    "alias_ref_resolved.json",
+    "app_ref_local_first_cloud_fallback.json",
+    "app_ref_local_only.json",
+    "audio_transcription_private.json",
+    "auto_policy_resolved_local.json",
+    "capability_chat_default_model.json",
+    "capability_embeddings_local.json",
+    "cloud_first_local_fallback.json",
+    "deployment_ref_cloud_only.json",
+    "experiment_variant_resolved.json",
+    "performance_first_lowest_latency.json",
+    "runtime_plan_cloud_fallback_disallowed.json",
+    "runtime_plan_local_candidate_gates.json",
+    "stream_post_first_token_no_fallback.json",
+    "stream_pre_first_token_fallback.json",
+    "telemetry_route_attempt_upload.json"
+  ]
+}
