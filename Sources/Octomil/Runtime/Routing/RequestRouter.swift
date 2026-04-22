@@ -30,6 +30,7 @@ public struct ParsedModelRef: Sendable, Equatable {
 
     public let kind: Kind
     public let raw: String
+    public let modelSlug: String?
     public let appSlug: String?
     public let capability: String?
     public let deploymentId: String?
@@ -39,6 +40,7 @@ public struct ParsedModelRef: Sendable, Equatable {
     public init(
         kind: Kind,
         raw: String,
+        modelSlug: String? = nil,
         appSlug: String? = nil,
         capability: String? = nil,
         deploymentId: String? = nil,
@@ -47,6 +49,7 @@ public struct ParsedModelRef: Sendable, Equatable {
     ) {
         self.kind = kind
         self.raw = raw
+        self.modelSlug = modelSlug
         self.appSlug = appSlug
         self.capability = capability
         self.deploymentId = deploymentId
@@ -74,8 +77,11 @@ public struct ParsedModelRef: Sendable, Equatable {
                 ? ParsedModelRef(kind: .unknown, raw: trimmed)
                 : ParsedModelRef(kind: .capability, raw: trimmed, capability: cap)
         }
-        if trimmed.hasPrefix("deploy_"), trimmed.count > "deploy_".count {
-            return ParsedModelRef(kind: .deployment, raw: trimmed, deploymentId: trimmed)
+        if trimmed.hasPrefix("deploy_") {
+            if trimmed.count > "deploy_".count {
+                return ParsedModelRef(kind: .deployment, raw: trimmed, deploymentId: trimmed)
+            }
+            return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
         if trimmed.hasPrefix("exp_"), let slash = trimmed.firstIndex(of: "/") {
             let experimentId = String(trimmed[..<slash])
@@ -85,13 +91,16 @@ public struct ParsedModelRef: Sendable, Equatable {
             }
             return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
-        if trimmed.hasPrefix("alias:"), trimmed.count > "alias:".count {
-            return ParsedModelRef(kind: .alias, raw: trimmed)
+        if trimmed.hasPrefix("alias:") {
+            if trimmed.count > "alias:".count {
+                return ParsedModelRef(kind: .alias, raw: trimmed)
+            }
+            return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
         if trimmed.hasPrefix("@") || trimmed.contains("://") {
             return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
-        return ParsedModelRef(kind: .model, raw: trimmed)
+        return ParsedModelRef(kind: .model, raw: trimmed, modelSlug: trimmed)
     }
 }
 
