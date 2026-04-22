@@ -541,7 +541,7 @@ public struct RuntimeSelection: Sendable, Equatable {
     public let artifact: RuntimeArtifactPlan?
     /// Whether a benchmark was run to produce this selection.
     public let benchmarkRan: Bool
-    /// How the selection was determined: "cache", "server_plan", "local_default", "fallback".
+    /// How the selection was determined — internal value; normalized via ``PlannerSourceNormalizer``.
     public let source: String
     /// Fallback candidates if this selection fails at runtime.
     public let fallbackCandidates: [RuntimeCandidatePlan]
@@ -830,6 +830,38 @@ public struct PlannerRouteMetadata: Sendable, Equatable {
         self.planner = planner
         self.fallback = fallback
         self.reason = reason
+    }
+}
+
+// MARK: - PlannerSourceNormalizer
+
+/// Normalizes planner source strings to the canonical contract enum.
+///
+/// Canonical values: `"server"`, `"cache"`, `"offline"`.
+///
+/// Aliases:
+/// - `"server_plan"` -> `"server"`
+/// - `"cached"` -> `"cache"`
+/// - `"local_default"`, `"fallback"`, `"none"`, `"local_benchmark"`, `""` -> `"offline"`
+///
+/// Unknown values pass through as-is.
+public enum PlannerSourceNormalizer {
+    /// Canonical planner source values.
+    public static let canonicalSources: Set<String> = ["server", "cache", "offline"]
+
+    private static let aliases: [String: String] = [
+        "local_default": "offline",
+        "server_plan": "server",
+        "cached": "cache",
+        "fallback": "offline",
+        "none": "offline",
+        "local_benchmark": "offline",
+    ]
+
+    /// Normalize a planner source string to its canonical value.
+    public static func normalize(_ source: String) -> String {
+        if source.isEmpty { return "offline" }
+        return aliases[source] ?? source
     }
 }
 

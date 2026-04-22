@@ -136,7 +136,7 @@ public struct RouteMetadata: Sendable, Equatable {
     public let routeId: String
     /// The plan ID from the server planner, if a plan was used.
     public let planId: String?
-    /// How the plan was obtained: "cache", "server_plan", "local_default", "none".
+    /// How the plan was obtained — canonical: "server", "cache", "offline".
     public let plannerSource: String
     /// The routing policy that was applied.
     public let policy: String?
@@ -168,7 +168,7 @@ public struct RouteMetadata: Sendable, Equatable {
     public init(
         routeId: String = UUID().uuidString,
         planId: String? = nil,
-        plannerSource: String = "none",
+        plannerSource: String = "offline",
         policy: String? = nil,
         finalLocality: String,
         engine: String? = nil,
@@ -368,7 +368,7 @@ public final class RequestRouter: @unchecked Sendable {
             routeId: routeId,
             parsedRef: parsedRef,
             policy: policyString,
-            plannerSource: "none"
+            plannerSource: "offline"
         )
     }
 
