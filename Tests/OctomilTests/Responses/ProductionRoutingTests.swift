@@ -184,6 +184,18 @@ final class ProductionRoutingTests: XCTestCase {
         XCTAssertEqual(ref.raw, "phi-4-mini")
     }
 
+    func testAliasRefParsedCorrectly() {
+        let ref = ParsedModelRef.parse("alias:my-model")
+        XCTAssertEqual(ref.kind, .alias)
+        XCTAssertEqual(ref.raw, "alias:my-model")
+    }
+
+    func testUnknownScopedRefParsedCorrectly() {
+        let ref = ParsedModelRef.parse("@unknown/scope")
+        XCTAssertEqual(ref.kind, .unknown)
+        XCTAssertEqual(ref.raw, "@unknown/scope")
+    }
+
     func testDeploymentRefCarriedInRouteMetadata() async throws {
         let runtime = RoutingMockRuntime(response: RuntimeResponse(text: "deployed"))
         let responses = OctomilResponses(runtimeResolver: { _ in runtime })
@@ -251,6 +263,57 @@ final class ProductionRoutingTests: XCTestCase {
         let decision = router.resolve(context: context)
 
         XCTAssertEqual(decision.routeMetadata.modelRefKind, "experiment")
+    }
+
+    func testStreamWithDeploymentRefAttachesCorrectKind() async throws {
+        let runtime = RoutingStreamMockRuntime(chunks: [RuntimeChunk(text: "result")])
+        let responses = OctomilResponses(runtimeResolver: { _ in runtime })
+
+        var doneResponse: Response?
+        for try await event in responses.stream(
+            ResponseRequest(model: "deploy_xyz789", input: [.text("query")])
+        ) {
+            if case .done(let resp) = event {
+                doneResponse = resp
+            }
+        }
+
+        XCTAssertNotNil(doneResponse)
+        XCTAssertEqual(doneResponse?.routeMetadata?.modelRefKind, "deployment")
+    }
+
+    func testStreamWithAppRefAttachesCorrectKind() async throws {
+        let runtime = RoutingStreamMockRuntime(chunks: [RuntimeChunk(text: "result")])
+        let responses = OctomilResponses(runtimeResolver: { _ in runtime })
+
+        var doneResponse: Response?
+        for try await event in responses.stream(
+            ResponseRequest(model: "@app/myapp/chat", input: [.text("query")])
+        ) {
+            if case .done(let resp) = event {
+                doneResponse = resp
+            }
+        }
+
+        XCTAssertNotNil(doneResponse)
+        XCTAssertEqual(doneResponse?.routeMetadata?.modelRefKind, "app")
+    }
+
+    func testStreamWithExperimentRefAttachesCorrectKind() async throws {
+        let runtime = RoutingStreamMockRuntime(chunks: [RuntimeChunk(text: "result")])
+        let responses = OctomilResponses(runtimeResolver: { _ in runtime })
+
+        var doneResponse: Response?
+        for try await event in responses.stream(
+            ResponseRequest(model: "exp_abc/variant_b", input: [.text("query")])
+        ) {
+            if case .done(let resp) = event {
+                doneResponse = resp
+            }
+        }
+
+        XCTAssertNotNil(doneResponse)
+        XCTAssertEqual(doneResponse?.routeMetadata?.modelRefKind, "experiment")
     }
 
     // MARK: - 4. Telemetry event matches contract shape

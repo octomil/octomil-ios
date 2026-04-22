@@ -396,6 +396,74 @@ public struct AppResolution: Codable, Sendable, Equatable {
     }
 }
 
+// MARK: - ModelResolution
+
+/// Generalized resolution metadata for non-app model ref types.
+///
+/// Returned by the server when the model ref resolves through a deployment,
+/// experiment, capability default, or plain model lookup. Carries the
+/// deployment_id, experiment_id, and variant_id needed for SDK route
+/// telemetry correlation.
+public struct ModelResolution: Codable, Sendable, Equatable {
+    /// How the ref was classified (e.g. "deployment", "experiment", "model").
+    public let refKind: String
+    /// The original model ref string as provided by the caller.
+    public let originalRef: String
+    /// The resolved model identifier.
+    public let resolvedModel: String
+    /// Deployment ID when the ref resolved through a deployment.
+    public let deploymentId: String?
+    /// Deployment key when the ref resolved through a deployment.
+    public let deploymentKey: String?
+    /// Experiment ID when the ref resolved through an experiment.
+    public let experimentId: String?
+    /// Variant ID when a specific variant was selected.
+    public let variantId: String?
+    /// Variant name when a specific variant was selected.
+    public let variantName: String?
+    /// Capability the ref resolved for.
+    public let capability: String?
+    /// Routing policy applied by the server during resolution.
+    public let routingPolicy: String?
+
+    enum CodingKeys: String, CodingKey {
+        case refKind = "ref_kind"
+        case originalRef = "original_ref"
+        case resolvedModel = "resolved_model"
+        case deploymentId = "deployment_id"
+        case deploymentKey = "deployment_key"
+        case experimentId = "experiment_id"
+        case variantId = "variant_id"
+        case variantName = "variant_name"
+        case capability
+        case routingPolicy = "routing_policy"
+    }
+
+    public init(
+        refKind: String,
+        originalRef: String,
+        resolvedModel: String,
+        deploymentId: String? = nil,
+        deploymentKey: String? = nil,
+        experimentId: String? = nil,
+        variantId: String? = nil,
+        variantName: String? = nil,
+        capability: String? = nil,
+        routingPolicy: String? = nil
+    ) {
+        self.refKind = refKind
+        self.originalRef = originalRef
+        self.resolvedModel = resolvedModel
+        self.deploymentId = deploymentId
+        self.deploymentKey = deploymentKey
+        self.experimentId = experimentId
+        self.variantId = variantId
+        self.variantName = variantName
+        self.capability = capability
+        self.routingPolicy = routingPolicy
+    }
+}
+
 // MARK: - RuntimePlanResponse
 
 /// Full plan response from the server planner API.
@@ -420,6 +488,8 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
     public let serverGeneratedAt: String
     /// App resolution details when the request used an app ref.
     public let appResolution: AppResolution?
+    /// Resolution metadata for deployment/experiment/capability/model refs.
+    public let resolution: ModelResolution?
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -431,6 +501,7 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         case fallbackAllowed = "fallback_allowed"
         case serverGeneratedAt = "server_generated_at"
         case appResolution = "app_resolution"
+        case resolution
     }
 
     public init(
@@ -442,7 +513,8 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         planTtlSeconds: Int = 604_800,
         fallbackAllowed: Bool = true,
         serverGeneratedAt: String = "",
-        appResolution: AppResolution? = nil
+        appResolution: AppResolution? = nil,
+        resolution: ModelResolution? = nil
     ) {
         self.model = model
         self.capability = capability
@@ -453,6 +525,7 @@ public struct RuntimePlanResponse: Codable, Sendable, Equatable {
         self.fallbackAllowed = fallbackAllowed
         self.serverGeneratedAt = serverGeneratedAt
         self.appResolution = appResolution
+        self.resolution = resolution
     }
 }
 
