@@ -8,25 +8,33 @@ import Foundation
 /// planner API and used in plan caching. They must match across the Python,
 /// Node, iOS, Android, and Browser SDKs.
 ///
+/// Values are backed by the contract-generated ``ContractRoutingPolicy`` enum.
+///
 /// **Note:** `quality_first` is intentionally absent. The server does not
 /// support it and it must not appear in any SDK.
 public enum RuntimeRoutingPolicy {
     /// No data leaves the device. Server plan fetch and telemetry are skipped.
-    public static let `private` = "private"
+    public static let `private` = ContractRoutingPolicy.private.rawValue
     /// Alias for ``private``. Older SDKs used this name.
-    public static let localOnly = "local_only"
+    public static let localOnly = ContractRoutingPolicy.localOnly.rawValue
     /// Prefer on-device inference, fall back to cloud if unavailable.
-    public static let localFirst = "local_first"
+    public static let localFirst = ContractRoutingPolicy.localFirst.rawValue
     /// Prefer cloud inference, fall back to on-device if unavailable.
-    public static let cloudFirst = "cloud_first"
+    public static let cloudFirst = ContractRoutingPolicy.cloudFirst.rawValue
     /// Always use cloud inference. Local engines are never attempted.
-    public static let cloudOnly = "cloud_only"
+    public static let cloudOnly = ContractRoutingPolicy.cloudOnly.rawValue
     /// Select the engine with the best performance metrics.
-    public static let performanceFirst = "performance_first"
+    public static let performanceFirst = ContractRoutingPolicy.performanceFirst.rawValue
 
     /// All valid policy names. Use this set for validation.
+    /// Backed by contract-generated ``ContractRoutingPolicy`` enum values.
     public static let allPolicies: Set<String> = [
-        `private`, localOnly, localFirst, cloudFirst, cloudOnly, performanceFirst,
+        ContractRoutingPolicy.private.rawValue,
+        ContractRoutingPolicy.localOnly.rawValue,
+        ContractRoutingPolicy.localFirst.rawValue,
+        ContractRoutingPolicy.cloudFirst.rawValue,
+        ContractRoutingPolicy.cloudOnly.rawValue,
+        ContractRoutingPolicy.performanceFirst.rawValue,
     ]
 }
 
@@ -334,6 +342,8 @@ public struct RuntimeCandidatePlan: Codable, Sendable, Equatable {
 // MARK: - RuntimeLocality
 
 /// Where inference runs: on-device or in the cloud.
+///
+/// Values match the contract-generated ``ContractRouteLocality`` enum.
 public enum RuntimeLocality: String, Codable, Sendable, Equatable {
     case local
     case cloud
@@ -593,17 +603,8 @@ public struct RuntimeSelection: Sendable, Equatable {
         let localityString = locality == .local ? "local" : "cloud"
         let modeString = locality == .local ? "sdk_runtime" : "hosted_gateway"
 
-        // Normalize internal source to contract enum: server | cache | offline
-        let plannerSourceString: String
-        switch source {
-        case "server_plan":
-            plannerSourceString = "server"
-        case "cache":
-            plannerSourceString = "cache"
-        default:
-            // local_default, fallback, empty, or any unknown value → offline
-            plannerSourceString = "offline"
-        }
+        // Normalize internal source to contract-generated PlannerSource values.
+        let plannerSourceString = PlannerSourceNormalizer.normalize(source)
 
         let execution = RouteExecution(
             locality: localityString,
@@ -837,7 +838,8 @@ public struct PlannerRouteMetadata: Sendable, Equatable {
 
 /// Normalizes planner source strings to the canonical contract enum.
 ///
-/// Canonical values: `"server"`, `"cache"`, `"offline"`.
+/// Canonical values are backed by the contract-generated ``PlannerSource`` enum:
+/// `"server"`, `"cache"`, `"offline"`.
 ///
 /// Aliases:
 /// - `"server_plan"` -> `"server"`
@@ -847,23 +849,27 @@ public struct PlannerRouteMetadata: Sendable, Equatable {
 /// Unknown values collapse to `"offline"` so SDK output boundaries never emit
 /// a contract-invalid planner source.
 public enum PlannerSourceNormalizer {
-    /// Canonical planner source values.
-    public static let canonicalSources: Set<String> = ["server", "cache", "offline"]
+    /// Canonical planner source values (backed by generated ``PlannerSource`` enum).
+    public static let canonicalSources: Set<String> = [
+        PlannerSource.server.rawValue,
+        PlannerSource.cache.rawValue,
+        PlannerSource.offline.rawValue,
+    ]
 
     private static let aliases: [String: String] = [
-        "local_default": "offline",
-        "server_plan": "server",
-        "cached": "cache",
-        "fallback": "offline",
-        "none": "offline",
-        "local_benchmark": "offline",
+        "local_default": PlannerSource.offline.rawValue,
+        "server_plan": PlannerSource.server.rawValue,
+        "cached": PlannerSource.cache.rawValue,
+        "fallback": PlannerSource.offline.rawValue,
+        "none": PlannerSource.offline.rawValue,
+        "local_benchmark": PlannerSource.offline.rawValue,
     ]
 
     /// Normalize a planner source string to its canonical value.
     public static func normalize(_ source: String) -> String {
-        if source.isEmpty { return "offline" }
+        if source.isEmpty { return PlannerSource.offline.rawValue }
         if canonicalSources.contains(source) { return source }
-        return aliases[source] ?? "offline"
+        return aliases[source] ?? PlannerSource.offline.rawValue
     }
 }
 
