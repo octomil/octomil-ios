@@ -1,0 +1,105 @@
+{
+  "description": "Auto policy: server resolves to local_first based on device capabilities and model availability. Demonstrates auto -> concrete policy resolution.",
+  "request": {
+    "model": "gemma3-1b",
+    "capability": "chat",
+    "routing_policy": "auto",
+    "device": {
+      "platform": "ios",
+      "arch": "arm64",
+      "ram_bytes": 6442450944,
+      "engines": [{ "id": "coreml", "version": "7.0" }]
+    }
+  },
+  "planner_response": {
+    "model": "gemma3-1b",
+    "capability": "chat",
+    "policy": "local_first",
+    "candidates": [
+      {
+        "locality": "local",
+        "engine": "coreml",
+        "artifact": {
+          "model_id": "gemma3-1b",
+          "artifact_id": "art_900",
+          "format": "mlmodelc",
+          "digest": "sha256:iii999",
+          "size_bytes": 800000000
+        },
+        "priority": 0,
+        "confidence": 0.88,
+        "reason": "auto resolved to local_first; coreml available on iOS",
+        "gates": [
+          { "code": "artifact_verified", "required": true, "source": "server" },
+          { "code": "runtime_available", "required": true, "source": "server" },
+          { "code": "model_loads", "required": true, "source": "server" }
+        ]
+      },
+      {
+        "locality": "cloud",
+        "engine": "cloud",
+        "priority": 1,
+        "confidence": 0.99,
+        "reason": "cloud fallback",
+        "gates": []
+      }
+    ],
+    "fallback_candidates": [],
+    "fallback_allowed": true,
+    "server_generated_at": "2026-04-20T10:00:00Z",
+    "plan_ttl_seconds": 604800
+  },
+  "expected_route_metadata": {
+    "status": "selected",
+    "execution": { "locality": "local", "mode": "sdk_runtime", "engine": "coreml" },
+    "model": {
+      "requested": { "ref": "gemma3-1b", "kind": "model", "capability": "chat" },
+      "resolved": { "id": "gemma3-1b", "slug": null, "version_id": null, "variant_id": null }
+    },
+    "artifact": { "id": "art_900", "version": null, "format": "mlmodelc", "digest": "sha256:iii999", "cache": { "status": "hit", "managed_by": "octomil" } },
+    "planner": { "source": "server" },
+    "fallback": { "used": false, "from_attempt": null, "to_attempt": null, "trigger": null },
+    "attempts": [
+      {
+        "index": 0,
+        "locality": "local",
+        "mode": "sdk_runtime",
+        "engine": "coreml",
+        "artifact": { "id": "art_900", "digest": "sha256:iii999", "cache": { "status": "hit", "managed_by": "octomil" } },
+        "status": "selected",
+        "stage": "inference",
+        "gate_results": [
+          { "code": "artifact_verified", "status": "passed" },
+          { "code": "runtime_available", "status": "passed" },
+          { "code": "model_loads", "status": "passed" }
+        ],
+        "reason": { "code": "selected", "message": "all gates passed, local coreml inference succeeded" }
+      }
+    ],
+    "reason": { "code": "attempt_selected", "message": "auto resolved to local_first, coreml selected on iOS" }
+  },
+  "expected_telemetry": {
+    "route_id": "{{generated}}",
+    "plan_id": "{{generated}}",
+    "request_id": "{{generated}}",
+    "capability": "chat",
+    "policy": "local_first",
+    "planner_source": "server",
+    "final_locality": "local",
+    "engine": "coreml",
+    "artifact_id": "art_900",
+    "fallback_used": false,
+    "candidate_attempts": 1
+  },
+  "expected_policy_result": {
+    "cloud_allowed": true,
+    "local_allowed": true,
+    "fallback_allowed": true,
+    "private": false
+  },
+  "rules_tested": [
+    "auto policy is resolved by server to concrete policy",
+    "planner response.policy shows the resolved policy, not 'auto'",
+    "SDK treats resolved policy identically to explicit policy"
+  ]
+}

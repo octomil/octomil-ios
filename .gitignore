@@ -41,5 +41,9 @@ Thumbs.db
 *.mobileprovision
 *.cer
 
+# Logs & test output
+*.log
+test-results/
+
 # Claude
 .claude/
