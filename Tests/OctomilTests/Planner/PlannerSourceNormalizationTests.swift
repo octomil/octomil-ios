@@ -45,8 +45,8 @@ final class PlannerSourceNormalizationTests: XCTestCase {
         XCTAssertEqual(PlannerSourceNormalizer.normalize(""), "offline")
     }
 
-    func testUnknownValuePassesThrough() {
-        XCTAssertEqual(PlannerSourceNormalizer.normalize("custom_source"), "custom_source")
+    func testUnknownValueMapsToOffline() {
+        XCTAssertEqual(PlannerSourceNormalizer.normalize("custom_source"), "offline")
     }
 
     // MARK: - PlannerSourceNormalizer.canonicalSources

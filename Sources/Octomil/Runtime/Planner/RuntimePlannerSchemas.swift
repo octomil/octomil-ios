@@ -844,7 +844,8 @@ public struct PlannerRouteMetadata: Sendable, Equatable {
 /// - `"cached"` -> `"cache"`
 /// - `"local_default"`, `"fallback"`, `"none"`, `"local_benchmark"`, `""` -> `"offline"`
 ///
-/// Unknown values pass through as-is.
+/// Unknown values collapse to `"offline"` so SDK output boundaries never emit
+/// a contract-invalid planner source.
 public enum PlannerSourceNormalizer {
     /// Canonical planner source values.
     public static let canonicalSources: Set<String> = ["server", "cache", "offline"]
@@ -861,7 +862,8 @@ public enum PlannerSourceNormalizer {
     /// Normalize a planner source string to its canonical value.
     public static func normalize(_ source: String) -> String {
         if source.isEmpty { return "offline" }
-        return aliases[source] ?? source
+        if canonicalSources.contains(source) { return source }
+        return aliases[source] ?? "offline"
     }
 }
 
