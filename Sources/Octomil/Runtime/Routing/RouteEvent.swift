@@ -24,7 +24,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
     public let capability: String
     /// Routing policy applied (auto, local_only, cloud_only, private).
     public let policy: String?
-    /// Source of the routing plan (server, local_default, cached).
+    /// Source of the routing plan — canonical: "server", "cache", "offline".
     public let plannerSource: String?
     /// The locality where inference was ultimately executed.
     public let selectedLocality: String
@@ -116,7 +116,7 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         self.planId = planId
         self.capability = capability
         self.policy = policy
-        self.plannerSource = plannerSource
+        self.plannerSource = plannerSource.map { PlannerSourceNormalizer.normalize($0) }
         self.selectedLocality = selectedLocality
         self.finalLocality = selectedLocality
         self.finalMode = finalMode
