@@ -41,7 +41,8 @@ public enum DeviceRuntimeProfileCollector {
             ramTotalBytes: totalRAMBytes(),
             gpuCoreCount: nil, // Not reliably queryable on iOS
             accelerators: detectAccelerators(),
-            installedRuntimes: runtimes
+            installedRuntimes: runtimes,
+            supportedGateCodes: []
         )
     }
 
