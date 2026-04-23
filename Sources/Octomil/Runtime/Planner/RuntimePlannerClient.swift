@@ -178,7 +178,7 @@ public actor RuntimePlannerClient {
     /// `supported_policies`, `plan_ttl_seconds`.
     public struct RuntimeDefaultsResponse: Codable, Sendable {
         /// Mapping of capability to ordered list of default engine identifiers.
-        /// Example: `{"chat": ["mlx-lm", "llama.cpp", "ollama"]}`.
+        /// Example: `{"chat": ["mlx-lm", "llama.cpp"]}`.
         public let defaultEngines: [String: [String]]
         /// Capabilities the planner supports (e.g. "chat", "embeddings", "transcription").
         public let supportedCapabilities: [String]

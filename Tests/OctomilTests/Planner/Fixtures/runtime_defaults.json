@@ -2,8 +2,8 @@
   "description": "Response from GET /api/v2/runtime/defaults with canonical engine defaults, capabilities, and policies.",
   "response": {
     "default_engines": {
-      "chat": ["mlx-lm", "llama.cpp", "ollama"],
-      "responses": ["mlx-lm", "llama.cpp", "ollama"],
+      "chat": ["mlx-lm", "llama.cpp"],
+      "responses": ["mlx-lm", "llama.cpp"],
       "embeddings": ["onnxruntime"],
       "transcription": ["whisper.cpp"],
       "audio": ["whisper.cpp"]
