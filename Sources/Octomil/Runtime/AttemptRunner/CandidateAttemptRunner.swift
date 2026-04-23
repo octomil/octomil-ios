@@ -15,6 +15,7 @@ public enum AttemptStage: String, Codable, Sendable, Equatable {
     case benchmark
     case gate
     case inference
+    case outputQuality = "output_quality"
 }
 
 // MARK: - AttemptStatus
@@ -58,7 +59,94 @@ public enum GateCode: String, Codable, Sendable, CaseIterable {
     case minFreeMemoryBytes = "min_free_memory_bytes"
     case minFreeStorageBytes = "min_free_storage_bytes"
     case benchmarkFresh = "benchmark_fresh"
+    // Output quality gates (post-inference)
+    case schemaValid = "schema_valid"
+    case toolCallValid = "tool_call_valid"
+    case safetyPassed = "safety_passed"
+    case evaluatorScoreMin = "evaluator_score_min"
+    case jsonParseable = "json_parseable"
+    case maxRefusalRate = "max_refusal_rate"
 }
+
+// MARK: - GateClass
+
+/// Classification of a gate by its purpose.
+///
+/// Matches `gate_class` in `candidate_gate.schema.json`.
+public enum GateClass: String, Codable, Sendable, Equatable {
+    case readiness
+    case performance
+    case outputQuality = "output_quality"
+}
+
+// MARK: - EvaluationPhase
+
+/// When a gate is evaluated relative to inference.
+///
+/// Matches `evaluation_phase` in `candidate_gate.schema.json`.
+public enum EvaluationPhase: String, Codable, Sendable, Equatable {
+    case preInference = "pre_inference"
+    case duringInference = "during_inference"
+    case postInference = "post_inference"
+}
+
+// MARK: - GateClassification
+
+/// Static classification of each gate code to its class, phase, and blocking default.
+public struct GateClassification: Sendable {
+    public let gateClass: GateClass
+    public let evaluationPhase: EvaluationPhase
+    public let blockingDefault: Bool
+
+    public init(gateClass: GateClass, evaluationPhase: EvaluationPhase, blockingDefault: Bool) {
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
+        self.blockingDefault = blockingDefault
+    }
+}
+
+/// Maps every canonical gate code to its (class, phase, blockingDefault).
+public let GATE_CLASSIFICATION: [String: GateClassification] = [
+    // Readiness gates (pre-inference)
+    GateCode.artifactVerified.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.runtimeAvailable.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.modelLoads.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.contextFits.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.modalitySupported.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.toolSupport.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.minFreeMemoryBytes.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.minFreeStorageBytes.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    // Performance gates (during inference)
+    GateCode.minTokensPerSecond.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+    GateCode.maxTtftMs.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+    GateCode.maxErrorRate.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+    GateCode.benchmarkFresh.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+    // Output quality gates (post-inference)
+    GateCode.schemaValid.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.toolCallValid.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.safetyPassed.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.evaluatorScoreMin.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: false),
+    GateCode.jsonParseable.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.maxRefusalRate.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: false),
+]
 
 // MARK: - GateResult
 
@@ -71,12 +159,16 @@ public struct GateResult: Codable, Sendable, Equatable {
     public var observedNumber: Double?
     public var thresholdNumber: Double?
     public var reasonCode: String?
+    public var gateClass: String?
+    public var evaluationPhase: String?
 
     enum CodingKeys: String, CodingKey {
         case code, status
         case observedNumber = "observed_number"
         case thresholdNumber = "threshold_number"
         case reasonCode = "reason_code"
+        case gateClass = "gate_class"
+        case evaluationPhase = "evaluation_phase"
     }
 
     public init(
@@ -84,13 +176,17 @@ public struct GateResult: Codable, Sendable, Equatable {
         status: GateStatus,
         observedNumber: Double? = nil,
         thresholdNumber: Double? = nil,
-        reasonCode: String? = nil
+        reasonCode: String? = nil,
+        gateClass: String? = nil,
+        evaluationPhase: String? = nil
     ) {
         self.code = code
         self.status = status
         self.observedNumber = observedNumber
         self.thresholdNumber = thresholdNumber
         self.reasonCode = reasonCode
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
     }
 }
 
@@ -107,12 +203,20 @@ public struct CandidateGate: Codable, Sendable, Equatable {
     public var thresholdString: String?
     public var windowSeconds: Int?
     public let source: String
+    public var gateClass: String?
+    public var evaluationPhase: String?
+    public var fallbackEligible: Bool?
+    public var blockingDefault: Bool?
 
     enum CodingKeys: String, CodingKey {
         case code, required, source
         case thresholdNumber = "threshold_number"
         case thresholdString = "threshold_string"
         case windowSeconds = "window_seconds"
+        case gateClass = "gate_class"
+        case evaluationPhase = "evaluation_phase"
+        case fallbackEligible = "fallback_eligible"
+        case blockingDefault = "blocking_default"
     }
 
     public init(
@@ -121,7 +225,11 @@ public struct CandidateGate: Codable, Sendable, Equatable {
         thresholdNumber: Double? = nil,
         thresholdString: String? = nil,
         windowSeconds: Int? = nil,
-        source: String = "server"
+        source: String = "server",
+        gateClass: String? = nil,
+        evaluationPhase: String? = nil,
+        fallbackEligible: Bool? = nil,
+        blockingDefault: Bool? = nil
     ) {
         self.code = code
         self.required = required
@@ -129,6 +237,10 @@ public struct CandidateGate: Codable, Sendable, Equatable {
         self.thresholdString = thresholdString
         self.windowSeconds = windowSeconds
         self.source = source
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
+        self.fallbackEligible = fallbackEligible
+        self.blockingDefault = blockingDefault
     }
 }
 
@@ -230,11 +342,39 @@ public struct FallbackTrigger: Codable, Sendable, Equatable {
     public let code: String
     public let stage: String
     public let message: String
+    public var gateCode: String?
+    public var gateClass: String?
+    public var evaluationPhase: String?
+    public var candidateIndex: Int?
+    public var outputVisibleBeforeFailure: Bool?
 
-    public init(code: String, stage: String, message: String) {
+    enum CodingKeys: String, CodingKey {
+        case code, stage, message
+        case gateCode = "gate_code"
+        case gateClass = "gate_class"
+        case evaluationPhase = "evaluation_phase"
+        case candidateIndex = "candidate_index"
+        case outputVisibleBeforeFailure = "output_visible_before_failure"
+    }
+
+    public init(
+        code: String,
+        stage: String,
+        message: String,
+        gateCode: String? = nil,
+        gateClass: String? = nil,
+        evaluationPhase: String? = nil,
+        candidateIndex: Int? = nil,
+        outputVisibleBeforeFailure: Bool? = nil
+    ) {
         self.code = code
         self.stage = stage
         self.message = message
+        self.gateCode = gateCode
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
+        self.candidateIndex = candidateIndex
+        self.outputVisibleBeforeFailure = outputVisibleBeforeFailure
     }
 }
 
@@ -385,6 +525,44 @@ public protocol AttemptGateEvaluator: Sendable {
     ///   - locality: "local" or "cloud".
     /// - Returns: The gate evaluation result.
     func evaluate(gate: CandidateGate, engine: String?, locality: String) -> GateResult
+}
+
+// MARK: - Output Quality Gate Evaluator
+
+/// Result of evaluating an output quality gate against inference output.
+public struct GateEvaluationResult: Sendable {
+    public let passed: Bool
+    public let score: Double?
+    public let reasonCode: String?
+    public let safeMetadata: [String: String]?
+
+    public init(
+        passed: Bool,
+        score: Double? = nil,
+        reasonCode: String? = nil,
+        safeMetadata: [String: String]? = nil
+    ) {
+        self.passed = passed
+        self.score = score
+        self.reasonCode = reasonCode
+        self.safeMetadata = safeMetadata
+    }
+}
+
+/// Protocol for evaluating output quality gates after inference.
+///
+/// Output quality gates run post-inference and check the response content
+/// against schema, safety, tool-call, and scoring requirements.
+public protocol OutputQualityGateEvaluator: Sendable {
+    /// Human-readable name of this evaluator (for telemetry).
+    var name: String { get }
+    /// Evaluate a gate against the inference response.
+    ///
+    /// - Parameters:
+    ///   - gate: The gate definition.
+    ///   - response: The inference response to evaluate.
+    /// - Returns: The evaluation result.
+    func evaluate(gate: CandidateGate, response: Any) async -> GateEvaluationResult
 }
 
 // MARK: - No-Op Defaults
