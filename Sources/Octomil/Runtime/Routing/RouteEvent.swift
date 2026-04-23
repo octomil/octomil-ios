@@ -68,6 +68,10 @@ public struct RouteEvent: Codable, Sendable, Equatable {
     public let qualityReasonCode: String?
     /// Advisory quality gate failures that did not block selection.
     public let advisoryFailures: [[String: String]]?
+    /// Number of gate failures recorded during the attempt loop.
+    public let gateFailureCount: Int?
+    /// Whether output was already visible to the caller when a quality gate failed.
+    public let outputVisibleBeforeFailure: Bool?
 
     enum CodingKeys: String, CodingKey {
         case routeId = "route_id"
@@ -97,6 +101,8 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         case qualityScore = "quality_score"
         case qualityReasonCode = "quality_reason_code"
         case advisoryFailures = "advisory_failures"
+        case gateFailureCount = "gate_failure_count"
+        case outputVisibleBeforeFailure = "output_visible_before_failure"
     }
 
     public init(
@@ -125,7 +131,9 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         qualityEvaluatorName: String? = nil,
         qualityScore: Double? = nil,
         qualityReasonCode: String? = nil,
-        advisoryFailures: [[String: String]]? = nil
+        advisoryFailures: [[String: String]]? = nil,
+        gateFailureCount: Int? = nil,
+        outputVisibleBeforeFailure: Bool? = nil
     ) {
         self.routeId = routeId
         self.requestId = requestId
@@ -154,6 +162,8 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         self.qualityScore = qualityScore
         self.qualityReasonCode = qualityReasonCode
         self.advisoryFailures = advisoryFailures
+        self.gateFailureCount = gateFailureCount
+        self.outputVisibleBeforeFailure = outputVisibleBeforeFailure
     }
 
     /// Backward-compatible initializer for the earlier production-routing surface.

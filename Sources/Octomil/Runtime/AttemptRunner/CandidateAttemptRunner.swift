@@ -120,19 +120,19 @@ public let GATE_CLASSIFICATION: [String: GateClassification] = [
         gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
     GateCode.toolSupport.rawValue: GateClassification(
         gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
-    GateCode.minFreeMemoryBytes.rawValue: GateClassification(
-        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
-    GateCode.minFreeStorageBytes.rawValue: GateClassification(
-        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
-    // Performance gates (during inference)
+    // Performance gates (pre-inference, checked from benchmark cache)
     GateCode.minTokensPerSecond.rawValue: GateClassification(
-        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
     GateCode.maxTtftMs.rawValue: GateClassification(
         gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
     GateCode.maxErrorRate.rawValue: GateClassification(
-        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    GateCode.minFreeMemoryBytes.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.minFreeStorageBytes.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: true),
     GateCode.benchmarkFresh.rawValue: GateClassification(
-        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
     // Output quality gates (post-inference)
     GateCode.schemaValid.rawValue: GateClassification(
         gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
@@ -147,6 +147,16 @@ public let GATE_CLASSIFICATION: [String: GateClassification] = [
     GateCode.maxRefusalRate.rawValue: GateClassification(
         gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: false),
 ]
+
+/// Look up the classification for a gate code.
+///
+/// Returns the canonical classification from ``GATE_CLASSIFICATION`` for known
+/// gate codes, or a fail-closed readiness/pre-inference default for unknown codes.
+public func classifyGate(_ code: String) -> GateClassification {
+    return GATE_CLASSIFICATION[code] ?? GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true
+    )
+}
 
 // MARK: - GateResult
 
@@ -950,110 +960,184 @@ public final class CandidateAttemptRunner: Sendable {
                 // ------------------------------------------------------------------
                 let outputQualityGates = input.gates.filter { Self.isOutputQualityGate($0) }
 
-                if !outputQualityGates.isEmpty, let evaluator = outputQualityEvaluator {
-                    let emitted = firstOutputEmitted()
-                    var postGateResults = indexedSelection.gateResults
-                    var advisoryFailures: [[String: Any]] = []
-                    var requiredGateFailedBeforeOutput = false
-                    var failedGateCode: String?
+                if !outputQualityGates.isEmpty {
+                    if let evaluator = outputQualityEvaluator {
+                        let emitted = firstOutputEmitted()
+                        var postGateResults = indexedSelection.gateResults
+                        var advisoryFailures: [[String: Any]] = []
+                        var requiredGateFailedBeforeOutput = false
+                        var failedGateCode: String?
 
-                    for gate in outputQualityGates {
-                        let evalResult = await evaluator.evaluate(gate: gate, response: value as Any)
+                        for gate in outputQualityGates {
+                            let evalResult = await evaluator.evaluate(gate: gate, response: value as Any)
 
-                        let status: GateStatus = evalResult.passed ? .passed : .failed
-                        let gateResult = Self.enrichGateResult(
-                            GateResult(
-                                code: gate.code,
-                                status: status,
-                                observedNumber: evalResult.score,
-                                thresholdNumber: gate.thresholdNumber,
-                                reasonCode: evalResult.reasonCode
-                            ),
-                            gate: gate
-                        )
-                        postGateResults.append(gateResult)
+                            let status: GateStatus = evalResult.passed ? .passed : .failed
+                            let gateResult = Self.enrichGateResult(
+                                GateResult(
+                                    code: gate.code,
+                                    status: status,
+                                    observedNumber: evalResult.score,
+                                    thresholdNumber: gate.thresholdNumber,
+                                    reasonCode: evalResult.reasonCode
+                                ),
+                                gate: gate
+                            )
+                            postGateResults.append(gateResult)
 
-                        if !evalResult.passed {
-                            if gate.required {
-                                if !emitted {
-                                    // Required gate failed before any output visible → fallback
-                                    requiredGateFailedBeforeOutput = true
-                                    failedGateCode = gate.code
-                                    break
+                            if !evalResult.passed {
+                                if gate.required {
+                                    if !emitted {
+                                        // Required gate failed before any output visible -> fallback
+                                        requiredGateFailedBeforeOutput = true
+                                        failedGateCode = gate.code
+                                        break
+                                    }
+                                    // Required gate failed but output already visible -> record, no fallback
                                 }
-                                // Required gate failed but output already visible → record, no fallback
-                            }
-                            if !gate.required {
-                                // Advisory failure → record only
-                                advisoryFailures.append([
-                                    "code": gate.code,
-                                    "reason_code": evalResult.reasonCode ?? "unknown",
-                                    "score": evalResult.score as Any,
-                                ])
+                                if !gate.required {
+                                    // Advisory failure -> record only
+                                    advisoryFailures.append([
+                                        "code": gate.code,
+                                        "reason_code": evalResult.reasonCode ?? "unknown",
+                                        "score": evalResult.score as Any,
+                                    ])
+                                }
                             }
                         }
-                    }
 
-                    if requiredGateFailedBeforeOutput && fallbackAllowed {
-                        // Trigger fallback on required output quality gate failure
-                        let failedAttempt = RouteAttempt(
+                        if requiredGateFailedBeforeOutput && fallbackAllowed {
+                            // Trigger fallback on required output quality gate failure
+                            let failedAttempt = RouteAttempt(
+                                index: idx,
+                                locality: indexedSelection.locality,
+                                mode: indexedSelection.mode,
+                                engine: indexedSelection.engine,
+                                artifact: indexedSelection.artifact,
+                                status: .failed,
+                                stage: .outputQuality,
+                                gateResults: postGateResults,
+                                reason: AttemptReason(
+                                    code: "output_quality_gate_failed",
+                                    message: "\(failedGateCode ?? "unknown") output quality gate failed"
+                                )
+                            )
+                            attempts.append(failedAttempt)
+                            if fallbackTrigger == nil {
+                                fallbackTrigger = FallbackTrigger(
+                                    code: "output_quality_gate_failed",
+                                    stage: AttemptStage.outputQuality.rawValue,
+                                    message: "\(failedGateCode ?? "unknown") output quality gate failed",
+                                    gateCode: failedGateCode,
+                                    gateClass: GateClass.outputQuality.rawValue,
+                                    evaluationPhase: EvaluationPhase.postInference.rawValue,
+                                    candidateIndex: idx,
+                                    outputVisibleBeforeFailure: false
+                                )
+                                fromAttempt = idx
+                            }
+                            if idx >= candidates.count - 1 || !fallbackAllowed {
+                                break
+                            }
+                            continue
+                        }
+
+                        // All quality gates passed or failures are advisory/post-output
+                        let finalAttempt = RouteAttempt(
                             index: idx,
                             locality: indexedSelection.locality,
                             mode: indexedSelection.mode,
                             engine: indexedSelection.engine,
                             artifact: indexedSelection.artifact,
-                            status: .failed,
-                            stage: .outputQuality,
+                            status: .selected,
+                            stage: .inference,
                             gateResults: postGateResults,
-                            reason: AttemptReason(
-                                code: "output_quality_gate_failed",
-                                message: "\(failedGateCode ?? "unknown") output quality gate failed"
-                            )
+                            reason: indexedSelection.reason
                         )
-                        attempts.append(failedAttempt)
-                        if fallbackTrigger == nil {
-                            fallbackTrigger = FallbackTrigger(
-                                code: "output_quality_gate_failed",
-                                stage: AttemptStage.outputQuality.rawValue,
-                                message: "\(failedGateCode ?? "unknown") output quality gate failed",
-                                gateCode: failedGateCode,
-                                gateClass: GateClass.outputQuality.rawValue,
-                                evaluationPhase: EvaluationPhase.postInference.rawValue,
-                                candidateIndex: idx,
-                                outputVisibleBeforeFailure: false
+                        attempts.append(finalAttempt)
+                        if fallbackTrigger != nil { toAttempt = idx }
+                        let hasFallback = fallbackTrigger != nil
+                        return AttemptInferenceResult(
+                            selectedAttempt: finalAttempt,
+                            attempts: attempts,
+                            fallbackUsed: hasFallback,
+                            fallbackTrigger: hasFallback ? fallbackTrigger : nil,
+                            fromAttempt: hasFallback ? fromAttempt : nil,
+                            toAttempt: hasFallback ? toAttempt : nil,
+                            value: value
+                        )
+                    } else {
+                        // No evaluator provided — fail closed for required gates
+                        let requiredOQGates = outputQualityGates.filter { $0.required }
+                        if let firstRequired = requiredOQGates.first {
+                            var postGateResults = indexedSelection.gateResults
+                            // Record unknown for all output quality gates
+                            for gate in outputQualityGates {
+                                let status: GateStatus = gate.required ? .failed : .unknown
+                                let reasonCode = gate.required ? "evaluator_missing" : nil
+                                postGateResults.append(Self.enrichGateResult(
+                                    GateResult(
+                                        code: gate.code,
+                                        status: status,
+                                        reasonCode: reasonCode
+                                    ),
+                                    gate: gate
+                                ))
+                            }
+
+                            if fallbackAllowed {
+                                let failedAttempt = RouteAttempt(
+                                    index: idx,
+                                    locality: indexedSelection.locality,
+                                    mode: indexedSelection.mode,
+                                    engine: indexedSelection.engine,
+                                    artifact: indexedSelection.artifact,
+                                    status: .failed,
+                                    stage: .outputQuality,
+                                    gateResults: postGateResults,
+                                    reason: AttemptReason(
+                                        code: "output_quality_gate_failed",
+                                        message: "\(firstRequired.code) requires evaluator but none configured"
+                                    )
+                                )
+                                attempts.append(failedAttempt)
+                                if fallbackTrigger == nil {
+                                    fallbackTrigger = FallbackTrigger(
+                                        code: "output_quality_gate_failed",
+                                        stage: AttemptStage.outputQuality.rawValue,
+                                        message: "\(firstRequired.code) requires evaluator but none configured",
+                                        gateCode: firstRequired.code,
+                                        gateClass: GateClass.outputQuality.rawValue,
+                                        evaluationPhase: EvaluationPhase.postInference.rawValue,
+                                        candidateIndex: idx,
+                                        outputVisibleBeforeFailure: false
+                                    )
+                                    fromAttempt = idx
+                                }
+                                if idx >= candidates.count - 1 {
+                                    break
+                                }
+                                continue
+                            }
+                            // Fallback not allowed — record failure and break
+                            let failedAttempt = RouteAttempt(
+                                index: idx,
+                                locality: indexedSelection.locality,
+                                mode: indexedSelection.mode,
+                                engine: indexedSelection.engine,
+                                artifact: indexedSelection.artifact,
+                                status: .failed,
+                                stage: .outputQuality,
+                                gateResults: postGateResults,
+                                reason: AttemptReason(
+                                    code: "output_quality_gate_failed",
+                                    message: "\(firstRequired.code) requires evaluator but none configured"
+                                )
                             )
-                            fromAttempt = idx
-                        }
-                        if idx >= candidates.count - 1 || !fallbackAllowed {
+                            attempts.append(failedAttempt)
                             break
                         }
-                        continue
+                        // No required output quality gates — proceed with unknown/advisory for optional ones
                     }
-
-                    // All quality gates passed or failures are advisory/post-output
-                    let finalAttempt = RouteAttempt(
-                        index: idx,
-                        locality: indexedSelection.locality,
-                        mode: indexedSelection.mode,
-                        engine: indexedSelection.engine,
-                        artifact: indexedSelection.artifact,
-                        status: .selected,
-                        stage: .inference,
-                        gateResults: postGateResults,
-                        reason: indexedSelection.reason
-                    )
-                    attempts.append(finalAttempt)
-                    if fallbackTrigger != nil { toAttempt = idx }
-                    let hasFallback = fallbackTrigger != nil
-                    return AttemptInferenceResult(
-                        selectedAttempt: finalAttempt,
-                        attempts: attempts,
-                        fallbackUsed: hasFallback,
-                        fallbackTrigger: hasFallback ? fallbackTrigger : nil,
-                        fromAttempt: hasFallback ? fromAttempt : nil,
-                        toAttempt: hasFallback ? toAttempt : nil,
-                        value: value
-                    )
                 }
 
                 // No output quality gates to evaluate
