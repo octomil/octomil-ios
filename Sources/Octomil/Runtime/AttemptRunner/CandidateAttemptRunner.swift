@@ -133,6 +133,11 @@ public let GATE_CLASSIFICATION: [String: GateClassification] = [
         gateClass: .performance, evaluationPhase: .preInference, blockingDefault: true),
     GateCode.benchmarkFresh.rawValue: GateClassification(
         gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    // Device-environment gates
+    "min_battery_pct": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "max_thermal_state": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "require_charging": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "require_wifi": GateClassification(gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
     // Output quality gates (post-inference)
     GateCode.schemaValid.rawValue: GateClassification(
         gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
