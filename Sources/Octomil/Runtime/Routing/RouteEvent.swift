@@ -166,82 +166,29 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         self.outputVisibleBeforeFailure = outputVisibleBeforeFailure
     }
 
-    /// Backward-compatible initializer for the earlier production-routing surface.
-    public init(
-        routeId: String,
-        requestId: String,
-        planId: String? = nil,
-        capability: String,
-        policy: String? = nil,
-        plannerSource: String? = nil,
-        finalLocality: String,
-        engine: String? = nil,
-        fallbackUsed: Bool = false,
-        fallbackTriggerCode: String? = nil,
-        candidateAttempts: Int = 0,
-        modelRef: String? = nil,
-        modelRefKind: String = "model",
-        appSlug: String? = nil,
-        appId: String? = nil,
-        deploymentId: String? = nil,
-        experimentId: String? = nil,
-        variantId: String? = nil,
-        artifactId: String? = nil,
-        cacheStatus: String? = nil
-    ) {
-        self.init(
-            routeId: routeId,
-            requestId: requestId,
-            planId: planId,
-            capability: capability,
-            policy: policy,
-            plannerSource: plannerSource,
-            selectedLocality: finalLocality,
-            finalMode: finalLocality == "cloud" ? "hosted_gateway" : "sdk_runtime",
-            engine: engine,
-            fallbackUsed: fallbackUsed,
-            fallbackTriggerCode: fallbackTriggerCode,
-            fallbackTriggerStage: nil,
-            candidateAttempts: candidateAttempts,
-            modelRef: modelRef,
-            modelRefKind: modelRefKind,
-            appSlug: appSlug,
-            appId: appId,
-            deploymentId: deploymentId,
-            experimentId: experimentId,
-            variantId: variantId,
-            artifactId: artifactId,
-            cacheStatus: cacheStatus
-        )
-    }
-
     /// Build a RouteEvent from a routing decision and request ID.
     public static func from(
         decision: RoutingDecisionResult,
         requestId: String,
         capability: String
     ) -> RouteEvent {
-        RouteEvent(
-            routeId: decision.routeMetadata.routeId,
+        let route = decision.routeMetadata
+        return RouteEvent(
+            routeId: RouteEvent.generateRouteId(),
             requestId: requestId,
-            planId: decision.routeMetadata.planId,
             capability: capability,
-            policy: decision.routeMetadata.policy,
-            plannerSource: decision.routeMetadata.plannerSource,
-            selectedLocality: decision.routeMetadata.finalLocality,
-            finalMode: decision.mode,
-            engine: decision.routeMetadata.engine,
-            fallbackUsed: decision.routeMetadata.fallbackUsed,
-            fallbackTriggerCode: decision.routeMetadata.fallbackTriggerCode,
-            fallbackTriggerStage: nil,
-            candidateAttempts: decision.routeMetadata.candidateAttempts,
-            modelRef: decision.routeMetadata.modelRef,
-            modelRefKind: decision.routeMetadata.modelRefKind,
-            appSlug: decision.routeMetadata.appSlug,
-            deploymentId: decision.routeMetadata.deploymentId,
-            experimentId: decision.routeMetadata.experimentId,
-            variantId: decision.routeMetadata.variantId,
-            cacheStatus: decision.routeMetadata.cacheStatus
+            plannerSource: route.planner.source,
+            selectedLocality: route.execution?.locality ?? decision.locality,
+            finalMode: route.execution?.mode ?? decision.mode,
+            engine: route.execution?.engine,
+            fallbackUsed: route.fallback.used,
+            fallbackTriggerCode: decision.attemptResult.fallbackTrigger?.code,
+            fallbackTriggerStage: decision.attemptResult.fallbackTrigger?.stage,
+            candidateAttempts: decision.attemptResult.attempts.count,
+            modelRef: route.model.requested.ref,
+            modelRefKind: route.model.requested.kind,
+            artifactId: route.artifact?.id,
+            cacheStatus: route.artifact?.cache.status
         )
     }
 

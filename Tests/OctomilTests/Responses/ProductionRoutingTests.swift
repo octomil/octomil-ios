@@ -26,10 +26,11 @@ final class ProductionRoutingTests: XCTestCase {
         XCTAssertNotNil(response.routeMetadata, "Response must carry routeMetadata")
 
         let meta = response.routeMetadata!
-        XCTAssertFalse(meta.routeId.isEmpty, "routeId must be non-empty")
-        XCTAssertEqual(meta.modelRefKind, "model")
-        XCTAssertFalse(meta.finalLocality.isEmpty)
-        XCTAssertGreaterThanOrEqual(meta.candidateAttempts, 0)
+        XCTAssertEqual(meta.status, "selected")
+        XCTAssertNotNil(meta.execution)
+        XCTAssertEqual(meta.model.requested.kind, "model")
+        XCTAssertEqual(meta.model.requested.ref, "phi-4-mini")
+        XCTAssertFalse(meta.execution?.locality.isEmpty ?? true)
     }
 
     func testStreamResponseCarriesRouteMetadata() async throws {
@@ -52,8 +53,8 @@ final class ProductionRoutingTests: XCTestCase {
         XCTAssertNotNil(doneResponse?.routeMetadata, "Streaming response must carry routeMetadata")
 
         let meta = doneResponse!.routeMetadata!
-        XCTAssertFalse(meta.routeId.isEmpty)
-        XCTAssertEqual(meta.modelRefKind, "model")
+        XCTAssertEqual(meta.status, "selected")
+        XCTAssertEqual(meta.model.requested.kind, "model")
     }
 
     func testRouteMetadataContainsPlannerSource() async throws {
@@ -65,8 +66,8 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         let meta = response.routeMetadata!
-        // Without a cached plan, planner source should be "none" (direct routing)
-        XCTAssertEqual(meta.plannerSource, "none")
+        // Without a cached server plan, planner source should be offline.
+        XCTAssertEqual(meta.planner.source, "offline")
     }
 
     // MARK: - 2. First-token streaming lockout
@@ -205,7 +206,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.modelRefKind, "deployment",
+            response.routeMetadata?.model.requested.kind, "deployment",
             "Route metadata must reflect the deployment ref kind"
         )
     }
@@ -219,7 +220,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.modelRefKind, "experiment",
+            response.routeMetadata?.model.requested.kind, "experiment",
             "Route metadata must reflect the experiment ref kind"
         )
     }
@@ -233,7 +234,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.modelRefKind, "app",
+            response.routeMetadata?.model.requested.kind, "app",
             "Route metadata must reflect the app ref kind"
         )
     }
@@ -248,7 +249,7 @@ final class ProductionRoutingTests: XCTestCase {
         let decision = router.resolve(context: context)
 
         // Without a plan, should fall back to hosted gateway
-        XCTAssertEqual(decision.routeMetadata.modelRefKind, "deployment")
+        XCTAssertEqual(decision.routeMetadata.model.requested.kind, "deployment")
         XCTAssertEqual(decision.locality, "cloud")
         XCTAssertEqual(decision.mode, "hosted_gateway")
     }
@@ -262,7 +263,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
         let decision = router.resolve(context: context)
 
-        XCTAssertEqual(decision.routeMetadata.modelRefKind, "experiment")
+        XCTAssertEqual(decision.routeMetadata.model.requested.kind, "experiment")
     }
 
     func testStreamWithDeploymentRefAttachesCorrectKind() async throws {
@@ -279,7 +280,7 @@ final class ProductionRoutingTests: XCTestCase {
         }
 
         XCTAssertNotNil(doneResponse)
-        XCTAssertEqual(doneResponse?.routeMetadata?.modelRefKind, "deployment")
+        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind, "deployment")
     }
 
     func testStreamWithAppRefAttachesCorrectKind() async throws {
@@ -296,7 +297,7 @@ final class ProductionRoutingTests: XCTestCase {
         }
 
         XCTAssertNotNil(doneResponse)
-        XCTAssertEqual(doneResponse?.routeMetadata?.modelRefKind, "app")
+        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind, "app")
     }
 
     func testStreamWithExperimentRefAttachesCorrectKind() async throws {
@@ -313,26 +314,21 @@ final class ProductionRoutingTests: XCTestCase {
         }
 
         XCTAssertNotNil(doneResponse)
-        XCTAssertEqual(doneResponse?.routeMetadata?.modelRefKind, "experiment")
+        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind, "experiment")
     }
 
     // MARK: - 4. Telemetry event matches contract shape
 
     func testRouteEventFromDecisionHasCanonicalFields() {
         let metadata = RouteMetadata(
-            routeId: "route_abc",
-            planId: "plan_123",
-            plannerSource: "cache",
-            policy: "local_first",
-            finalLocality: "local",
-            engine: "coreml",
-            modelRefKind: "deployment",
-            modelRef: "deploy_abc",
-            deploymentId: "deploy_abc",
-            cacheStatus: "hit",
-            fallbackUsed: true,
-            fallbackTriggerCode: "gate_failed",
-            candidateAttempts: 3
+            status: "selected",
+            execution: RouteExecution(locality: "local", mode: "sdk_runtime", engine: "coreml"),
+            model: RouteModel(
+                requested: RouteModelRequested(ref: "deploy_abc", kind: "deployment")
+            ),
+            artifact: RouteArtifact(cache: ArtifactCache(status: "hit")),
+            planner: PlannerInfo(source: "cache"),
+            fallback: FallbackInfo(used: true)
         )
 
         let decision = RoutingDecisionResult(
@@ -350,20 +346,19 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         // Verify all canonical fields
-        XCTAssertEqual(routeEvent.routeId, "route_abc")
+        XCTAssertTrue(routeEvent.routeId.hasPrefix("route_"))
         XCTAssertEqual(routeEvent.requestId, "req_xyz")
-        XCTAssertEqual(routeEvent.planId, "plan_123")
+        XCTAssertNil(routeEvent.planId)
         XCTAssertEqual(routeEvent.capability, "chat")
-        XCTAssertEqual(routeEvent.policy, "local_first")
+        XCTAssertNil(routeEvent.policy)
         XCTAssertEqual(routeEvent.plannerSource, "cache")
         XCTAssertEqual(routeEvent.finalLocality, "local")
         XCTAssertEqual(routeEvent.engine, "coreml")
         XCTAssertTrue(routeEvent.fallbackUsed)
-        XCTAssertEqual(routeEvent.fallbackTriggerCode, "gate_failed")
-        XCTAssertEqual(routeEvent.candidateAttempts, 3)
+        XCTAssertNil(routeEvent.fallbackTriggerCode)
+        XCTAssertEqual(routeEvent.candidateAttempts, 0)
         XCTAssertEqual(routeEvent.modelRef, "deploy_abc")
         XCTAssertEqual(routeEvent.modelRefKind, "deployment")
-        XCTAssertEqual(routeEvent.deploymentId, "deploy_abc")
         XCTAssertEqual(routeEvent.cacheStatus, "hit")
     }
 
@@ -375,7 +370,8 @@ final class ProductionRoutingTests: XCTestCase {
             capability: "chat",
             policy: "auto",
             plannerSource: "none",
-            finalLocality: "cloud",
+            selectedLocality: "cloud",
+            finalMode: "hosted_gateway",
             engine: nil,
             fallbackUsed: false,
             candidateAttempts: 1,
@@ -401,7 +397,8 @@ final class ProductionRoutingTests: XCTestCase {
             routeId: "route_privacy",
             requestId: "req_privacy",
             capability: "chat",
-            finalLocality: "local",
+            selectedLocality: "local",
+            finalMode: "sdk_runtime",
             modelRefKind: "model"
         )
 
@@ -440,7 +437,8 @@ final class ProductionRoutingTests: XCTestCase {
             capability: "chat",
             policy: "local_first",
             plannerSource: "cache",
-            finalLocality: "local",
+            selectedLocality: "local",
+            finalMode: "sdk_runtime",
             engine: "coreml",
             fallbackUsed: false,
             candidateAttempts: 2,
@@ -529,7 +527,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         let decision = router.resolve(context: context)
-        XCTAssertEqual(decision.routeMetadata.plannerSource, "cache")
+        XCTAssertEqual(decision.routeMetadata.planner.source, "cache")
     }
 
     // MARK: - 7. Auth safety — publishable key only in app-facing code

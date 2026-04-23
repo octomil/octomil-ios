@@ -655,7 +655,7 @@ final class RuntimePlannerParityTests: XCTestCase {
         let json = """
         {
             "default_engines": {
-                "chat": ["mlx-lm", "llama.cpp", "ollama"],
+                "chat": ["mlx-lm", "llama.cpp"],
                 "embeddings": ["onnxruntime"]
             },
             "supported_capabilities": ["chat", "embeddings", "transcription"],
@@ -670,7 +670,7 @@ final class RuntimePlannerParityTests: XCTestCase {
             from: json
         )
 
-        XCTAssertEqual(response.defaultEngines["chat"], ["mlx-lm", "llama.cpp", "ollama"])
+        XCTAssertEqual(response.defaultEngines["chat"], ["mlx-lm", "llama.cpp"])
         XCTAssertEqual(response.defaultEngines["embeddings"], ["onnxruntime"])
         XCTAssertEqual(response.supportedCapabilities, ["chat", "embeddings", "transcription"])
         XCTAssertEqual(response.supportedPolicies.count, 6)
@@ -755,8 +755,8 @@ final class RuntimePlannerParityTests: XCTestCase {
         // Validate all required contract fields decode correctly.
         XCTAssertFalse(response.defaultEngines.isEmpty,
                        "default_engines must not be empty")
-        XCTAssertEqual(response.defaultEngines["chat"], ["mlx-lm", "llama.cpp", "ollama"])
-        XCTAssertEqual(response.defaultEngines["responses"], ["mlx-lm", "llama.cpp", "ollama"])
+        XCTAssertEqual(response.defaultEngines["chat"], ["mlx-lm", "llama.cpp"])
+        XCTAssertEqual(response.defaultEngines["responses"], ["mlx-lm", "llama.cpp"])
         XCTAssertEqual(response.defaultEngines["embeddings"], ["onnxruntime"])
         XCTAssertEqual(response.defaultEngines["transcription"], ["whisper.cpp"])
         XCTAssertEqual(response.defaultEngines["audio"], ["whisper.cpp"])

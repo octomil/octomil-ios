@@ -30,6 +30,7 @@ public struct ParsedModelRef: Sendable, Equatable {
 
     public let kind: Kind
     public let raw: String
+    public let modelSlug: String?
     public let appSlug: String?
     public let capability: String?
     public let deploymentId: String?
@@ -39,6 +40,7 @@ public struct ParsedModelRef: Sendable, Equatable {
     public init(
         kind: Kind,
         raw: String,
+        modelSlug: String? = nil,
         appSlug: String? = nil,
         capability: String? = nil,
         deploymentId: String? = nil,
@@ -47,6 +49,7 @@ public struct ParsedModelRef: Sendable, Equatable {
     ) {
         self.kind = kind
         self.raw = raw
+        self.modelSlug = modelSlug
         self.appSlug = appSlug
         self.capability = capability
         self.deploymentId = deploymentId
@@ -74,8 +77,11 @@ public struct ParsedModelRef: Sendable, Equatable {
                 ? ParsedModelRef(kind: .unknown, raw: trimmed)
                 : ParsedModelRef(kind: .capability, raw: trimmed, capability: cap)
         }
-        if trimmed.hasPrefix("deploy_"), trimmed.count > "deploy_".count {
-            return ParsedModelRef(kind: .deployment, raw: trimmed, deploymentId: trimmed)
+        if trimmed.hasPrefix("deploy_") {
+            if trimmed.count > "deploy_".count {
+                return ParsedModelRef(kind: .deployment, raw: trimmed, deploymentId: trimmed)
+            }
+            return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
         if trimmed.hasPrefix("exp_"), let slash = trimmed.firstIndex(of: "/") {
             let experimentId = String(trimmed[..<slash])
@@ -85,13 +91,16 @@ public struct ParsedModelRef: Sendable, Equatable {
             }
             return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
-        if trimmed.hasPrefix("alias:"), trimmed.count > "alias:".count {
-            return ParsedModelRef(kind: .alias, raw: trimmed)
+        if trimmed.hasPrefix("alias:") {
+            if trimmed.count > "alias:".count {
+                return ParsedModelRef(kind: .alias, raw: trimmed)
+            }
+            return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
         if trimmed.hasPrefix("@") || trimmed.contains("://") {
             return ParsedModelRef(kind: .unknown, raw: trimmed)
         }
-        return ParsedModelRef(kind: .model, raw: trimmed)
+        return ParsedModelRef(kind: .model, raw: trimmed, modelSlug: trimmed)
     }
 }
 
@@ -125,95 +134,10 @@ public struct RequestRoutingContext: Sendable {
     }
 }
 
-// MARK: - CanonicalRouteMetadata typealias
-
-/// The canonical route metadata shape, as defined in octomil-contracts.
-///
-/// This is the ``PlannerRouteMetadata`` type from ``RuntimePlannerSchemas``,
-/// re-aliased for cross-SDK naming consistency. Prefer this over the flat
-/// ``RouteMetadata`` for new code.
-public typealias CanonicalRouteMetadata = PlannerRouteMetadata
-
 // MARK: - RouteMetadata
 
-/// Privacy-safe metadata attached to every routed request.
-///
-/// NEVER contains: prompt, input, output, audio, filePath, content, messages.
-/// Only operational metadata for routing telemetry and debugging.
-///
-/// - Important: This flat shape is **deprecated**. Prefer ``CanonicalRouteMetadata``
-///   (the contract-backed nested shape) via ``RoutingDecisionResult/canonicalMetadata``.
-@available(*, deprecated, message: "Use CanonicalRouteMetadata (PlannerRouteMetadata) instead")
-public struct RouteMetadata: Sendable, Equatable {
-    /// Unique ID for this routing decision.
-    public let routeId: String
-    /// The plan ID from the server planner, if a plan was used.
-    public let planId: String?
-    /// How the plan was obtained — canonical: "server", "cache", "offline".
-    public let plannerSource: String
-    /// The routing policy that was applied.
-    public let policy: String?
-    /// Final locality where inference ran.
-    public let finalLocality: String
-    /// Engine used for inference.
-    public let engine: String?
-    /// The parsed model reference kind.
-    public let modelRefKind: String
-    /// Model reference string as supplied by the caller.
-    public let modelRef: String?
-    /// App slug, when the model ref is app-scoped.
-    public let appSlug: String?
-    /// Deployment ID or key, when the model ref is deployment-scoped.
-    public let deploymentId: String?
-    /// Experiment ID, when the model ref is experiment-scoped.
-    public let experimentId: String?
-    /// Variant ID, when the model ref is experiment-scoped.
-    public let variantId: String?
-    /// Artifact cache status for the selected local attempt.
-    public let cacheStatus: String?
-    /// Whether fallback was triggered during this request.
-    public let fallbackUsed: Bool
-    /// Machine-readable code for what triggered the fallback.
-    public let fallbackTriggerCode: String?
-    /// Number of candidate attempts evaluated.
-    public let candidateAttempts: Int
-
-    public init(
-        routeId: String = UUID().uuidString,
-        planId: String? = nil,
-        plannerSource: String = "offline",
-        policy: String? = nil,
-        finalLocality: String,
-        engine: String? = nil,
-        modelRefKind: String = "model",
-        modelRef: String? = nil,
-        appSlug: String? = nil,
-        deploymentId: String? = nil,
-        experimentId: String? = nil,
-        variantId: String? = nil,
-        cacheStatus: String? = nil,
-        fallbackUsed: Bool = false,
-        fallbackTriggerCode: String? = nil,
-        candidateAttempts: Int = 0
-    ) {
-        self.routeId = routeId
-        self.planId = planId
-        self.plannerSource = plannerSource
-        self.policy = policy
-        self.finalLocality = finalLocality
-        self.engine = engine
-        self.modelRefKind = modelRefKind
-        self.modelRef = modelRef
-        self.appSlug = appSlug
-        self.deploymentId = deploymentId
-        self.experimentId = experimentId
-        self.variantId = variantId
-        self.cacheStatus = cacheStatus
-        self.fallbackUsed = fallbackUsed
-        self.fallbackTriggerCode = fallbackTriggerCode
-        self.candidateAttempts = candidateAttempts
-    }
-}
+/// Contract-backed route metadata shape attached to every routed request.
+public typealias RouteMetadata = PlannerRouteMetadata
 
 // MARK: - RoutingDecisionResult
 
@@ -228,16 +152,11 @@ public struct RoutingDecisionResult: Sendable {
     public let mode: String
     /// Engine to use, if local.
     public let engine: String?
-    /// Privacy-safe route metadata (flat shape).
-    /// - Important: Deprecated. Use ``canonicalMetadata`` instead.
-    @available(*, deprecated, message: "Use canonicalMetadata instead")
+    /// Contract-backed route metadata.
     public let routeMetadata: RouteMetadata
-    /// Contract-backed canonical route metadata (nested shape).
-    public let canonicalMetadata: CanonicalRouteMetadata
     /// Full attempt loop result for telemetry.
     public let attemptResult: AttemptLoopResult
 
-    @available(*, deprecated, message: "Use init with canonicalMetadata instead")
     public init(
         locality: String,
         mode: String,
@@ -249,26 +168,6 @@ public struct RoutingDecisionResult: Sendable {
         self.mode = mode
         self.engine = engine
         self.routeMetadata = routeMetadata
-        self.canonicalMetadata = CanonicalRouteMetadata(
-            status: "selected",
-            model: RouteModel(requested: RouteModelRequested(ref: routeMetadata.modelRef ?? ""))
-        )
-        self.attemptResult = attemptResult
-    }
-
-    public init(
-        locality: String,
-        mode: String,
-        engine: String? = nil,
-        routeMetadata: RouteMetadata,
-        canonicalMetadata: CanonicalRouteMetadata,
-        attemptResult: AttemptLoopResult
-    ) {
-        self.locality = locality
-        self.mode = mode
-        self.engine = engine
-        self.routeMetadata = routeMetadata
-        self.canonicalMetadata = canonicalMetadata
         self.attemptResult = attemptResult
     }
 }
@@ -355,25 +254,6 @@ public final class RequestRouter: @unchecked Sendable {
 
             if let selected = loopResult.selectedAttempt {
                 let metadata = RouteMetadata(
-                    routeId: routeId,
-                    planId: plan.serverGeneratedAt.isEmpty ? nil : plan.serverGeneratedAt,
-                    plannerSource: "cache",
-                    policy: plan.policy,
-                    finalLocality: selected.locality,
-                    engine: selected.engine,
-                    modelRefKind: parsedRef.kind.rawValue,
-                    modelRef: parsedRef.raw,
-                    appSlug: parsedRef.appSlug,
-                    deploymentId: parsedRef.deploymentId,
-                    experimentId: parsedRef.experimentId,
-                    variantId: parsedRef.variantId,
-                    cacheStatus: selected.artifact?.cache.status,
-                    fallbackUsed: loopResult.fallbackUsed,
-                    fallbackTriggerCode: loopResult.fallbackTrigger?.code,
-                    candidateAttempts: loopResult.attempts.count
-                )
-
-                let canonical = CanonicalRouteMetadata(
                     status: "selected",
                     execution: RouteExecution(
                         locality: selected.locality,
@@ -398,7 +278,6 @@ public final class RequestRouter: @unchecked Sendable {
                     mode: selected.mode,
                     engine: selected.engine,
                     routeMetadata: metadata,
-                    canonicalMetadata: canonical,
                     attemptResult: loopResult
                 )
             }
@@ -417,20 +296,6 @@ public final class RequestRouter: @unchecked Sendable {
 
             // No fallback allowed — return a failed decision with the attempt loop intact.
             let metadata = RouteMetadata(
-                routeId: routeId,
-                plannerSource: "cache",
-                policy: policyString,
-                finalLocality: "local",
-                modelRefKind: parsedRef.kind.rawValue,
-                modelRef: parsedRef.raw,
-                appSlug: parsedRef.appSlug,
-                deploymentId: parsedRef.deploymentId,
-                experimentId: parsedRef.experimentId,
-                variantId: parsedRef.variantId,
-                fallbackUsed: false,
-                candidateAttempts: loopResult.attempts.count
-            )
-            let canonical = CanonicalRouteMetadata(
                 status: "unavailable",
                 execution: nil,
                 model: RouteModel(
@@ -450,7 +315,6 @@ public final class RequestRouter: @unchecked Sendable {
                 locality: "local",
                 mode: "sdk_runtime",
                 routeMetadata: metadata,
-                canonicalMetadata: canonical,
                 attemptResult: loopResult
             )
         }
@@ -543,22 +407,6 @@ public final class RequestRouter: @unchecked Sendable {
         attemptResult: AttemptLoopResult? = nil
     ) -> RoutingDecisionResult {
         let metadata = RouteMetadata(
-            routeId: routeId,
-            plannerSource: plannerSource,
-            policy: policy,
-            finalLocality: "cloud",
-            modelRefKind: parsedRef.kind.rawValue,
-            modelRef: parsedRef.raw,
-            appSlug: parsedRef.appSlug,
-            deploymentId: parsedRef.deploymentId,
-            experimentId: parsedRef.experimentId,
-            variantId: parsedRef.variantId,
-            fallbackUsed: attemptResult?.fallbackUsed ?? false,
-            fallbackTriggerCode: attemptResult?.fallbackTrigger?.code,
-            candidateAttempts: attemptResult?.attempts.count ?? 0
-        )
-
-        let canonical = CanonicalRouteMetadata(
             status: "selected",
             execution: RouteExecution(
                 locality: "cloud",
@@ -578,7 +426,6 @@ public final class RequestRouter: @unchecked Sendable {
             locality: "cloud",
             mode: "hosted_gateway",
             routeMetadata: metadata,
-            canonicalMetadata: canonical,
             attemptResult: attemptResult ?? AttemptLoopResult()
         )
     }

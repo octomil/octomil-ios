@@ -22,7 +22,7 @@ import os.log
 /// let response = try await responses.create(
 ///     ResponseRequest(model: "phi-4-mini", input: [.text("Hello")])
 /// )
-/// print(response.routeMetadata?.finalLocality ?? "unknown")
+/// print(response.routeMetadata?.execution?.locality ?? "unknown")
 /// ```
 public final class OctomilResponses: @unchecked Sendable {
     private let runtimeResolver: ((String) -> ModelRuntime?)?
@@ -259,18 +259,23 @@ public final class OctomilResponses: @unchecked Sendable {
                         ResponseUsage(promptTokens: $0.promptTokens, completionTokens: $0.completionTokens, totalTokens: $0.totalTokens)
                     }
 
-                    // Build RouteMetadata from the decision
                     let metadata = RouteMetadata(
-                        routeId: decision.routeMetadata.routeId,
-                        planId: decision.routeMetadata.planId,
-                        plannerSource: decision.routeMetadata.plannerSource,
-                        policy: decision.routeMetadata.policy,
-                        finalLocality: selectedAttempt.locality,
-                        engine: selectedAttempt.engine,
-                        modelRefKind: decision.routeMetadata.modelRefKind,
-                        fallbackUsed: fallbackUsed || attemptReadiness.fallbackUsed,
-                        fallbackTriggerCode: fallbackTriggerCode ?? attemptReadiness.fallbackTrigger?.code,
-                        candidateAttempts: candidateAttemptCount
+                        status: "selected",
+                        execution: RouteExecution(
+                            locality: selectedAttempt.locality,
+                            mode: selectedAttempt.mode,
+                            engine: selectedAttempt.engine
+                        ),
+                        model: decision.routeMetadata.model,
+                        artifact: selectedAttempt.artifact.map { artifact in
+                            RouteArtifact(cache: ArtifactCache(status: artifact.cache.status))
+                        },
+                        planner: decision.routeMetadata.planner,
+                        fallback: FallbackInfo(used: fallbackUsed || attemptReadiness.fallbackUsed),
+                        reason: RouteReason(
+                            code: fallbackTriggerCode ?? attemptReadiness.fallbackTrigger?.code ?? "ok",
+                            message: "streaming route selected"
+                        )
                     )
 
                     let response = Response(
@@ -407,7 +412,7 @@ public final class OctomilResponses: @unchecked Sendable {
             locality: locality,
             priority: 0,
             confidence: 1.0,
-            reason: "direct routing: \(decision.routeMetadata.plannerSource)",
+            reason: "direct routing: \(decision.routeMetadata.planner.source)",
             engine: decision.engine ?? "registered"
         ))]
     }
@@ -466,46 +471,41 @@ public final class OctomilResponses: @unchecked Sendable {
     ) -> RouteMetadata {
         let selected = attemptResult.selectedAttempt
         return RouteMetadata(
-            routeId: decision.routeMetadata.routeId,
-            planId: decision.routeMetadata.planId,
-            plannerSource: decision.routeMetadata.plannerSource,
-            policy: decision.routeMetadata.policy,
-            finalLocality: selected?.locality ?? decision.locality,
-            engine: selected?.engine ?? decision.engine,
-            modelRefKind: decision.routeMetadata.modelRefKind,
-            modelRef: decision.routeMetadata.modelRef,
-            appSlug: decision.routeMetadata.appSlug,
-            deploymentId: decision.routeMetadata.deploymentId,
-            experimentId: decision.routeMetadata.experimentId,
-            variantId: decision.routeMetadata.variantId,
-            cacheStatus: selected?.artifact?.cache.status ?? decision.routeMetadata.cacheStatus,
-            fallbackUsed: attemptResult.fallbackUsed,
-            fallbackTriggerCode: attemptResult.fallbackTrigger?.code,
-            candidateAttempts: attemptResult.attempts.count
+            status: selected == nil ? "unavailable" : "selected",
+            execution: selected.map { attempt in
+                RouteExecution(
+                    locality: attempt.locality,
+                    mode: attempt.mode,
+                    engine: attempt.engine
+                )
+            },
+            model: decision.routeMetadata.model,
+            artifact: selected?.artifact.map { artifact in
+                RouteArtifact(cache: ArtifactCache(status: artifact.cache.status))
+            } ?? decision.routeMetadata.artifact,
+            planner: decision.routeMetadata.planner,
+            fallback: FallbackInfo(used: attemptResult.fallbackUsed),
+            reason: RouteReason(
+                code: attemptResult.fallbackTrigger?.code ?? (selected == nil ? "no_candidate" : "ok"),
+                message: selected?.reason.message ?? "route resolved"
+            )
         )
     }
 
     /// Emit route telemetry event. Privacy-safe: no prompt/output/content.
     private func emitRouteTelemetry(metadata: RouteMetadata, requestId: String, capability: String) {
         let routeEvent = RouteEvent(
-            routeId: metadata.routeId,
             requestId: requestId,
-            planId: metadata.planId,
             capability: capability,
-            policy: metadata.policy,
-            plannerSource: metadata.plannerSource,
-            finalLocality: metadata.finalLocality,
-            engine: metadata.engine,
-            fallbackUsed: metadata.fallbackUsed,
-            fallbackTriggerCode: metadata.fallbackTriggerCode,
-            candidateAttempts: metadata.candidateAttempts,
-            modelRef: metadata.modelRef,
-            modelRefKind: metadata.modelRefKind,
-            appSlug: metadata.appSlug,
-            deploymentId: metadata.deploymentId,
-            experimentId: metadata.experimentId,
-            variantId: metadata.variantId,
-            cacheStatus: metadata.cacheStatus
+            plannerSource: metadata.planner.source,
+            selectedLocality: metadata.execution?.locality ?? "unavailable",
+            finalMode: metadata.execution?.mode ?? "unavailable",
+            engine: metadata.execution?.engine,
+            fallbackUsed: metadata.fallback.used,
+            modelRef: metadata.model.requested.ref,
+            modelRefKind: metadata.model.requested.kind,
+            artifactId: metadata.artifact?.id,
+            cacheStatus: metadata.artifact?.cache.status
         )
         TelemetryQueue.shared?.reportRouteEvent(routeEvent)
     }
