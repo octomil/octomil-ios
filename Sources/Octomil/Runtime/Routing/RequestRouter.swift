@@ -273,6 +273,23 @@ public struct RoutingDecisionResult: Sendable {
     }
 }
 
+/// Routing decision plus the inference attempt result produced by the router.
+///
+/// This is the production-path variant used when output-quality gates need the
+/// actual response value before a candidate can be selected.
+public struct RoutedInferenceResult<Value: Sendable>: Sendable {
+    public let decision: RoutingDecisionResult
+    public let attemptResult: AttemptInferenceResult<Value>
+
+    public init(
+        decision: RoutingDecisionResult,
+        attemptResult: AttemptInferenceResult<Value>
+    ) {
+        self.decision = decision
+        self.attemptResult = attemptResult
+    }
+}
+
 // MARK: - RequestRouter
 
 /// Resolves routing decisions for public-path inference requests.
@@ -446,6 +463,40 @@ public final class RequestRouter: @unchecked Sendable {
             policy: policyString,
             plannerSource: "offline"
         )
+    }
+
+    /// Resolve a routing decision and execute inference inside the attempt loop.
+    ///
+    /// Use this for product request paths that need post-inference
+    /// output-quality gates to participate in fallback. ``resolve`` remains a
+    /// preflight-only helper for status/explain flows.
+    public func resolveWithInference<Value: Sendable>(
+        context: RequestRoutingContext,
+        runtimeChecker: (any AttemptRuntimeChecker)? = nil,
+        gateEvaluator: (any AttemptGateEvaluator)? = nil,
+        outputQualityEvaluator: (any OutputQualityGateEvaluator)? = nil,
+        firstOutputEmitted: @Sendable @escaping () -> Bool = { false },
+        candidatesForDecision: @Sendable (RoutingDecisionResult) -> [AttemptCandidateInput],
+        executeCandidate: @Sendable @escaping (AttemptCandidateInput, RouteAttempt) async throws -> Value
+    ) async -> RoutedInferenceResult<Value> {
+        let decision = resolve(
+            context: context,
+            runtimeChecker: runtimeChecker,
+            gateEvaluator: gateEvaluator
+        )
+        let candidates = candidatesForDecision(decision)
+        let attemptResult = await CandidateAttemptRunner(
+            fallbackAllowed: Self.isFallbackAllowed(context.routingPolicy),
+            streaming: context.streaming
+        ).runWithInference(
+            candidates: candidates,
+            runtimeChecker: runtimeChecker,
+            gateEvaluator: gateEvaluator,
+            outputQualityEvaluator: outputQualityEvaluator,
+            firstOutputEmitted: firstOutputEmitted,
+            executeCandidate: executeCandidate
+        )
+        return RoutedInferenceResult(decision: decision, attemptResult: attemptResult)
     }
 
     // MARK: - Private

@@ -60,26 +60,23 @@ public final class OctomilResponses: @unchecked Sendable {
         let effectiveRequest = buildEffectiveRequest(request)
         let runtimeRequest = Self.buildRuntimeRequest(effectiveRequest)
 
-        // Resolve routing decision
         let routingContext = await buildRoutingContext(request, streaming: false)
-        let decision = router.resolve(context: routingContext)
-        let fallbackAllowed = RequestRouter.isFallbackAllowed(request.routing)
-
-        // Build candidates from plan-based routing, or use a single registered-runtime candidate.
-        let candidates = buildProductionCandidates(
-            decision: decision,
+        let routed = await router.resolveWithInference(
             context: routingContext,
-            model: request.model
-        )
-
-        let attemptResult = await CandidateAttemptRunner(
-            fallbackAllowed: fallbackAllowed
-        ).runWithInference(
-            candidates: candidates
+            outputQualityEvaluator: DefaultOutputQualityEvaluator(),
+            candidatesForDecision: { [self] decision in
+                buildProductionCandidates(
+                    decision: decision,
+                    context: routingContext,
+                    model: request.model
+                )
+            }
         ) { [self] candidateInput, attempt in
             let runtime = try resolveRuntimeForAttempt(request: request, attempt: attempt)
             return try await runtime.run(request: runtimeRequest)
         }
+        let decision = routed.decision
+        let attemptResult = routed.attemptResult
 
         guard let runtimeResponse = attemptResult.value else {
             if let error = attemptResult.error { throw error }
