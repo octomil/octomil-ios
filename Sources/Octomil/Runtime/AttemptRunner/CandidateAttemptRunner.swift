@@ -1,5 +1,8 @@
 import Foundation
 import os.log
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - AttemptStage
 
@@ -133,6 +136,11 @@ public let GATE_CLASSIFICATION: [String: GateClassification] = [
         gateClass: .performance, evaluationPhase: .preInference, blockingDefault: true),
     GateCode.benchmarkFresh.rawValue: GateClassification(
         gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    // Device-environment gates
+    "min_battery_pct": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "max_thermal_state": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "require_charging": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "require_wifi": GateClassification(gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
     // Output quality gates (post-inference)
     GateCode.schemaValid.rawValue: GateClassification(
         gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
@@ -157,6 +165,13 @@ public func classifyGate(_ code: String) -> GateClassification {
         gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true
     )
 }
+
+private let DEVICE_ENVIRONMENT_GATE_CODES: Set<String> = [
+    "min_battery_pct",
+    "max_thermal_state",
+    "require_charging",
+    "require_wifi",
+]
 
 // MARK: - GateResult
 
@@ -591,10 +606,132 @@ struct NoOpArtifactChecker: AttemptArtifactChecker {
     }
 }
 
-/// Default gate evaluator that always passes.
+/// Default gate evaluator.
+///
+/// Generic runtime gates stay permissive so product paths can inject dedicated
+/// benchmark and memory evaluators. Device-environment gates must be proven
+/// locally; required gates fail closed when the metric is unavailable.
 struct NoOpGateEvaluator: AttemptGateEvaluator {
     func evaluate(gate: CandidateGate, engine: String?, locality: String) -> GateResult {
-        GateResult(code: gate.code, status: .passed)
+        guard DEVICE_ENVIRONMENT_GATE_CODES.contains(gate.code) else {
+            return GateResult(code: gate.code, status: .passed)
+        }
+
+        let classification = classifyGate(gate.code)
+        func result(
+            _ status: GateStatus,
+            observedNumber: Double? = nil,
+            thresholdNumber: Double? = gate.thresholdNumber,
+            reasonCode: String? = nil
+        ) -> GateResult {
+            GateResult(
+                code: gate.code,
+                status: status,
+                observedNumber: observedNumber,
+                thresholdNumber: thresholdNumber,
+                reasonCode: reasonCode,
+                gateClass: gate.gateClass ?? classification.gateClass.rawValue,
+                evaluationPhase: gate.evaluationPhase ?? classification.evaluationPhase.rawValue
+            )
+        }
+
+        func unavailable(_ reasonCode: String = "device_metric_unavailable") -> GateResult {
+            result(gate.required ? .failed : .unknown, reasonCode: gate.required ? reasonCode : nil)
+        }
+
+        guard locality == "local" else {
+            return result(.notRequired)
+        }
+
+        switch gate.code {
+        case "min_battery_pct":
+            guard let threshold = gate.thresholdNumber else {
+                return unavailable("threshold_missing")
+            }
+            #if os(iOS) && canImport(UIKit)
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let level = UIDevice.current.batteryLevel
+            guard level >= 0 else {
+                return unavailable()
+            }
+            let observed = Double(level * 100)
+            return result(
+                observed >= threshold ? .passed : .failed,
+                observedNumber: observed,
+                thresholdNumber: threshold,
+                reasonCode: observed >= threshold ? nil : "battery_below_threshold"
+            )
+            #else
+            return unavailable()
+            #endif
+
+        case "require_charging":
+            #if os(iOS) && canImport(UIKit)
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let batteryState = UIDevice.current.batteryState
+            guard batteryState != .unknown else {
+                return unavailable()
+            }
+            let pluggedIn = batteryState == .charging || batteryState == .full
+            return result(
+                pluggedIn ? .passed : .failed,
+                reasonCode: pluggedIn ? nil : "device_not_charging"
+            )
+            #else
+            return unavailable()
+            #endif
+
+        case "max_thermal_state":
+            let observed = Self.thermalRank(ProcessInfo.processInfo.thermalState)
+            guard let maxAllowed = Self.thermalThreshold(gate) else {
+                return unavailable("threshold_missing")
+            }
+            return result(
+                observed <= maxAllowed ? .passed : .failed,
+                observedNumber: Double(observed),
+                thresholdNumber: Double(maxAllowed),
+                reasonCode: observed <= maxAllowed ? nil : "thermal_state_exceeded"
+            )
+
+        case "require_wifi":
+            return unavailable("network_state_unavailable")
+
+        default:
+            return GateResult(code: gate.code, status: .passed)
+        }
+    }
+
+    private static func thermalRank(_ state: ProcessInfo.ThermalState) -> Int {
+        switch state {
+        case .nominal:
+            return 0
+        case .fair:
+            return 1
+        case .serious:
+            return 2
+        case .critical:
+            return 3
+        @unknown default:
+            return 3
+        }
+    }
+
+    private static func thermalThreshold(_ gate: CandidateGate) -> Int? {
+        if let value = gate.thresholdNumber {
+            return Int(value)
+        }
+        switch gate.thresholdString?.lowercased() {
+        case "nominal":
+            return 0
+        case "fair":
+            return 1
+        case "serious":
+            return 2
+        case "critical":
+            return 3
+        default:
+            return nil
+        }
     }
 }
 
@@ -811,7 +948,8 @@ public final class CandidateAttemptRunner: Sendable {
                 )
                 gateResults.append(result)
 
-                if result.status == .failed && gate.required {
+                if gate.required && (result.status == .failed
+                    || (result.status == .unknown && DEVICE_ENVIRONMENT_GATE_CODES.contains(gate.code))) {
                     gateFailed = true
 
                     let reasonMessage = "\(gate.code) gate failed"

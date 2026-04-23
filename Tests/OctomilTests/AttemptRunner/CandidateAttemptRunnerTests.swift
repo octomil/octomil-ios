@@ -853,6 +853,29 @@ final class CandidateAttemptRunnerTests: XCTestCase {
         XCTAssertEqual(result.selectedAttempt?.locality, "cloud")
     }
 
+    func testRequiredDeviceGateFailsClosedAndFallsBack() {
+        let runner = CandidateAttemptRunner(fallbackAllowed: true)
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "require_wifi", required: true, source: "server"),
+        ]
+
+        let candidates = [
+            makeLocalCandidate(gates: gates),
+            makeCloudCandidate(),
+        ]
+
+        let result = runner.run(candidates: candidates)
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.attempts.count, 2)
+        XCTAssertEqual(result.attempts[0].status, .failed)
+        XCTAssertEqual(result.attempts[0].stage, .gate)
+        let failedGate = result.attempts[0].gateResults.first { $0.code == "require_wifi" }
+        XCTAssertEqual(failedGate?.reasonCode, "network_state_unavailable")
+        XCTAssertEqual(result.selectedAttempt?.locality, "cloud")
+    }
+
     // MARK: - All gate results include gateClass and evaluationPhase
 
     func testAllGateResultsIncludeClassAndPhase() {
