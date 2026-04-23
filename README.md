@@ -16,7 +16,7 @@ A Swift SDK that handles everything between your app and an on-device ML model. 
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/octomil/octomil-ios.git", from: "1.3.0")
+    .package(url: "https://github.com/octomil/octomil-ios.git", from: "1.3.1")
 ]
 ```
 
