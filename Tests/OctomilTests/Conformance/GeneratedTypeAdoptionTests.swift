@@ -62,7 +62,7 @@ final class GeneratedTypeAdoptionTests: XCTestCase {
             (.deployment, ContractModelRefKind.deployment.rawValue),
             (.experiment, ContractModelRefKind.experiment.rawValue),
             (.alias, ContractModelRefKind.alias.rawValue),
-            (.default, ContractModelRefKind.default.rawValue),
+            (.`default`, ContractModelRefKind.`default`.rawValue),
             (.unknown, ContractModelRefKind.unknown.rawValue),
         ]
         for (kind, contractRaw) in mappings {

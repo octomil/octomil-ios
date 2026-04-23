@@ -7,6 +7,6 @@ public enum ContractModelRefKind: String, Codable, Sendable {
     case deployment = "deployment"
     case experiment = "experiment"
     case alias = "alias"
-    case default = "default"
+    case `default` = "default"
     case unknown = "unknown"
 }
