@@ -134,12 +134,25 @@ public struct RequestRoutingContext: Sendable {
     }
 }
 
+// MARK: - CanonicalRouteMetadata typealias
+
+/// The canonical route metadata shape, as defined in octomil-contracts.
+///
+/// This is the ``PlannerRouteMetadata`` type from ``RuntimePlannerSchemas``,
+/// re-aliased for cross-SDK naming consistency. Prefer this over the flat
+/// ``RouteMetadata`` for new code.
+public typealias CanonicalRouteMetadata = PlannerRouteMetadata
+
 // MARK: - RouteMetadata
 
 /// Privacy-safe metadata attached to every routed request.
 ///
 /// NEVER contains: prompt, input, output, audio, filePath, content, messages.
 /// Only operational metadata for routing telemetry and debugging.
+///
+/// - Important: This flat shape is **deprecated**. Prefer ``CanonicalRouteMetadata``
+///   (the contract-backed nested shape) via ``RoutingDecisionResult/canonicalMetadata``.
+@available(*, deprecated, message: "Use CanonicalRouteMetadata (PlannerRouteMetadata) instead")
 public struct RouteMetadata: Sendable, Equatable {
     /// Unique ID for this routing decision.
     public let routeId: String
@@ -224,11 +237,16 @@ public struct RoutingDecisionResult: Sendable {
     public let mode: String
     /// Engine to use, if local.
     public let engine: String?
-    /// Privacy-safe route metadata.
+    /// Privacy-safe route metadata (flat shape).
+    /// - Important: Deprecated. Use ``canonicalMetadata`` instead.
+    @available(*, deprecated, message: "Use canonicalMetadata instead")
     public let routeMetadata: RouteMetadata
+    /// Contract-backed canonical route metadata (nested shape).
+    public let canonicalMetadata: CanonicalRouteMetadata
     /// Full attempt loop result for telemetry.
     public let attemptResult: AttemptLoopResult
 
+    @available(*, deprecated, message: "Use init with canonicalMetadata instead")
     public init(
         locality: String,
         mode: String,
@@ -240,6 +258,26 @@ public struct RoutingDecisionResult: Sendable {
         self.mode = mode
         self.engine = engine
         self.routeMetadata = routeMetadata
+        self.canonicalMetadata = CanonicalRouteMetadata(
+            status: "selected",
+            model: RouteModel(requested: RouteModelRequested(ref: routeMetadata.modelRef ?? ""))
+        )
+        self.attemptResult = attemptResult
+    }
+
+    public init(
+        locality: String,
+        mode: String,
+        engine: String? = nil,
+        routeMetadata: RouteMetadata,
+        canonicalMetadata: CanonicalRouteMetadata,
+        attemptResult: AttemptLoopResult
+    ) {
+        self.locality = locality
+        self.mode = mode
+        self.engine = engine
+        self.routeMetadata = routeMetadata
+        self.canonicalMetadata = canonicalMetadata
         self.attemptResult = attemptResult
     }
 }
@@ -327,11 +365,32 @@ public final class RequestRouter: @unchecked Sendable {
                     candidateAttempts: loopResult.attempts.count
                 )
 
+                let canonical = CanonicalRouteMetadata(
+                    status: "selected",
+                    execution: RouteExecution(
+                        locality: selected.locality,
+                        mode: selected.mode,
+                        engine: selected.engine
+                    ),
+                    model: RouteModel(
+                        requested: RouteModelRequested(
+                            ref: parsedRef.raw,
+                            kind: parsedRef.kind.rawValue
+                        )
+                    ),
+                    artifact: selected.artifact.map { att in
+                        RouteArtifact(cache: ArtifactCache(status: att.cache.status))
+                    },
+                    planner: PlannerInfo(source: "cache"),
+                    fallback: FallbackInfo(used: loopResult.fallbackUsed)
+                )
+
                 return RoutingDecisionResult(
                     locality: selected.locality,
                     mode: selected.mode,
                     engine: selected.engine,
                     routeMetadata: metadata,
+                    canonicalMetadata: canonical,
                     attemptResult: loopResult
                 )
             }
@@ -363,10 +422,27 @@ public final class RequestRouter: @unchecked Sendable {
                 fallbackUsed: false,
                 candidateAttempts: loopResult.attempts.count
             )
+            let canonical = CanonicalRouteMetadata(
+                status: "unavailable",
+                execution: nil,
+                model: RouteModel(
+                    requested: RouteModelRequested(
+                        ref: parsedRef.raw,
+                        kind: parsedRef.kind.rawValue
+                    )
+                ),
+                planner: PlannerInfo(source: "cache"),
+                fallback: FallbackInfo(used: false),
+                reason: RouteReason(
+                    code: "no_candidate_passed",
+                    message: "All plan candidates failed and fallback is not allowed"
+                )
+            )
             return RoutingDecisionResult(
                 locality: "local",
                 mode: "sdk_runtime",
                 routeMetadata: metadata,
+                canonicalMetadata: canonical,
                 attemptResult: loopResult
             )
         }
@@ -440,10 +516,27 @@ public final class RequestRouter: @unchecked Sendable {
             candidateAttempts: attemptResult?.attempts.count ?? 0
         )
 
+        let canonical = CanonicalRouteMetadata(
+            status: "selected",
+            execution: RouteExecution(
+                locality: "cloud",
+                mode: "hosted_gateway"
+            ),
+            model: RouteModel(
+                requested: RouteModelRequested(
+                    ref: parsedRef.raw,
+                    kind: parsedRef.kind.rawValue
+                )
+            ),
+            planner: PlannerInfo(source: plannerSource),
+            fallback: FallbackInfo(used: attemptResult?.fallbackUsed ?? false)
+        )
+
         return RoutingDecisionResult(
             locality: "cloud",
             mode: "hosted_gateway",
             routeMetadata: metadata,
+            canonicalMetadata: canonical,
             attemptResult: attemptResult ?? AttemptLoopResult()
         )
     }
