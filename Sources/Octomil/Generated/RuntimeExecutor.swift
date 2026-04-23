@@ -9,7 +9,6 @@ public enum RuntimeExecutor: String, Codable, Sendable {
     case mnn = "mnn"
     case transformersjs = "transformersjs"
     case cloud = "cloud"
-    case ollama = "ollama"
     case whisper = "whisper"
     case mlc = "mlc"
     case cactus = "cactus"

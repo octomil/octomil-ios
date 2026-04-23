@@ -11,7 +11,7 @@ public struct StreamToken: Sendable, Equatable {
     /// Whether this is the final event in the stream.
     public let done: Bool
 
-    /// The inference provider (e.g. "ollama").
+    /// The inference provider (e.g. "cloud").
     public let provider: String?
 
     /// Total latency in milliseconds (present on the final event).

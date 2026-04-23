@@ -24,13 +24,13 @@ final class CloudStreamingInferenceTests: XCTestCase {
         let token = StreamToken(
             token: "world",
             done: true,
-            provider: "ollama",
+            provider: "cloud",
             latencyMs: 42.5,
             sessionId: "abc-123"
         )
         XCTAssertEqual(token.token, "world")
         XCTAssertTrue(token.done)
-        XCTAssertEqual(token.provider, "ollama")
+        XCTAssertEqual(token.provider, "cloud")
         XCTAssertEqual(token.latencyMs, 42.5)
         XCTAssertEqual(token.sessionId, "abc-123")
     }
@@ -46,12 +46,12 @@ final class CloudStreamingInferenceTests: XCTestCase {
     // MARK: - SSE Parsing
 
     func testParseSSELineNormalToken() {
-        let line = #"data: {"token": "The", "done": false, "provider": "ollama"}"#
+        let line = #"data: {"token": "The", "done": false, "provider": "cloud"}"#
         let token = CloudStreamingClient.parseSSELine(line)
         XCTAssertNotNil(token)
         XCTAssertEqual(token?.token, "The")
         XCTAssertFalse(token!.done)
-        XCTAssertEqual(token?.provider, "ollama")
+        XCTAssertEqual(token?.provider, "cloud")
     }
 
     func testParseSSELineDoneToken() {
