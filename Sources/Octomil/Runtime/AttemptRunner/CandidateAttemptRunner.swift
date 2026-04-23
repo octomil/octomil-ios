@@ -1005,8 +1005,8 @@ public final class CandidateAttemptRunner: Sendable {
                             }
                         }
 
-                        if requiredGateFailedBeforeOutput && fallbackAllowed {
-                            // Trigger fallback on required output quality gate failure
+                        if requiredGateFailedBeforeOutput {
+                            // Required output quality gate failed before output visible
                             let failedAttempt = RouteAttempt(
                                 index: idx,
                                 locality: indexedSelection.locality,
@@ -1035,7 +1035,7 @@ public final class CandidateAttemptRunner: Sendable {
                                 )
                                 fromAttempt = idx
                             }
-                            if idx >= candidates.count - 1 || !fallbackAllowed {
+                            if !fallbackAllowed || idx >= candidates.count - 1 {
                                 break
                             }
                             continue
