@@ -34,6 +34,27 @@ private struct StubArtifactChecker: AttemptArtifactChecker {
     }
 }
 
+/// Output quality gate evaluator stub for tests.
+private struct StubOutputQualityEvaluator: OutputQualityGateEvaluator {
+    let name: String = "stub_quality_evaluator"
+    let failingGates: Set<String>
+    let scores: [String: Double]
+
+    init(failingGates: Set<String> = [], scores: [String: Double] = [:]) {
+        self.failingGates = failingGates
+        self.scores = scores
+    }
+
+    func evaluate(gate: CandidateGate, response: Any) async -> GateEvaluationResult {
+        let shouldFail = failingGates.contains(gate.code)
+        return GateEvaluationResult(
+            passed: !shouldFail,
+            score: scores[gate.code],
+            reasonCode: shouldFail ? "\(gate.code)_failed" : nil
+        )
+    }
+}
+
 /// Gate evaluator that fails specific gate codes.
 private struct StubGateEvaluator: AttemptGateEvaluator {
     /// Gate codes that should fail, mapped to observed/threshold values.
@@ -536,9 +557,11 @@ final class CandidateAttemptRunnerTests: XCTestCase {
             "context_fits", "modality_supported", "tool_support",
             "min_tokens_per_second", "max_ttft_ms", "max_error_rate",
             "min_free_memory_bytes", "min_free_storage_bytes", "benchmark_fresh",
+            "schema_valid", "tool_call_valid", "safety_passed",
+            "evaluator_score_min", "json_parseable", "max_refusal_rate",
         ]
         let actual = Set(GateCode.allCases.map(\.rawValue))
-        XCTAssertEqual(actual, expected, "GateCode enum must cover all 12 contract gate codes")
+        XCTAssertEqual(actual, expected, "GateCode enum must cover all 18 contract gate codes")
     }
 
     // MARK: - Local candidate without artifact skips verify stage
@@ -635,5 +658,303 @@ final class CandidateAttemptRunnerTests: XCTestCase {
         let result = runner.run(candidates: [candidate])
         XCTAssertTrue(result.succeeded)
         XCTAssertEqual(result.selectedAttempt?.engine, "llama.cpp", "Engine should be canonicalized")
+    }
+
+    // MARK: - Output quality gates are skipped in run()
+
+    func testOutputQualityGatesSkippedInRun() {
+        let runner = CandidateAttemptRunner(fallbackAllowed: true)
+        let gateEval = StubGateEvaluator(failingGates: [
+            "schema_valid": (observed: 0, threshold: 1),
+        ])
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "schema_valid", required: true, source: "server",
+                          gateClass: "output_quality", evaluationPhase: "post_inference"),
+            CandidateGate(code: "min_tokens_per_second", required: true, thresholdNumber: 10.0, source: "server"),
+        ]
+
+        let candidates = [makeLocalCandidate(gates: gates)]
+        let result = runner.run(candidates: candidates, gateEvaluator: gateEval)
+
+        XCTAssertTrue(result.succeeded, "Output quality gates should be skipped in run()")
+        let gateCodes = result.selectedAttempt!.gateResults.map(\.code)
+        XCTAssertFalse(gateCodes.contains("schema_valid"),
+                       "schema_valid should not be evaluated in run()")
+        XCTAssertTrue(gateCodes.contains("min_tokens_per_second"))
+    }
+
+    // MARK: - Output quality gate failure before output → fallback
+
+    func testOutputQualityGateFailureBeforeOutputTriggersFallback() async {
+        let runner = CandidateAttemptRunner(fallbackAllowed: true, streaming: false)
+        let qualityEval = StubOutputQualityEvaluator(failingGates: ["schema_valid"])
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "schema_valid", required: true, source: "server",
+                          gateClass: "output_quality", evaluationPhase: "post_inference"),
+        ]
+
+        let candidates = [
+            makeLocalCandidate(engine: "mlx-lm", gates: gates),
+            makeCloudCandidate(),
+        ]
+
+        let result: AttemptInferenceResult<String> = await runner.runWithInference(
+            candidates: candidates,
+            outputQualityEvaluator: qualityEval,
+            firstOutputEmitted: { false },
+            executeCandidate: { _, _ in "test response" }
+        )
+
+        // First candidate should fail at output_quality stage
+        XCTAssertTrue(result.attempts.count >= 2,
+                      "Expected at least 2 attempts, got \(result.attempts.count)")
+        let firstAttempt = result.attempts[0]
+        XCTAssertEqual(firstAttempt.status, .failed)
+        XCTAssertEqual(firstAttempt.stage, .outputQuality)
+        XCTAssertEqual(firstAttempt.reason.code, "output_quality_gate_failed")
+
+        // Should have fallen back to cloud
+        XCTAssertNotNil(result.selectedAttempt)
+        XCTAssertEqual(result.selectedAttempt?.locality, "cloud")
+        XCTAssertTrue(result.fallbackUsed)
+        XCTAssertEqual(result.fallbackTrigger?.code, "output_quality_gate_failed")
+        XCTAssertEqual(result.fallbackTrigger?.gateCode, "schema_valid")
+        XCTAssertEqual(result.fallbackTrigger?.gateClass, "output_quality")
+        XCTAssertEqual(result.fallbackTrigger?.evaluationPhase, "post_inference")
+        XCTAssertEqual(result.fallbackTrigger?.outputVisibleBeforeFailure, false)
+    }
+
+    // MARK: - Output quality gate failure after first token → NO fallback
+
+    func testOutputQualityGateFailureAfterFirstTokenNoFallback() async {
+        let runner = CandidateAttemptRunner(fallbackAllowed: true, streaming: true)
+        let qualityEval = StubOutputQualityEvaluator(failingGates: ["schema_valid"])
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "schema_valid", required: true, source: "server",
+                          gateClass: "output_quality", evaluationPhase: "post_inference"),
+        ]
+
+        let candidates = [
+            makeLocalCandidate(engine: "mlx-lm", gates: gates),
+            makeCloudCandidate(),
+        ]
+
+        let result: AttemptInferenceResult<String> = await runner.runWithInference(
+            candidates: candidates,
+            outputQualityEvaluator: qualityEval,
+            firstOutputEmitted: { true },  // Output already emitted
+            executeCandidate: { _, _ in "test response" }
+        )
+
+        // Should NOT fallback — output was already visible
+        XCTAssertNotNil(result.selectedAttempt)
+        XCTAssertEqual(result.selectedAttempt?.locality, "local")
+        XCTAssertEqual(result.attempts.count, 1)
+        XCTAssertEqual(result.selectedAttempt?.status, .selected)
+
+        // The schema_valid gate result should still be present (recorded)
+        let schemaGate = result.selectedAttempt!.gateResults.first { $0.code == "schema_valid" }
+        XCTAssertNotNil(schemaGate)
+        XCTAssertEqual(schemaGate?.status, .failed)
+    }
+
+    // MARK: - Advisory quality gate failure → no disqualification
+
+    func testAdvisoryQualityGateFailureNoDisqualification() async {
+        let runner = CandidateAttemptRunner(fallbackAllowed: true, streaming: false)
+        let qualityEval = StubOutputQualityEvaluator(
+            failingGates: ["evaluator_score_min"],
+            scores: ["evaluator_score_min": 0.3]
+        )
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "evaluator_score_min", required: false, thresholdNumber: 0.8,
+                          source: "server", gateClass: "output_quality",
+                          evaluationPhase: "post_inference"),
+        ]
+
+        let candidates = [makeLocalCandidate(engine: "mlx-lm", gates: gates)]
+
+        let result: AttemptInferenceResult<String> = await runner.runWithInference(
+            candidates: candidates,
+            outputQualityEvaluator: qualityEval,
+            firstOutputEmitted: { false },
+            executeCandidate: { _, _ in "test response" }
+        )
+
+        XCTAssertNotNil(result.selectedAttempt, "Advisory gate failure should not disqualify")
+        XCTAssertEqual(result.selectedAttempt?.status, .selected)
+        XCTAssertFalse(result.fallbackUsed)
+
+        // Gate result should be recorded
+        let evalGate = result.selectedAttempt!.gateResults.first { $0.code == "evaluator_score_min" }
+        XCTAssertNotNil(evalGate)
+        XCTAssertEqual(evalGate?.status, .failed)
+        XCTAssertEqual(evalGate?.observedNumber, 0.3)
+    }
+
+    // MARK: - Private policy prevents fallback on quality gate failure
+
+    func testPrivatePolicyPreventsQualityGateFallback() async {
+        let runner = CandidateAttemptRunner(fallbackAllowed: false, streaming: false)
+        let qualityEval = StubOutputQualityEvaluator(failingGates: ["schema_valid"])
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "schema_valid", required: true, source: "server",
+                          gateClass: "output_quality", evaluationPhase: "post_inference"),
+        ]
+
+        let candidates = [
+            makeLocalCandidate(engine: "mlx-lm", gates: gates),
+            makeCloudCandidate(),
+        ]
+
+        let result: AttemptInferenceResult<String> = await runner.runWithInference(
+            candidates: candidates,
+            outputQualityEvaluator: qualityEval,
+            firstOutputEmitted: { false },
+            executeCandidate: { _, _ in "test response" }
+        )
+
+        // Private policy: no fallback allowed, should fail
+        XCTAssertNil(result.selectedAttempt, "Private policy should not fall back on quality gate failure")
+        XCTAssertEqual(result.attempts.count, 1)
+        XCTAssertEqual(result.attempts[0].stage, .outputQuality)
+        XCTAssertFalse(result.fallbackUsed)
+    }
+
+    // MARK: - Unknown required gate fails closed
+
+    func testUnknownRequiredGateFailsClosed() {
+        let runner = CandidateAttemptRunner(fallbackAllowed: true)
+        let gateEval = StubGateEvaluator(failingGates: [
+            "unknown_future_gate": (observed: 0, threshold: 1),
+        ])
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "unknown_future_gate", required: true, source: "server"),
+        ]
+
+        let candidates = [
+            makeLocalCandidate(gates: gates),
+            makeCloudCandidate(),
+        ]
+
+        let result = runner.run(candidates: candidates, gateEvaluator: gateEval)
+
+        // Unknown gate defaults to pre_inference (fail-closed) — should trigger fallback
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.attempts.count, 2)
+        XCTAssertEqual(result.attempts[0].status, .failed)
+        XCTAssertEqual(result.attempts[0].stage, .gate)
+        XCTAssertEqual(result.selectedAttempt?.locality, "cloud")
+    }
+
+    // MARK: - All gate results include gateClass and evaluationPhase
+
+    func testAllGateResultsIncludeClassAndPhase() {
+        let runner = CandidateAttemptRunner(fallbackAllowed: true)
+
+        let gates: [CandidateGate] = [
+            CandidateGate(code: "min_tokens_per_second", required: true, thresholdNumber: 10.0, source: "server"),
+            CandidateGate(code: "max_ttft_ms", required: true, thresholdNumber: 2000, source: "server"),
+        ]
+
+        let candidates = [makeLocalCandidate(gates: gates)]
+        let result = runner.run(candidates: candidates)
+
+        XCTAssertTrue(result.succeeded)
+        let gateResults = result.selectedAttempt!.gateResults
+
+        for gr in gateResults {
+            XCTAssertNotNil(gr.gateClass, "Gate \(gr.code) should have gateClass set")
+            XCTAssertNotNil(gr.evaluationPhase, "Gate \(gr.code) should have evaluationPhase set")
+        }
+
+        // Verify specific classifications
+        let rtGate = gateResults.first { $0.code == "runtime_available" }
+        XCTAssertEqual(rtGate?.gateClass, "readiness")
+        XCTAssertEqual(rtGate?.evaluationPhase, "pre_inference")
+
+        let tpsGate = gateResults.first { $0.code == "min_tokens_per_second" }
+        XCTAssertEqual(tpsGate?.gateClass, "performance")
+        XCTAssertEqual(tpsGate?.evaluationPhase, "pre_inference")
+    }
+
+    // MARK: - GATE_CLASSIFICATION covers all 18 gate codes
+
+    func testGateClassificationCoversAllCodes() {
+        for gateCode in GateCode.allCases {
+            XCTAssertNotNil(GATE_CLASSIFICATION[gateCode.rawValue],
+                           "GATE_CLASSIFICATION must include \(gateCode.rawValue)")
+        }
+    }
+
+    // MARK: - Output quality gates use explicit gate_class from server
+
+    func testOutputQualityGateUsesExplicitClassFromServer() {
+        let gate = CandidateGate(
+            code: "schema_valid",
+            required: true,
+            source: "server",
+            gateClass: "output_quality",
+            evaluationPhase: "post_inference"
+        )
+        XCTAssertTrue(CandidateAttemptRunner.isOutputQualityGate(gate))
+        XCTAssertEqual(CandidateAttemptRunner.effectiveGateClass(for: gate), .outputQuality)
+        XCTAssertEqual(CandidateAttemptRunner.effectivePhase(for: gate), .postInference)
+    }
+
+    // MARK: - Output quality gate classification falls back to GATE_CLASSIFICATION
+
+    func testOutputQualityGateFallsBackToClassification() {
+        let gate = CandidateGate(code: "schema_valid", required: true, source: "server")
+        XCTAssertTrue(CandidateAttemptRunner.isOutputQualityGate(gate))
+        XCTAssertEqual(CandidateAttemptRunner.effectiveGateClass(for: gate), .outputQuality)
+        XCTAssertEqual(CandidateAttemptRunner.effectivePhase(for: gate), .postInference)
+    }
+
+    // MARK: - FallbackTrigger serializes new fields correctly
+
+    func testFallbackTriggerNewFieldsSerialize() throws {
+        let trigger = FallbackTrigger(
+            code: "output_quality_gate_failed",
+            stage: "output_quality",
+            message: "schema_valid failed",
+            gateCode: "schema_valid",
+            gateClass: "output_quality",
+            evaluationPhase: "post_inference",
+            candidateIndex: 0,
+            outputVisibleBeforeFailure: false
+        )
+
+        let data = try JSONEncoder().encode(trigger)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(json["gate_code"] as? String, "schema_valid")
+        XCTAssertEqual(json["gate_class"] as? String, "output_quality")
+        XCTAssertEqual(json["evaluation_phase"] as? String, "post_inference")
+        XCTAssertEqual(json["candidate_index"] as? Int, 0)
+        XCTAssertEqual(json["output_visible_before_failure"] as? Bool, false)
+    }
+
+    // MARK: - GateResult serializes gateClass and evaluationPhase
+
+    func testGateResultNewFieldsSerialize() throws {
+        let result = GateResult(
+            code: "schema_valid",
+            status: .passed,
+            gateClass: "output_quality",
+            evaluationPhase: "post_inference"
+        )
+
+        let data = try JSONEncoder().encode(result)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(json["gate_class"] as? String, "output_quality")
+        XCTAssertEqual(json["evaluation_phase"] as? String, "post_inference")
     }
 }
