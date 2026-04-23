@@ -60,6 +60,18 @@ public struct RouteEvent: Codable, Sendable, Equatable {
     public let artifactId: String?
     /// Cache status for the route decision: "hit", "miss", or "not_applicable".
     public let cacheStatus: String?
+    /// Name of the output quality evaluator used, if any.
+    public let qualityEvaluatorName: String?
+    /// Score from the output quality evaluator.
+    public let qualityScore: Double?
+    /// Reason code from the output quality evaluator.
+    public let qualityReasonCode: String?
+    /// Advisory quality gate failures that did not block selection.
+    public let advisoryFailures: [[String: String]]?
+    /// Number of gate failures recorded during the attempt loop.
+    public let gateFailureCount: Int?
+    /// Whether output was already visible to the caller when a quality gate failed.
+    public let outputVisibleBeforeFailure: Bool?
 
     enum CodingKeys: String, CodingKey {
         case routeId = "route_id"
@@ -85,6 +97,12 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         case variantId = "variant_id"
         case artifactId = "artifact_id"
         case cacheStatus = "cache_status"
+        case qualityEvaluatorName = "quality_evaluator_name"
+        case qualityScore = "quality_score"
+        case qualityReasonCode = "quality_reason_code"
+        case advisoryFailures = "advisory_failures"
+        case gateFailureCount = "gate_failure_count"
+        case outputVisibleBeforeFailure = "output_visible_before_failure"
     }
 
     public init(
@@ -109,7 +127,13 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         experimentId: String? = nil,
         variantId: String? = nil,
         artifactId: String? = nil,
-        cacheStatus: String? = nil
+        cacheStatus: String? = nil,
+        qualityEvaluatorName: String? = nil,
+        qualityScore: Double? = nil,
+        qualityReasonCode: String? = nil,
+        advisoryFailures: [[String: String]]? = nil,
+        gateFailureCount: Int? = nil,
+        outputVisibleBeforeFailure: Bool? = nil
     ) {
         self.routeId = routeId
         self.requestId = requestId
@@ -134,6 +158,12 @@ public struct RouteEvent: Codable, Sendable, Equatable {
         self.variantId = variantId
         self.artifactId = artifactId
         self.cacheStatus = cacheStatus
+        self.qualityEvaluatorName = qualityEvaluatorName
+        self.qualityScore = qualityScore
+        self.qualityReasonCode = qualityReasonCode
+        self.advisoryFailures = advisoryFailures
+        self.gateFailureCount = gateFailureCount
+        self.outputVisibleBeforeFailure = outputVisibleBeforeFailure
     }
 
     /// Build a RouteEvent from a routing decision and request ID.

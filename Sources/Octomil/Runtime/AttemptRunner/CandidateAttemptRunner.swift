@@ -1,5 +1,8 @@
 import Foundation
 import os.log
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - AttemptStage
 
@@ -15,6 +18,7 @@ public enum AttemptStage: String, Codable, Sendable, Equatable {
     case benchmark
     case gate
     case inference
+    case outputQuality = "output_quality"
 }
 
 // MARK: - AttemptStatus
@@ -58,7 +62,116 @@ public enum GateCode: String, Codable, Sendable, CaseIterable {
     case minFreeMemoryBytes = "min_free_memory_bytes"
     case minFreeStorageBytes = "min_free_storage_bytes"
     case benchmarkFresh = "benchmark_fresh"
+    // Output quality gates (post-inference)
+    case schemaValid = "schema_valid"
+    case toolCallValid = "tool_call_valid"
+    case safetyPassed = "safety_passed"
+    case evaluatorScoreMin = "evaluator_score_min"
+    case jsonParseable = "json_parseable"
+    case maxRefusalRate = "max_refusal_rate"
 }
+
+// MARK: - GateClass
+
+/// Classification of a gate by its purpose.
+///
+/// Matches `gate_class` in `candidate_gate.schema.json`.
+public enum GateClass: String, Codable, Sendable, Equatable {
+    case readiness
+    case performance
+    case outputQuality = "output_quality"
+}
+
+// MARK: - EvaluationPhase
+
+/// When a gate is evaluated relative to inference.
+///
+/// Matches `evaluation_phase` in `candidate_gate.schema.json`.
+public enum EvaluationPhase: String, Codable, Sendable, Equatable {
+    case preInference = "pre_inference"
+    case duringInference = "during_inference"
+    case postInference = "post_inference"
+}
+
+// MARK: - GateClassification
+
+/// Static classification of each gate code to its class, phase, and blocking default.
+public struct GateClassification: Sendable {
+    public let gateClass: GateClass
+    public let evaluationPhase: EvaluationPhase
+    public let blockingDefault: Bool
+
+    public init(gateClass: GateClass, evaluationPhase: EvaluationPhase, blockingDefault: Bool) {
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
+        self.blockingDefault = blockingDefault
+    }
+}
+
+/// Maps every canonical gate code to its (class, phase, blockingDefault).
+public let GATE_CLASSIFICATION: [String: GateClassification] = [
+    // Readiness gates (pre-inference)
+    GateCode.artifactVerified.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.runtimeAvailable.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.modelLoads.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.contextFits.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.modalitySupported.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.toolSupport.rawValue: GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    // Performance gates (pre-inference, checked from benchmark cache)
+    GateCode.minTokensPerSecond.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    GateCode.maxTtftMs.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .duringInference, blockingDefault: false),
+    GateCode.maxErrorRate.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    GateCode.minFreeMemoryBytes.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.minFreeStorageBytes.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: true),
+    GateCode.benchmarkFresh.rawValue: GateClassification(
+        gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    // Device-environment gates
+    "min_battery_pct": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "max_thermal_state": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "require_charging": GateClassification(gateClass: .performance, evaluationPhase: .preInference, blockingDefault: false),
+    "require_wifi": GateClassification(gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true),
+    // Output quality gates (post-inference)
+    GateCode.schemaValid.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.toolCallValid.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.safetyPassed.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.evaluatorScoreMin.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: false),
+    GateCode.jsonParseable.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: true),
+    GateCode.maxRefusalRate.rawValue: GateClassification(
+        gateClass: .outputQuality, evaluationPhase: .postInference, blockingDefault: false),
+]
+
+/// Look up the classification for a gate code.
+///
+/// Returns the canonical classification from ``GATE_CLASSIFICATION`` for known
+/// gate codes, or a fail-closed readiness/pre-inference default for unknown codes.
+public func classifyGate(_ code: String) -> GateClassification {
+    return GATE_CLASSIFICATION[code] ?? GateClassification(
+        gateClass: .readiness, evaluationPhase: .preInference, blockingDefault: true
+    )
+}
+
+private let DEVICE_ENVIRONMENT_GATE_CODES: Set<String> = [
+    "min_battery_pct",
+    "max_thermal_state",
+    "require_charging",
+    "require_wifi",
+]
 
 // MARK: - GateResult
 
@@ -71,12 +184,16 @@ public struct GateResult: Codable, Sendable, Equatable {
     public var observedNumber: Double?
     public var thresholdNumber: Double?
     public var reasonCode: String?
+    public var gateClass: String?
+    public var evaluationPhase: String?
 
     enum CodingKeys: String, CodingKey {
         case code, status
         case observedNumber = "observed_number"
         case thresholdNumber = "threshold_number"
         case reasonCode = "reason_code"
+        case gateClass = "gate_class"
+        case evaluationPhase = "evaluation_phase"
     }
 
     public init(
@@ -84,13 +201,17 @@ public struct GateResult: Codable, Sendable, Equatable {
         status: GateStatus,
         observedNumber: Double? = nil,
         thresholdNumber: Double? = nil,
-        reasonCode: String? = nil
+        reasonCode: String? = nil,
+        gateClass: String? = nil,
+        evaluationPhase: String? = nil
     ) {
         self.code = code
         self.status = status
         self.observedNumber = observedNumber
         self.thresholdNumber = thresholdNumber
         self.reasonCode = reasonCode
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
     }
 }
 
@@ -107,12 +228,20 @@ public struct CandidateGate: Codable, Sendable, Equatable {
     public var thresholdString: String?
     public var windowSeconds: Int?
     public let source: String
+    public var gateClass: String?
+    public var evaluationPhase: String?
+    public var fallbackEligible: Bool?
+    public var blockingDefault: Bool?
 
     enum CodingKeys: String, CodingKey {
         case code, required, source
         case thresholdNumber = "threshold_number"
         case thresholdString = "threshold_string"
         case windowSeconds = "window_seconds"
+        case gateClass = "gate_class"
+        case evaluationPhase = "evaluation_phase"
+        case fallbackEligible = "fallback_eligible"
+        case blockingDefault = "blocking_default"
     }
 
     public init(
@@ -121,7 +250,11 @@ public struct CandidateGate: Codable, Sendable, Equatable {
         thresholdNumber: Double? = nil,
         thresholdString: String? = nil,
         windowSeconds: Int? = nil,
-        source: String = "server"
+        source: String = "server",
+        gateClass: String? = nil,
+        evaluationPhase: String? = nil,
+        fallbackEligible: Bool? = nil,
+        blockingDefault: Bool? = nil
     ) {
         self.code = code
         self.required = required
@@ -129,6 +262,10 @@ public struct CandidateGate: Codable, Sendable, Equatable {
         self.thresholdString = thresholdString
         self.windowSeconds = windowSeconds
         self.source = source
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
+        self.fallbackEligible = fallbackEligible
+        self.blockingDefault = blockingDefault
     }
 }
 
@@ -230,11 +367,39 @@ public struct FallbackTrigger: Codable, Sendable, Equatable {
     public let code: String
     public let stage: String
     public let message: String
+    public var gateCode: String?
+    public var gateClass: String?
+    public var evaluationPhase: String?
+    public var candidateIndex: Int?
+    public var outputVisibleBeforeFailure: Bool?
 
-    public init(code: String, stage: String, message: String) {
+    enum CodingKeys: String, CodingKey {
+        case code, stage, message
+        case gateCode = "gate_code"
+        case gateClass = "gate_class"
+        case evaluationPhase = "evaluation_phase"
+        case candidateIndex = "candidate_index"
+        case outputVisibleBeforeFailure = "output_visible_before_failure"
+    }
+
+    public init(
+        code: String,
+        stage: String,
+        message: String,
+        gateCode: String? = nil,
+        gateClass: String? = nil,
+        evaluationPhase: String? = nil,
+        candidateIndex: Int? = nil,
+        outputVisibleBeforeFailure: Bool? = nil
+    ) {
         self.code = code
         self.stage = stage
         self.message = message
+        self.gateCode = gateCode
+        self.gateClass = gateClass
+        self.evaluationPhase = evaluationPhase
+        self.candidateIndex = candidateIndex
+        self.outputVisibleBeforeFailure = outputVisibleBeforeFailure
     }
 }
 
@@ -387,6 +552,44 @@ public protocol AttemptGateEvaluator: Sendable {
     func evaluate(gate: CandidateGate, engine: String?, locality: String) -> GateResult
 }
 
+// MARK: - Output Quality Gate Evaluator
+
+/// Result of evaluating an output quality gate against inference output.
+public struct GateEvaluationResult: Sendable {
+    public let passed: Bool
+    public let score: Double?
+    public let reasonCode: String?
+    public let safeMetadata: [String: String]?
+
+    public init(
+        passed: Bool,
+        score: Double? = nil,
+        reasonCode: String? = nil,
+        safeMetadata: [String: String]? = nil
+    ) {
+        self.passed = passed
+        self.score = score
+        self.reasonCode = reasonCode
+        self.safeMetadata = safeMetadata
+    }
+}
+
+/// Protocol for evaluating output quality gates after inference.
+///
+/// Output quality gates run post-inference and check the response content
+/// against schema, safety, tool-call, and scoring requirements.
+public protocol OutputQualityGateEvaluator: Sendable {
+    /// Human-readable name of this evaluator (for telemetry).
+    var name: String { get }
+    /// Evaluate a gate against the inference response.
+    ///
+    /// - Parameters:
+    ///   - gate: The gate definition.
+    ///   - response: The inference response to evaluate.
+    /// - Returns: The evaluation result.
+    func evaluate(gate: CandidateGate, response: Any) async -> GateEvaluationResult
+}
+
 // MARK: - No-Op Defaults
 
 /// Default runtime checker that always reports available.
@@ -403,10 +606,132 @@ struct NoOpArtifactChecker: AttemptArtifactChecker {
     }
 }
 
-/// Default gate evaluator that always passes.
+/// Default gate evaluator.
+///
+/// Generic runtime gates stay permissive so product paths can inject dedicated
+/// benchmark and memory evaluators. Device-environment gates must be proven
+/// locally; required gates fail closed when the metric is unavailable.
 struct NoOpGateEvaluator: AttemptGateEvaluator {
     func evaluate(gate: CandidateGate, engine: String?, locality: String) -> GateResult {
-        GateResult(code: gate.code, status: .passed)
+        guard DEVICE_ENVIRONMENT_GATE_CODES.contains(gate.code) else {
+            return GateResult(code: gate.code, status: .passed)
+        }
+
+        let classification = classifyGate(gate.code)
+        func result(
+            _ status: GateStatus,
+            observedNumber: Double? = nil,
+            thresholdNumber: Double? = gate.thresholdNumber,
+            reasonCode: String? = nil
+        ) -> GateResult {
+            GateResult(
+                code: gate.code,
+                status: status,
+                observedNumber: observedNumber,
+                thresholdNumber: thresholdNumber,
+                reasonCode: reasonCode,
+                gateClass: gate.gateClass ?? classification.gateClass.rawValue,
+                evaluationPhase: gate.evaluationPhase ?? classification.evaluationPhase.rawValue
+            )
+        }
+
+        func unavailable(_ reasonCode: String = "device_metric_unavailable") -> GateResult {
+            result(gate.required ? .failed : .unknown, reasonCode: gate.required ? reasonCode : nil)
+        }
+
+        guard locality == "local" else {
+            return result(.notRequired)
+        }
+
+        switch gate.code {
+        case "min_battery_pct":
+            guard let threshold = gate.thresholdNumber else {
+                return unavailable("threshold_missing")
+            }
+            #if os(iOS) && canImport(UIKit)
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let level = UIDevice.current.batteryLevel
+            guard level >= 0 else {
+                return unavailable()
+            }
+            let observed = Double(level * 100)
+            return result(
+                observed >= threshold ? .passed : .failed,
+                observedNumber: observed,
+                thresholdNumber: threshold,
+                reasonCode: observed >= threshold ? nil : "battery_below_threshold"
+            )
+            #else
+            return unavailable()
+            #endif
+
+        case "require_charging":
+            #if os(iOS) && canImport(UIKit)
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let batteryState = UIDevice.current.batteryState
+            guard batteryState != .unknown else {
+                return unavailable()
+            }
+            let pluggedIn = batteryState == .charging || batteryState == .full
+            return result(
+                pluggedIn ? .passed : .failed,
+                reasonCode: pluggedIn ? nil : "device_not_charging"
+            )
+            #else
+            return unavailable()
+            #endif
+
+        case "max_thermal_state":
+            let observed = Self.thermalRank(ProcessInfo.processInfo.thermalState)
+            guard let maxAllowed = Self.thermalThreshold(gate) else {
+                return unavailable("threshold_missing")
+            }
+            return result(
+                observed <= maxAllowed ? .passed : .failed,
+                observedNumber: Double(observed),
+                thresholdNumber: Double(maxAllowed),
+                reasonCode: observed <= maxAllowed ? nil : "thermal_state_exceeded"
+            )
+
+        case "require_wifi":
+            return unavailable("network_state_unavailable")
+
+        default:
+            return GateResult(code: gate.code, status: .passed)
+        }
+    }
+
+    private static func thermalRank(_ state: ProcessInfo.ThermalState) -> Int {
+        switch state {
+        case .nominal:
+            return 0
+        case .fair:
+            return 1
+        case .serious:
+            return 2
+        case .critical:
+            return 3
+        @unknown default:
+            return 3
+        }
+    }
+
+    private static func thermalThreshold(_ gate: CandidateGate) -> Int? {
+        if let value = gate.thresholdNumber {
+            return Int(value)
+        }
+        switch gate.thresholdString?.lowercased() {
+        case "nominal":
+            return 0
+        case "fair":
+            return 1
+        case "serious":
+            return 2
+        case "critical":
+            return 3
+        default:
+            return nil
+        }
     }
 }
 
@@ -507,11 +832,11 @@ public final class CandidateAttemptRunner: Sendable {
             var gateResults: [GateResult] = []
 
             if !runtimeOk {
-                gateResults.append(GateResult(
+                gateResults.append(Self.enrichGateResult(GateResult(
                     code: GateCode.runtimeAvailable.rawValue,
                     status: .failed,
                     reasonCode: runtimeReason
-                ))
+                )))
 
                 let reasonMessage = "\(engine ?? "runtime") not available: \(runtimeReason ?? "unknown")"
                 let attempt = RouteAttempt(
@@ -541,10 +866,10 @@ public final class CandidateAttemptRunner: Sendable {
                 break
             }
 
-            gateResults.append(GateResult(
+            gateResults.append(Self.enrichGateResult(GateResult(
                 code: GateCode.runtimeAvailable.rawValue,
                 status: .passed
-            ))
+            )))
 
             // ------------------------------------------------------------------
             // Stage: verify artifact (local candidates with artifacts only)
@@ -559,16 +884,16 @@ public final class CandidateAttemptRunner: Sendable {
                 )
 
                 if artOk {
-                    gateResults.append(GateResult(
+                    gateResults.append(Self.enrichGateResult(GateResult(
                         code: GateCode.artifactVerified.rawValue,
                         status: .passed
-                    ))
+                    )))
                 } else {
-                    gateResults.append(GateResult(
+                    gateResults.append(Self.enrichGateResult(GateResult(
                         code: GateCode.artifactVerified.rawValue,
                         status: .failed,
                         reasonCode: artReason
-                    ))
+                    )))
 
                     let reasonMessage = "artifact verification failed: \(artReason ?? "unknown")"
                     let attempt = RouteAttempt(
@@ -612,10 +937,19 @@ public final class CandidateAttemptRunner: Sendable {
                     continue
                 }
 
-                let result = gateEval.evaluate(gate: gate, engine: engine, locality: locality)
+                // Skip output_quality gates — they are evaluated post-inference.
+                if Self.isOutputQualityGate(gate) {
+                    continue
+                }
+
+                let result = Self.enrichGateResult(
+                    gateEval.evaluate(gate: gate, engine: engine, locality: locality),
+                    gate: gate
+                )
                 gateResults.append(result)
 
-                if result.status == .failed && gate.required {
+                if gate.required && (result.status == .failed
+                    || (result.status == .unknown && DEVICE_ENVIRONMENT_GATE_CODES.contains(gate.code))) {
                     gateFailed = true
 
                     let reasonMessage = "\(gate.code) gate failed"
@@ -693,11 +1027,13 @@ public final class CandidateAttemptRunner: Sendable {
     ///
     /// This product-path method records inference-stage failures instead of
     /// declaring a candidate selected before the request actually runs.
+    /// After successful inference, output quality gates are evaluated.
     public func runWithInference<Value: Sendable>(
         candidates: [AttemptCandidateInput],
         runtimeChecker: (any AttemptRuntimeChecker)? = nil,
         artifactChecker: (any AttemptArtifactChecker)? = nil,
         gateEvaluator: (any AttemptGateEvaluator)? = nil,
+        outputQualityEvaluator: (any OutputQualityGateEvaluator)? = nil,
         firstOutputEmitted: @Sendable () -> Bool = { false },
         executeCandidate: @Sendable (AttemptCandidateInput, RouteAttempt) async throws -> Value
     ) async -> AttemptInferenceResult<Value> {
@@ -756,6 +1092,193 @@ public final class CandidateAttemptRunner: Sendable {
 
             do {
                 let value = try await executeCandidate(input, indexedSelection)
+
+                // ------------------------------------------------------------------
+                // Post-inference: evaluate output quality gates
+                // ------------------------------------------------------------------
+                let outputQualityGates = input.gates.filter { Self.isOutputQualityGate($0) }
+
+                if !outputQualityGates.isEmpty {
+                    if let evaluator = outputQualityEvaluator {
+                        let emitted = firstOutputEmitted()
+                        var postGateResults = indexedSelection.gateResults
+                        var advisoryFailures: [[String: Any]] = []
+                        var requiredGateFailedBeforeOutput = false
+                        var failedGateCode: String?
+
+                        for gate in outputQualityGates {
+                            let evalResult = await evaluator.evaluate(gate: gate, response: value as Any)
+
+                            let status: GateStatus = evalResult.passed ? .passed : .failed
+                            let gateResult = Self.enrichGateResult(
+                                GateResult(
+                                    code: gate.code,
+                                    status: status,
+                                    observedNumber: evalResult.score,
+                                    thresholdNumber: gate.thresholdNumber,
+                                    reasonCode: evalResult.reasonCode
+                                ),
+                                gate: gate
+                            )
+                            postGateResults.append(gateResult)
+
+                            if !evalResult.passed {
+                                if gate.required {
+                                    if !emitted {
+                                        // Required gate failed before any output visible -> fallback
+                                        requiredGateFailedBeforeOutput = true
+                                        failedGateCode = gate.code
+                                        break
+                                    }
+                                    // Required gate failed but output already visible -> record, no fallback
+                                }
+                                if !gate.required {
+                                    // Advisory failure -> record only
+                                    advisoryFailures.append([
+                                        "code": gate.code,
+                                        "reason_code": evalResult.reasonCode ?? "unknown",
+                                        "score": evalResult.score as Any,
+                                    ])
+                                }
+                            }
+                        }
+
+                        if requiredGateFailedBeforeOutput {
+                            // Required output quality gate failed before output visible
+                            let failedAttempt = RouteAttempt(
+                                index: idx,
+                                locality: indexedSelection.locality,
+                                mode: indexedSelection.mode,
+                                engine: indexedSelection.engine,
+                                artifact: indexedSelection.artifact,
+                                status: .failed,
+                                stage: .outputQuality,
+                                gateResults: postGateResults,
+                                reason: AttemptReason(
+                                    code: "output_quality_gate_failed",
+                                    message: "\(failedGateCode ?? "unknown") output quality gate failed"
+                                )
+                            )
+                            attempts.append(failedAttempt)
+                            if fallbackTrigger == nil {
+                                fallbackTrigger = FallbackTrigger(
+                                    code: "output_quality_gate_failed",
+                                    stage: AttemptStage.outputQuality.rawValue,
+                                    message: "\(failedGateCode ?? "unknown") output quality gate failed",
+                                    gateCode: failedGateCode,
+                                    gateClass: GateClass.outputQuality.rawValue,
+                                    evaluationPhase: EvaluationPhase.postInference.rawValue,
+                                    candidateIndex: idx,
+                                    outputVisibleBeforeFailure: false
+                                )
+                                fromAttempt = idx
+                            }
+                            if !fallbackAllowed || idx >= candidates.count - 1 {
+                                break
+                            }
+                            continue
+                        }
+
+                        // All quality gates passed or failures are advisory/post-output
+                        let finalAttempt = RouteAttempt(
+                            index: idx,
+                            locality: indexedSelection.locality,
+                            mode: indexedSelection.mode,
+                            engine: indexedSelection.engine,
+                            artifact: indexedSelection.artifact,
+                            status: .selected,
+                            stage: .inference,
+                            gateResults: postGateResults,
+                            reason: indexedSelection.reason
+                        )
+                        attempts.append(finalAttempt)
+                        if fallbackTrigger != nil { toAttempt = idx }
+                        let hasFallback = fallbackTrigger != nil
+                        return AttemptInferenceResult(
+                            selectedAttempt: finalAttempt,
+                            attempts: attempts,
+                            fallbackUsed: hasFallback,
+                            fallbackTrigger: hasFallback ? fallbackTrigger : nil,
+                            fromAttempt: hasFallback ? fromAttempt : nil,
+                            toAttempt: hasFallback ? toAttempt : nil,
+                            value: value
+                        )
+                    } else {
+                        // No evaluator provided — fail closed for required gates
+                        let requiredOQGates = outputQualityGates.filter { $0.required }
+                        if let firstRequired = requiredOQGates.first {
+                            var postGateResults = indexedSelection.gateResults
+                            // Record unknown for all output quality gates
+                            for gate in outputQualityGates {
+                                let status: GateStatus = gate.required ? .failed : .unknown
+                                let reasonCode = gate.required ? "evaluator_missing" : nil
+                                postGateResults.append(Self.enrichGateResult(
+                                    GateResult(
+                                        code: gate.code,
+                                        status: status,
+                                        reasonCode: reasonCode
+                                    ),
+                                    gate: gate
+                                ))
+                            }
+
+                            if fallbackAllowed {
+                                let failedAttempt = RouteAttempt(
+                                    index: idx,
+                                    locality: indexedSelection.locality,
+                                    mode: indexedSelection.mode,
+                                    engine: indexedSelection.engine,
+                                    artifact: indexedSelection.artifact,
+                                    status: .failed,
+                                    stage: .outputQuality,
+                                    gateResults: postGateResults,
+                                    reason: AttemptReason(
+                                        code: "output_quality_gate_failed",
+                                        message: "\(firstRequired.code) requires evaluator but none configured"
+                                    )
+                                )
+                                attempts.append(failedAttempt)
+                                if fallbackTrigger == nil {
+                                    fallbackTrigger = FallbackTrigger(
+                                        code: "output_quality_gate_failed",
+                                        stage: AttemptStage.outputQuality.rawValue,
+                                        message: "\(firstRequired.code) requires evaluator but none configured",
+                                        gateCode: firstRequired.code,
+                                        gateClass: GateClass.outputQuality.rawValue,
+                                        evaluationPhase: EvaluationPhase.postInference.rawValue,
+                                        candidateIndex: idx,
+                                        outputVisibleBeforeFailure: false
+                                    )
+                                    fromAttempt = idx
+                                }
+                                if idx >= candidates.count - 1 {
+                                    break
+                                }
+                                continue
+                            }
+                            // Fallback not allowed — record failure and break
+                            let failedAttempt = RouteAttempt(
+                                index: idx,
+                                locality: indexedSelection.locality,
+                                mode: indexedSelection.mode,
+                                engine: indexedSelection.engine,
+                                artifact: indexedSelection.artifact,
+                                status: .failed,
+                                stage: .outputQuality,
+                                gateResults: postGateResults,
+                                reason: AttemptReason(
+                                    code: "output_quality_gate_failed",
+                                    message: "\(firstRequired.code) requires evaluator but none configured"
+                                )
+                            )
+                            attempts.append(failedAttempt)
+                            break
+                        }
+                        // No required output quality gates — proceed with unknown/advisory for optional ones
+                    }
+                }
+
+                // No output quality gates to evaluate
                 attempts.append(indexedSelection)
                 if fallbackTrigger != nil { toAttempt = idx }
                 let hasFallback = fallbackTrigger != nil
@@ -820,5 +1343,47 @@ public final class CandidateAttemptRunner: Sendable {
         case .local: return "sdk_runtime"
         case .cloud: return "hosted_gateway"
         }
+    }
+
+    /// Determine the effective evaluation phase for a gate.
+    ///
+    /// Uses the gate's explicit `evaluationPhase` if set, otherwise
+    /// falls back to `GATE_CLASSIFICATION`. Unknown gates default
+    /// to `pre_inference` (fail-closed).
+    static func effectivePhase(for gate: CandidateGate) -> EvaluationPhase {
+        if let phase = gate.evaluationPhase, let parsed = EvaluationPhase(rawValue: phase) {
+            return parsed
+        }
+        return GATE_CLASSIFICATION[gate.code]?.evaluationPhase ?? .preInference
+    }
+
+    /// Determine the effective gate class for a gate.
+    static func effectiveGateClass(for gate: CandidateGate) -> GateClass {
+        if let cls = gate.gateClass, let parsed = GateClass(rawValue: cls) {
+            return parsed
+        }
+        return GATE_CLASSIFICATION[gate.code]?.gateClass ?? .readiness
+    }
+
+    /// Whether a gate is an output-quality gate evaluated post-inference.
+    static func isOutputQualityGate(_ gate: CandidateGate) -> Bool {
+        effectivePhase(for: gate) == .postInference
+    }
+
+    /// Enrich a GateResult with classification metadata from the gate definition.
+    static func enrichGateResult(_ result: GateResult, gate: CandidateGate) -> GateResult {
+        var enriched = result
+        enriched.gateClass = effectiveGateClass(for: gate).rawValue
+        enriched.evaluationPhase = effectivePhase(for: gate).rawValue
+        return enriched
+    }
+
+    /// Enrich a GateResult using the code alone (for stage-level gates like runtime_available).
+    static func enrichGateResult(_ result: GateResult) -> GateResult {
+        guard let classification = GATE_CLASSIFICATION[result.code] else { return result }
+        var enriched = result
+        enriched.gateClass = classification.gateClass.rawValue
+        enriched.evaluationPhase = classification.evaluationPhase.rawValue
+        return enriched
     }
 }

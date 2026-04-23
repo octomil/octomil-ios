@@ -1,0 +1,205 @@
+{
+  "$schema": "../../schemas/runtime_planner/model_ref_parse_cases.schema.json",
+  "description": "Canonical model-ref parsing test cases. This is the desired grammar, not a snapshot of current SDK parser behavior. All SDKs must produce matching results.",
+  "cases": [
+    {
+      "id": "model_plain_slug",
+      "input": "phi-4",
+      "expected": {
+        "kind": "model",
+        "raw": "phi-4",
+        "model_slug": "phi-4"
+      }
+    },
+    {
+      "id": "model_slug_with_size",
+      "input": "gemma-1b",
+      "expected": {
+        "kind": "model",
+        "raw": "gemma-1b",
+        "model_slug": "gemma-1b"
+      }
+    },
+    {
+      "id": "model_alphanumeric",
+      "input": "smollm2-135m",
+      "expected": {
+        "kind": "model",
+        "raw": "smollm2-135m",
+        "model_slug": "smollm2-135m"
+      }
+    },
+    {
+      "id": "app_ref",
+      "input": "@app/translator/chat",
+      "expected": {
+        "kind": "app",
+        "raw": "@app/translator/chat",
+        "app_slug": "translator",
+        "capability": "chat"
+      }
+    },
+    {
+      "id": "app_ref_multi_word_slug",
+      "input": "@app/my-assistant/chat",
+      "expected": {
+        "kind": "app",
+        "raw": "@app/my-assistant/chat",
+        "app_slug": "my-assistant",
+        "capability": "chat"
+      }
+    },
+    {
+      "id": "app_ref_missing_capability",
+      "input": "@app/translator",
+      "expected": {
+        "kind": "unknown",
+        "raw": "@app/translator"
+      }
+    },
+    {
+      "id": "capability_ref",
+      "input": "@capability/chat",
+      "expected": {
+        "kind": "capability",
+        "raw": "@capability/chat",
+        "capability": "chat"
+      }
+    },
+    {
+      "id": "capability_ref_embeddings",
+      "input": "@capability/embeddings",
+      "expected": {
+        "kind": "capability",
+        "raw": "@capability/embeddings",
+        "capability": "embeddings"
+      }
+    },
+    {
+      "id": "capability_ref_empty",
+      "input": "@capability/",
+      "expected": {
+        "kind": "unknown",
+        "raw": "@capability/"
+      }
+    },
+    {
+      "id": "deployment_ref",
+      "input": "deploy_abc123",
+      "expected": {
+        "kind": "deployment",
+        "raw": "deploy_abc123",
+        "deployment_id": "deploy_abc123"
+      }
+    },
+    {
+      "id": "deployment_ref_with_dashes",
+      "input": "deploy_prod_chat_v2",
+      "expected": {
+        "kind": "deployment",
+        "raw": "deploy_prod_chat_v2",
+        "deployment_id": "deploy_prod_chat_v2"
+      }
+    },
+    {
+      "id": "deployment_ref_empty_suffix",
+      "input": "deploy_",
+      "expected": {
+        "kind": "unknown",
+        "raw": "deploy_"
+      }
+    },
+    {
+      "id": "experiment_ref_with_variant",
+      "input": "exp_test_001/variant_a",
+      "expected": {
+        "kind": "experiment",
+        "raw": "exp_test_001/variant_a",
+        "experiment_id": "exp_test_001",
+        "variant_id": "variant_a"
+      }
+    },
+    {
+      "id": "experiment_ref_control",
+      "input": "exp_latency_opt/control",
+      "expected": {
+        "kind": "experiment",
+        "raw": "exp_latency_opt/control",
+        "experiment_id": "exp_latency_opt",
+        "variant_id": "control"
+      }
+    },
+    {
+      "id": "experiment_ref_missing_variant",
+      "input": "exp_latency_opt/",
+      "expected": {
+        "kind": "unknown",
+        "raw": "exp_latency_opt/"
+      }
+    },
+    {
+      "id": "alias_ref",
+      "input": "alias:production",
+      "expected": {
+        "kind": "alias",
+        "raw": "alias:production"
+      }
+    },
+    {
+      "id": "alias_ref_canary",
+      "input": "alias:canary",
+      "expected": {
+        "kind": "alias",
+        "raw": "alias:canary"
+      }
+    },
+    {
+      "id": "alias_ref_empty",
+      "input": "alias:",
+      "expected": {
+        "kind": "unknown",
+        "raw": "alias:"
+      }
+    },
+    {
+      "id": "default_empty_string",
+      "input": "",
+      "expected": {
+        "kind": "default",
+        "raw": ""
+      }
+    },
+    {
+      "id": "default_whitespace_only",
+      "input": "   ",
+      "expected": {
+        "kind": "default",
+        "raw": ""
+      }
+    },
+    {
+      "id": "unknown_bare_at_prefix",
+      "input": "@unknown-prefix/something",
+      "expected": {
+        "kind": "unknown",
+        "raw": "@unknown-prefix/something"
+      }
+    },
+    {
+      "id": "unknown_url_scheme",
+      "input": "https://example.com/model",
+      "expected": {
+        "kind": "unknown",
+        "raw": "https://example.com/model"
+      }
+    },
+    {
+      "id": "unknown_custom_scheme",
+      "input": "custom://model/ref",
+      "expected": {
+        "kind": "unknown",
+        "raw": "custom://model/ref"
+      }
+    }
+  ]
+}
