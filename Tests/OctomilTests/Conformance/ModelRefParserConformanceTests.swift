@@ -33,10 +33,7 @@ final class ModelRefParserConformanceTests: XCTestCase {
     // MARK: - Test
 
     func testAllFixtureCases() throws {
-        let fixtureURL = try XCTUnwrap(
-            Bundle.module.url(forResource: "model_ref_parse_cases", withExtension: "json")
-                ?? fixtureURLFromFilesystem()
-        )
+        let fixtureURL = try XCTUnwrap(fixtureURLFromFilesystem())
         let data = try Data(contentsOf: fixtureURL)
         let fixture = try JSONDecoder().decode(FixtureFile.self, from: data)
 
@@ -95,7 +92,7 @@ final class ModelRefParserConformanceTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Fallback fixture loader when Bundle.module resources aren't available.
+    /// Fixture loader for the vendored contract fixture.
     private func fixtureURLFromFilesystem() -> URL? {
         let thisFile = URL(fileURLWithPath: #file)
         let fixturesDir = thisFile
