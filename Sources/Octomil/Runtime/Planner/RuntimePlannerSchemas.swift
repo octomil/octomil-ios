@@ -168,6 +168,8 @@ public struct DeviceRuntimeProfile: Codable, Sendable, Equatable {
     public let accelerators: [String]
     /// Locally-installed inference engines.
     public let installedRuntimes: [InstalledRuntime]
+    /// Device-environment gate codes this SDK can evaluate.
+    public let supportedGateCodes: [String]?
 
     enum CodingKeys: String, CodingKey {
         case sdk
@@ -180,6 +182,7 @@ public struct DeviceRuntimeProfile: Codable, Sendable, Equatable {
         case gpuCoreCount = "gpu_core_count"
         case accelerators
         case installedRuntimes = "installed_runtimes"
+        case supportedGateCodes = "supported_gate_codes"
     }
 
     public init(
@@ -192,7 +195,8 @@ public struct DeviceRuntimeProfile: Codable, Sendable, Equatable {
         ramTotalBytes: Int64? = nil,
         gpuCoreCount: Int? = nil,
         accelerators: [String] = [],
-        installedRuntimes: [InstalledRuntime] = []
+        installedRuntimes: [InstalledRuntime] = [],
+        supportedGateCodes: [String]? = []
     ) {
         self.sdk = sdk
         self.sdkVersion = sdkVersion
@@ -204,6 +208,7 @@ public struct DeviceRuntimeProfile: Codable, Sendable, Equatable {
         self.gpuCoreCount = gpuCoreCount
         self.accelerators = accelerators
         self.installedRuntimes = installedRuntimes
+        self.supportedGateCodes = supportedGateCodes
     }
 }
 
