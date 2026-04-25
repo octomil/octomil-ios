@@ -6,8 +6,8 @@ public enum Engine: String, Sendable, Codable {
     case coreml
     case mlx
     case llamaCpp = "llama_cpp"
-    case sherpa
-    case whisper
+    case sherpa = "sherpa-onnx"
+    case whisper = "whisper.cpp"
 
     /// Create an ``Engine`` from an executor string, handling common aliases.
     ///
@@ -16,13 +16,13 @@ public enum Engine: String, Sendable, Codable {
     /// canonical ``Engine`` case.
     public init?(executor: String) {
         switch executor.lowercased() {
-        case "sherpa", "sherpa-onnx":
+        case "sherpa", "sherpa-onnx", "sherpa_onnx", "sherpaonnx":
             self = .sherpa
-        case "whisper", "whisper.cpp":
+        case "whisper", "whisper.cpp", "whispercpp", "whisper_cpp":
             self = .whisper
         case "llama.cpp", "llamacpp", "llama_cpp":
             self = .llamaCpp
-        case "mlx":
+        case "mlx", "mlx-lm", "mlx_lm":
             self = .mlx
         case "coreml":
             self = .coreml

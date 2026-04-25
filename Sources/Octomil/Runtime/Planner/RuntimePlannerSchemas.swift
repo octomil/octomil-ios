@@ -129,6 +129,9 @@ public enum RuntimeEngineID {
         "whispercpp": "whisper.cpp",
         "whisper_cpp": "whisper.cpp",
         "whisper-cpp": "whisper.cpp",
+        "sherpa": "sherpa-onnx",
+        "sherpa_onnx": "sherpa-onnx",
+        "sherpaonnx": "sherpa-onnx",
     ]
 
     public static func canonical(_ engine: String) -> String {
