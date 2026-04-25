@@ -2,24 +2,6 @@
 import Foundation
 import Octomil
 
-extension EngineRegistry {
-
-    /// Register the sherpa-onnx TTS engine for on-device speech synthesis.
-    ///
-    /// Call once during SDK init when the optional `OctomilRuntimeSherpaTTS`
-    /// target is linked. Idempotent — safe to call multiple times.
-    public func registerSherpaTTS() {
-        // No streaming TTS surface yet; the engine vends a single-shot
-        // synthesize() per request. The audio modality is shared with
-        // sherpa ASR (via OctomilRuntimeSherpa), so we register under a
-        // distinct .sherpaTTS engine key when available, falling back to
-        // .sherpa otherwise.
-        register(modality: .audio, engine: .sherpa) { url in
-            SherpaTtsAudioRuntimeAdapter(modelPath: url)
-        }
-    }
-}
-
 // MARK: - Runtime Evidence
 
 extension InstalledRuntime {
@@ -48,23 +30,16 @@ extension InstalledRuntime {
     }
 }
 
-// MARK: - Runtime Adapter
-
-/// Thin adapter exposing ``SherpaTtsEngine`` to the runtime registry.
-final class SherpaTtsAudioRuntimeAdapter: @unchecked Sendable {
-    private let modelPath: URL
-    private var engine: SherpaTtsEngine?
-
-    init(modelPath: URL) {
-        self.modelPath = modelPath
-    }
-
-    /// Lazily load the engine. Returns the cached instance after the first call.
-    func ensureLoaded() throws -> SherpaTtsEngine {
-        if let engine { return engine }
-        let loaded = try SherpaTtsEngine(modelPath: modelPath)
-        self.engine = loaded
-        return loaded
-    }
-}
+// MARK: - Notes
+//
+// Unlike the streaming-ASR sibling (OctomilRuntimeSherpa), TTS does NOT
+// plug into ``EngineRegistry``: that registry's factory contract returns
+// ``StreamingInferenceEngine``, which is shaped for token-streaming text
+// inference, not single-shot synthesis. TTS callers construct
+// ``SherpaTtsEngine(modelPath:)`` directly and call ``synthesize(text:...)``,
+// the same way ``SherpaTtsRuntime`` works on Android.
+//
+// If a streaming TTS surface ships in the future (token/sample streaming
+// to a `<audio>`-style consumer), it will land as a new TTS-specific
+// registry seam, not by widening ``EngineRegistry``.
 #endif

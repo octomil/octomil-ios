@@ -8,6 +8,12 @@
 import OctomilRuntimeLlama
 #if canImport(sherpa_onnx)
 import OctomilRuntimeSherpa
+// Re-exported so callers writing only `import OctomilClient` get
+// `SherpaTtsEngine` and `InstalledRuntime.sherpaTtsEvidence` without an
+// extra module import. TTS does not auto-register: see the comment block
+// in OctomilRuntimeSherpaTTS/SherpaTtsRegistration.swift for why it does
+// not plug into EngineRegistry.
+@_exported import OctomilRuntimeSherpaTTS
 #endif
 import OctomilRuntimeWhisper
 import OctomilMLX
