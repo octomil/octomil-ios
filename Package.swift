@@ -40,6 +40,7 @@ let package = Package(
                 "Octomil",
                 "OctomilRuntimeLlama",
                 .target(name: "OctomilRuntimeSherpa", condition: .when(platforms: [.iOS])),
+                .target(name: "OctomilRuntimeSherpaTTS", condition: .when(platforms: [.iOS])),
                 "OctomilRuntimeWhisper",
                 "OctomilMLX",
                 "OctomilTimeSeries",
@@ -72,6 +73,20 @@ let package = Package(
                 .target(name: "onnxruntime", condition: .when(platforms: [.iOS])),
             ],
             path: "Sources/OctomilRuntimeSherpa"
+        ),
+        .target(
+            // Optional on-device TTS runtime backed by sherpa-onnx (Kokoro / VITS).
+            // Sibling to OctomilRuntimeSherpa (ASR) so callers that only ship
+            // STT do not pull in TTS resources, and vice versa. Shares the
+            // same sherpa_onnx + onnxruntime xcframeworks; the actual TTS
+            // engine binding lives in this target.
+            name: "OctomilRuntimeSherpaTTS",
+            dependencies: [
+                "Octomil",
+                .target(name: "sherpa_onnx", condition: .when(platforms: [.iOS])),
+                .target(name: "onnxruntime", condition: .when(platforms: [.iOS])),
+            ],
+            path: "Sources/OctomilRuntimeSherpaTTS"
         ),
         .target(
             name: "OctomilRuntimeWhisper",
