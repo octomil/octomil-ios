@@ -47,7 +47,7 @@ extension InstalledRuntime {
         artifactDigest: String? = nil
     ) -> InstalledRuntime {
         modelCapable(
-            engine: "whisper.cpp",
+            engine: "sherpa-onnx",
             model: model,
             capabilities: ["audio_transcription"],
             artifactDigest: artifactDigest,
