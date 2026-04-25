@@ -4,5 +4,5 @@
 import Foundation
 
 public enum OctomilVersion {
-    public static let current = "1.3.1"
+    public static let current = "1.4.0"
 }
