@@ -146,7 +146,7 @@ public actor PrepareManager {
     /// unavailable rather than committing to local and failing.
     public nonisolated func canPrepare(_ candidate: PrepareCandidate) -> Bool {
         do {
-            try Self.validateForPrepare(candidate)
+            try Self.validateForPrepare(candidate, expandedRecipe: nil)
             return true
         } catch {
             return false
@@ -173,10 +173,14 @@ public actor PrepareManager {
     /// ``PrepareOutcome``. Throws on unpreparable candidates,
     /// policy violations, or download exhaustion.
     public func prepare(_ candidate: PrepareCandidate, mode: PrepareMode = .lazy) async throws -> PrepareOutcome {
-        try Self.validateForPrepare(candidate)
+        // Mode gate runs first because it depends only on the
+        // candidate's policy, not its artifact contents.
         try Self.checkExplicitOnlyVsMode(candidate, mode: mode)
 
         if !candidate.prepareRequired {
+            // No artifact validation needed — the engine manages
+            // its own bytes (e.g. an external endpoint).
+            try Self.validateForPrepare(candidate, expandedRecipe: nil)
             return PrepareOutcome(
                 artifactId: Self.artifactId(of: candidate),
                 artifactDir: cacheDir,
@@ -193,14 +197,42 @@ public actor PrepareManager {
                     "This is a server contract violation; refusing to prepare."
             )
         }
-        // PR C-followup option 2.
-        artifact = try expandStaticRecipeSource(artifact)
+        // Reviewer P1: expand the static-recipe source BEFORE
+        // structural validation. A planner candidate with only
+        // ``source='static_recipe', recipeId='kokoro-82m'`` and no
+        // download_urls / digest is the new contract — the SDK
+        // fills canonical metadata from the registry. Validating
+        // first would reject "missing download_urls" before
+        // expansion runs.
+        var usedRecipe: StaticRecipe? = nil
+        (artifact, usedRecipe) = try expandStaticRecipeSource(artifact)
+        // Build a synthetic candidate carrying the expanded
+        // artifact for the structural validator.
+        let expandedCandidate = PrepareCandidate(
+            locality: candidate.locality,
+            engine: candidate.engine,
+            artifact: artifact,
+            deliveryMode: candidate.deliveryMode,
+            prepareRequired: candidate.prepareRequired,
+            preparePolicy: candidate.preparePolicy
+        )
+        try Self.validateForPrepare(expandedCandidate, expandedRecipe: usedRecipe)
 
         let descriptor = try Self.buildDescriptor(from: artifact)
         let dir = try artifactDirFor(descriptor.artifactId)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         if let cached = try await Self.alreadyVerified(descriptor, in: dir) {
+            // Reviewer P1: even on a cache hit, run the recipe's
+            // ``MaterializationPlan`` idempotently. The marker check
+            // makes a complete layout a no-op; a partial extraction
+            // (interrupted before required_outputs all landed) gets
+            // re-extracted from the on-disk archive. Without this,
+            // the cache hit would return ``files`` pointing only at
+            // the archive instead of the unpacked layout.
+            if let recipe = usedRecipe {
+                try Materializer.materialize(plan: recipe.materialization, in: dir)
+            }
             return PrepareOutcome(
                 artifactId: descriptor.artifactId,
                 artifactDir: dir,
@@ -213,6 +245,14 @@ public actor PrepareManager {
         }
 
         let result = try await downloader.download(descriptor: descriptor, destDir: dir)
+        // Reviewer P1: post-download materialization. Without this
+        // the artifact_dir contains only the recipe's archive
+        // (e.g. ``kokoro-en-v0_19.tar.bz2``) instead of the
+        // unpacked layout the iOS Sherpa TTS engine expects
+        // (model.onnx / voices.bin / tokens.txt / espeak-ng-data/).
+        if let recipe = usedRecipe {
+            try Materializer.materialize(plan: recipe.materialization, in: dir)
+        }
         return PrepareOutcome(
             artifactId: descriptor.artifactId,
             artifactDir: dir,
@@ -258,7 +298,14 @@ public actor PrepareManager {
 
     // MARK: - Validation
 
-    private static func validateForPrepare(_ candidate: PrepareCandidate) throws {
+    /// Reviewer P1: when the caller has already expanded a
+    /// ``source="static_recipe"`` candidate via the recipe registry,
+    /// the artifact carries canonical digest / downloadUrls /
+    /// requiredFiles and the structural rules below apply normally.
+    /// Otherwise, an unexpanded ``source="static_recipe"`` candidate
+    /// is admitted iff the recipe is registered (so callers can
+    /// dry-run via ``canPrepare`` without performing expansion).
+    private static func validateForPrepare(_ candidate: PrepareCandidate, expandedRecipe: StaticRecipe?) throws {
         guard candidate.locality == "local" else {
             throw PrepareError.invalidInput("Candidate locality is \(candidate.locality.debugDescription); only \"local\" candidates are preparable.")
         }
@@ -272,14 +319,29 @@ public actor PrepareManager {
         guard let artifact = candidate.artifact else {
             throw PrepareError.invalidInput("Candidate has prepareRequired=true but no artifact plan.")
         }
+        // Unexpanded static-recipe candidate: defer to the recipe
+        // table for digest / downloadUrls / requiredFiles. Validate
+        // by checking the recipe is registered (so unknown ids fail
+        // fast); the rest of the structural checks apply post-
+        // expansion in the prepare() flow.
+        if expandedRecipe == nil, artifact.source == "static_recipe" {
+            guard let recipeId = artifact.recipeId, !recipeId.isEmpty else {
+                throw PrepareError.invalidInput("Artifact has source='static_recipe' but no recipeId.")
+            }
+            if StaticRecipeRegistry.shared.recipe(for: recipeId) == nil {
+                throw PrepareError.unknownRecipe(
+                    "Artifact source='static_recipe' but recipeId \(recipeId.debugDescription) is not in this SDK's registered recipe table."
+                )
+            }
+            return
+        }
+        if let source = artifact.source, source != "static_recipe" {
+            throw PrepareError.invalidInput("Artifact source \(source.debugDescription) is not recognized by this SDK release. Known sources: 'static_recipe'.")
+        }
         guard let digest = artifact.digest, !digest.isEmpty else {
             throw PrepareError.invalidInput("Artifact '\(artifact.artifactId ?? artifact.modelId)' is missing 'digest'; refusing to prepare without integrity.")
         }
         guard !artifact.downloadUrls.isEmpty else {
-            // ``source="static_recipe"`` lets the planner skip
-            // downloadUrls; ``expandStaticRecipeSource`` populates
-            // them. Allow that case through so the expansion can run.
-            if artifact.source == "static_recipe" { return }
             throw PrepareError.invalidInput("Artifact '\(artifact.artifactId ?? artifact.modelId)' has no downloadUrls. Cannot prepare; the planner must emit at least one endpoint.")
         }
         if artifact.requiredFiles.count > 1, artifact.manifestUri == nil {
@@ -312,8 +374,8 @@ public actor PrepareManager {
     /// ``source="static_recipe"`` for an unregistered ``recipeId``
     /// will hit the downstream missing-downloadUrls branch with a
     /// clear actionable error.
-    private nonisolated func expandStaticRecipeSource(_ artifact: PrepareArtifactPlan) throws -> PrepareArtifactPlan {
-        guard let source = artifact.source else { return artifact }
+    private nonisolated func expandStaticRecipeSource(_ artifact: PrepareArtifactPlan) throws -> (PrepareArtifactPlan, StaticRecipe?) {
+        guard let source = artifact.source else { return (artifact, nil) }
         if source != "static_recipe" {
             throw PrepareError.invalidInput("Artifact source \(source.debugDescription) is not recognized by this SDK release. Known sources: 'static_recipe'.")
         }
@@ -333,7 +395,7 @@ public actor PrepareManager {
         if !artifact.requiredFiles.isEmpty, artifact.requiredFiles != [recipe.file.relativePath] {
             throw PrepareError.invalidInput("Static recipe \(recipeId.debugDescription) ships file \(recipe.file.relativePath.debugDescription); planner-declared requiredFiles \(artifact.requiredFiles) does not match.")
         }
-        return PrepareArtifactPlan(
+        let expanded = PrepareArtifactPlan(
             modelId: artifact.modelId,
             artifactId: artifact.artifactId ?? recipe.modelId,
             digest: recipe.file.digest,
@@ -344,6 +406,7 @@ public actor PrepareManager {
             source: nil,
             recipeId: nil
         )
+        return (expanded, recipe)
     }
 
     // MARK: - Descriptor / cache
@@ -411,13 +474,48 @@ public struct StaticRecipeFile: Sendable {
     }
 }
 
+/// Reviewer P1 (#2): a static recipe carries both download
+/// metadata AND a ``MaterializationPlan`` so the post-download
+/// archive can be unpacked into the layout the runtime engine
+/// expects (e.g. Sherpa Kokoro: ``model.onnx`` / ``voices.bin`` /
+/// ``tokens.txt`` / ``espeak-ng-data/``). Mirrors Python's
+/// ``StaticRecipe.materialization``.
+public struct MaterializationPlan: Sendable {
+    public enum Kind: String, Sendable { case none, archive }
+    public enum ArchiveFormat: String, Sendable { case tarBz2 = "tar.bz2", tarGz = "tar.gz", tar, zip }
+
+    public let kind: Kind
+    /// Relative path of the downloaded archive within
+    /// ``artifactDir``. Required when ``kind == .archive``.
+    public let source: String?
+    public let archiveFormat: ArchiveFormat?
+    /// Path prefix to strip from each archive member's destination
+    /// (matches ``tar --strip-components`` semantics). Acts as an
+    /// allowlist boundary: members outside the prefix are skipped.
+    public let stripPrefix: String?
+    /// Paths the runtime engine reads at inference time. The
+    /// idempotency check + completeness assertion both key off
+    /// this list.
+    public let requiredOutputs: [String]
+
+    public init(kind: Kind = .none, source: String? = nil, archiveFormat: ArchiveFormat? = nil, stripPrefix: String? = nil, requiredOutputs: [String] = []) {
+        self.kind = kind
+        self.source = source
+        self.archiveFormat = archiveFormat
+        self.stripPrefix = stripPrefix
+        self.requiredOutputs = requiredOutputs
+    }
+}
+
 public struct StaticRecipe: Sendable {
     public let modelId: String
     public let file: StaticRecipeFile
+    public let materialization: MaterializationPlan
 
-    public init(modelId: String, file: StaticRecipeFile) {
+    public init(modelId: String, file: StaticRecipeFile, materialization: MaterializationPlan = MaterializationPlan()) {
         self.modelId = modelId
         self.file = file
+        self.materialization = materialization
     }
 }
 
@@ -443,7 +541,14 @@ public final class StaticRecipeRegistry: @unchecked Sendable {
             url: URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models")!,
             digest: "sha256:912804855a04745fa77a30be545b3f9a5d15c4d66db00b88cbcd4921df605ac7"
         )
-        let kokoro = StaticRecipe(modelId: "kokoro-82m", file: kokoroFile)
+        let kokoroPlan = MaterializationPlan(
+            kind: .archive,
+            source: "kokoro-en-v0_19.tar.bz2",
+            archiveFormat: .tarBz2,
+            stripPrefix: "kokoro-en-v0_19/",
+            requiredOutputs: ["model.onnx", "voices.bin", "tokens.txt", "espeak-ng-data/phontab"]
+        )
+        let kokoro = StaticRecipe(modelId: "kokoro-82m", file: kokoroFile, materialization: kokoroPlan)
         self.recipes = [
             "kokoro-82m": kokoro,
             "kokoro-en-v0_19": kokoro,

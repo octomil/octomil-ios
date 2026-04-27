@@ -365,16 +365,75 @@ public actor DurableDownloader {
         return relativePath
     }
 
+    /// Reviewer P1: lexical containment alone is insufficient. If
+    /// ``destDir`` already contains ``linkdir → /tmp/outside``
+    /// (planted by an earlier extraction, hostile sibling
+    /// artifact, or misconfigured cache), a member like
+    /// ``linkdir/escaped.txt`` passes the lexical check but
+    /// ``moveItem`` follows the symlink and writes outside the
+    /// artifact directory. This function:
+    ///
+    /// 1. Resolves ``destDir`` through any pre-existing symlinks
+    ///    (``URL.resolvingSymlinksInPath()``).
+    /// 2. Resolves the deepest existing ancestor of the candidate
+    ///    path, then verifies the resolved path is contained.
+    /// 3. Walks every existing ancestor under ``destDir`` and
+    ///    refuses if any of them is itself a symlink whose target
+    ///    leaves ``destDir`` (defense in depth: even if step 2
+    ///    happens to land inside, a subsequent ``moveItem``
+    ///    follows the link).
+    ///
+    /// Mirrors Python's ``_safe_join_under`` and Node's
+    /// ``safeJoin`` post-PR-12-fix.
     public static func safeJoin(destDir: URL, relativePath: String) throws -> URL {
         let safe = try validateRelativePath(relativePath)
-        let base = destDir.standardizedFileURL
-        if safe.isEmpty { return base }
-        let candidate = base.appendingPathComponent(safe).standardizedFileURL
-        let basePath = base.path + "/"
-        guard candidate.path == base.path || candidate.path.hasPrefix(basePath) else {
+        let baseResolved = realpathExisting(destDir.standardizedFileURL)
+        if safe.isEmpty { return baseResolved }
+        let candidate = baseResolved.appendingPathComponent(safe).standardizedFileURL
+        let candidateResolved = realpathExisting(candidate)
+        let basePathWithSep = baseResolved.path + "/"
+        guard candidateResolved.path == baseResolved.path || candidateResolved.path.hasPrefix(basePathWithSep) else {
             throw DownloadError.invalidRelativePath(relativePath, reason: "resolves outside the artifact directory")
         }
-        return candidate
+        // Defense in depth: walk every existing ancestor below
+        // ``baseResolved``; refuse if any is a symlink whose target
+        // escapes the base. Without this, an in-tree symlink whose
+        // target ALSO lives in tree but redirects file writes to a
+        // sensitive existing path could slip through step 1.
+        var cursor = candidate.deletingLastPathComponent()
+        while cursor.path != baseResolved.path && cursor.path != cursor.deletingLastPathComponent().path {
+            if let stat = try? FileManager.default.attributesOfItem(atPath: cursor.path),
+               let type = stat[.type] as? FileAttributeType, type == .typeSymbolicLink {
+                let target = realpathExisting(cursor)
+                guard target.path == baseResolved.path || target.path.hasPrefix(basePathWithSep) else {
+                    throw DownloadError.invalidRelativePath(relativePath, reason: "crosses a symlink that escapes the artifact directory")
+                }
+            }
+            cursor = cursor.deletingLastPathComponent()
+        }
+        return candidateResolved
+    }
+
+    /// Resolve symlinks for whatever portion of ``url`` exists,
+    /// then re-append the not-yet-existing tail. Equivalent to the
+    /// Node ``realpathExisting`` helper.
+    private static func realpathExisting(_ url: URL) -> URL {
+        var head = url.standardizedFileURL
+        var tail: [String] = []
+        while true {
+            if FileManager.default.fileExists(atPath: head.path) {
+                let resolved = head.resolvingSymlinksInPath()
+                var out = resolved
+                for part in tail { out = out.appendingPathComponent(part) }
+                return out.standardizedFileURL
+            }
+            let parent = head.deletingLastPathComponent()
+            if parent.path == head.path {
+                return url.standardizedFileURL
+            }
+            tail.insert(head.lastPathComponent, at: 0)
+            head = parent
+        }
     }
 
     public static func digestMatches(filePath: URL, expected: String) async throws -> Bool {
