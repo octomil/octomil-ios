@@ -54,14 +54,33 @@ public final class AudioTranscriptions: @unchecked Sendable {
         model: String,
         language: String? = nil,
         responseFormat: TranscriptionResponseFormat = .text,
-        timestampGranularities: [TimestampGranularity] = []
+        timestampGranularities: [TimestampGranularity] = [],
+        policy: AppRoutingPolicy? = nil,
+        app: AppManifest? = nil
     ) async throws -> TranscriptionResult {
         try validateOptions(
             responseFormat: responseFormat,
             timestampGranularities: timestampGranularities
         )
 
-        guard let runtime = runtimeResolver(.id(model)) else {
+        // Mirror AudioSpeech: an @app/<slug>/transcription ref preserves
+        // the app identity, and the resolved routing policy enforces
+        // local-only/private fail-closed semantics when the runtime is
+        // unavailable.
+        let parsed = ParsedModelRef.parse(model)
+        let resolvedPolicy = AudioSpeech.resolvePolicyForTranscription(
+            explicit: policy,
+            app: app,
+            parsed: parsed
+        )
+
+        guard let runtime = runtimeResolver(.id(parsed.modelSlug ?? model)) else {
+            if AudioSpeech.deniesCloudFallback(resolvedPolicy) {
+                throw OctomilError.cloudFallbackDisallowed(
+                    reason: "Transcription routing policy '\(resolvedPolicy?.rawValue ?? "local_only")' " +
+                        "forbids cloud fallback and the local runtime is unavailable for model '\(model)'."
+                )
+            }
             throw OctomilError.runtimeUnavailable(reason: "No runtime for model '\(model)'")
         }
 
@@ -74,6 +93,48 @@ public final class AudioTranscriptions: @unchecked Sendable {
         return TranscriptionResult(
             text: response.text,
             language: language
+        )
+    }
+
+    // MARK: - Warmup
+
+    /// Prepare the artifact and load (warm) the transcription runtime
+    /// so the next ``create`` call reuses the cached handle. Mirrors
+    /// ``AudioSpeech.warmup`` so the unified facade's ``warmup``
+    /// dispatcher can drive both capabilities through one entry point.
+    @discardableResult
+    public func warmup(
+        model: String,
+        app: AppManifest? = nil
+    ) async throws -> WarmupOutcome {
+        let parsed = ParsedModelRef.parse(model)
+        let modelId = parsed.modelSlug ?? model
+        let resolvedPolicy = AudioSpeech.resolvePolicyForTranscription(
+            explicit: nil,
+            app: app,
+            parsed: parsed
+        )
+        // Ask the runtime resolver — if a transcription runtime is
+        // already wired up (e.g. Whisper bundled, Sherpa ASR, or a
+        // test mock) we treat that as a "warm" hit.
+        if let _ = runtimeResolver(.id(modelId)) {
+            let cacheDir = PrepareManager.defaultCacheDir()
+            return WarmupOutcome(
+                modelId: modelId,
+                engine: parsed.kind == .app ? "app_runtime" : "transcription_runtime",
+                artifactDir: cacheDir,
+                cached: true
+            )
+        }
+        if AudioSpeech.deniesCloudFallback(resolvedPolicy) {
+            throw OctomilError.cloudFallbackDisallowed(
+                reason: "Transcription routing policy '\(resolvedPolicy?.rawValue ?? "local_only")' " +
+                    "forbids cloud fallback and no local runtime is registered for '\(modelId)'."
+            )
+        }
+        throw OctomilError.runtimeUnavailable(
+            reason: "No transcription runtime registered for '\(modelId)'. " +
+                "Register one via the runtime extension targets before calling warmup."
         )
     }
 
