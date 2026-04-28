@@ -4,11 +4,26 @@ import XCTest
 
 final class BackgroundSyncReconcileTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        // ``BackgroundSync.shared`` is a process-wide singleton.
+        // The companion test in this suite calls
+        // ``configureReconciler`` and the configured state leaks
+        // forward, making this test flake when XCTest runs them
+        // in alphabetical order (configure-… first, defaults-…
+        // second). Reset before every test in this suite so each
+        // case sees a deterministic empty state.
+        BackgroundSync.shared._resetReconcilerForTesting()
+    }
+
+    override func tearDown() {
+        BackgroundSync.shared._resetReconcilerForTesting()
+        super.tearDown()
+    }
+
     // MARK: - isReconcileEnabled
 
     func testIsReconcileEnabledDefaultsFalse() {
-        // BackgroundSync.shared is a singleton, but we can verify
-        // reconcileEnabled is false by default when not configured
         let sync = BackgroundSync.shared
         // Without configuring reconciler, isReconcileEnabled should be false
         // Note: This tests the property, not the full flow, since we can't
