@@ -79,12 +79,33 @@ public actor FileLock {
                 .appendingPathComponent("artifacts")
                 .appendingPathComponent(".locks")
         }
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return home
-            .appendingPathComponent(".cache")
-            .appendingPathComponent("octomil")
-            .appendingPathComponent("artifacts")
-            .appendingPathComponent(".locks")
+        // ``homeDirectoryForCurrentUser`` is unavailable on iOS; on
+        // mobile platforms the canonical cache root is the per-app
+        // ``Library/Caches`` directory.
+        #if os(iOS) || os(tvOS) || os(watchOS)
+            if let caches = try? FileManager.default.url(
+                for: .cachesDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ) {
+                return caches
+                    .appendingPathComponent("octomil")
+                    .appendingPathComponent("artifacts")
+                    .appendingPathComponent(".locks")
+            }
+            return URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("octomil")
+                .appendingPathComponent("artifacts")
+                .appendingPathComponent(".locks")
+        #else
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            return home
+                .appendingPathComponent(".cache")
+                .appendingPathComponent("octomil")
+                .appendingPathComponent("artifacts")
+                .appendingPathComponent(".locks")
+        #endif
     }
 
     public var isLocked: Bool { fd >= 0 }

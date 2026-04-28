@@ -278,7 +278,10 @@ public actor PrepareManager {
         }
         // ``Library/Caches`` is the iOS-blessed cache location;
         // outside that platform we fall back to ``~/.cache/octomil``
-        // for parity with Python / Node.
+        // for parity with Python / Node. ``homeDirectoryForCurrentUser``
+        // is unavailable on iOS — gate the macOS fallback behind a
+        // platform check so the iOS build doesn't fail on the
+        // unreachable branch.
         #if os(iOS) || os(tvOS) || os(watchOS)
             if let caches = try? FileManager.default.url(
                 for: .cachesDirectory,
@@ -288,12 +291,16 @@ public actor PrepareManager {
             ) {
                 return caches.appendingPathComponent("octomil").appendingPathComponent("artifacts")
             }
+            return URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("octomil")
+                .appendingPathComponent("artifacts")
+        #else
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            return home
+                .appendingPathComponent(".cache")
+                .appendingPathComponent("octomil")
+                .appendingPathComponent("artifacts")
         #endif
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return home
-            .appendingPathComponent(".cache")
-            .appendingPathComponent("octomil")
-            .appendingPathComponent("artifacts")
     }
 
     // MARK: - Validation

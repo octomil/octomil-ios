@@ -14,12 +14,18 @@
 //
 // Design notes:
 //
-//   - Tar / bz2 / gzip extraction shells out to ``/usr/bin/tar``,
-//     which ships with every Apple platform image. Avoids pulling
-//     in a Swift tar library and matches what real users see when
-//     they curl + tar a Kokoro release manually.
-//   - ZIP extraction shells out to ``/usr/bin/unzip``. Same
-//     reasoning.
+//   - On macOS, archive extraction shells out to ``/usr/bin/tar`` /
+//     ``/usr/bin/unzip``, which ship with every macOS image. This
+//     keeps unit tests fast and matches what real developers see
+//     when they curl + tar a Kokoro release manually.
+//   - On iOS, ``Foundation.Process`` is unavailable AND the iOS
+//     sandbox forbids spawning subprocesses anyway, so a follow-up
+//     PR will wire the iOS path to ``libbz2`` (system library) +
+//     a pure-Swift tar reader. Until then, materialize() throws
+//     ``unsupportedOnPlatform`` on iOS — this is no worse than the
+//     pre-Materializer behavior (where prepare returned the raw
+//     archive that no engine could open), and produces a clear
+//     actionable error rather than a silent half-prepared cache.
 //   - The marker file (``.octomil-materialized``) is written LAST,
 //     after every ``requiredOutputs`` entry is verified on disk.
 //     A partial extraction (interrupted before the marker) is
@@ -47,6 +53,7 @@ public enum MaterializerError: Error, CustomStringConvertible {
     case toolFailed(tool: String, status: Int32, output: String)
     case requiredOutputsMissing([String], in: URL)
     case invalidPlan(String)
+    case unsupportedOnPlatform(String)
 
     public var description: String {
         switch self {
@@ -62,6 +69,8 @@ public enum MaterializerError: Error, CustomStringConvertible {
             return "Materializer: required outputs missing under \(dir.path): \(missing)."
         case let .invalidPlan(message):
             return "Materializer: invalid plan: \(message)"
+        case let .unsupportedOnPlatform(message):
+            return "Materializer: \(message)"
         }
     }
 }
@@ -121,12 +130,7 @@ public enum Materializer {
         defer { try? FileManager.default.removeItem(at: staging) }
 
         let format = plan.archiveFormat ?? Self.inferArchiveFormat(source: source)
-        switch format {
-        case .tarBz2, .tarGz, .tar:
-            try runTar(archive: archiveURL, into: staging, format: format)
-        case .zip:
-            try runUnzip(archive: archiveURL, into: staging)
-        }
+        try extractArchive(archiveURL, into: staging, format: format)
 
         try copyAllowlist(from: staging, into: artifactDir, stripPrefix: plan.stripPrefix)
         try assertLayoutComplete(plan: plan, in: artifactDir)
@@ -138,6 +142,32 @@ public enum Materializer {
         _ = try FileManager.default.replaceItemAt(markerURL, withItemAt: tmpMarker)
     }
 
+    /// Platform-specific archive extraction. macOS shells out to
+    /// ``/usr/bin/tar`` / ``/usr/bin/unzip``; iOS throws
+    /// ``unsupportedOnPlatform`` until the libbz2-based path lands.
+    private static func extractArchive(_ archive: URL, into staging: URL, format: MaterializationPlan.ArchiveFormat) throws {
+        #if os(macOS)
+            switch format {
+            case .tarBz2, .tarGz, .tar:
+                try runTar(archive: archive, into: staging, format: format)
+            case .zip:
+                try runUnzip(archive: archive, into: staging)
+            }
+        #else
+            // iOS: Foundation.Process is unavailable AND the iOS
+            // sandbox forbids spawning subprocesses. Surface a clear
+            // error instead of silently producing a half-prepared
+            // cache. Follow-up: wire libbz2 (system library on iOS)
+            // + a pure-Swift tar reader so this path becomes a
+            // first-class implementation.
+            throw MaterializerError.unsupportedOnPlatform(
+                "archive extraction (format=\(format.rawValue)) is not yet implemented on this platform; " +
+                    "host or pre-extract the archive on a platform with /usr/bin/tar."
+            )
+        #endif
+    }
+
+    #if os(macOS)
     private static func runTar(archive: URL, into staging: URL, format: MaterializationPlan.ArchiveFormat) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
@@ -174,6 +204,7 @@ public enum Materializer {
             throw MaterializerError.toolFailed(tool: name, status: process.terminationStatus, output: output)
         }
     }
+    #endif
 
     private static func copyAllowlist(from staging: URL, into artifactDir: URL, stripPrefix: String?) throws {
         let prefix = stripPrefix.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
