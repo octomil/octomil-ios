@@ -15,6 +15,7 @@ public final class Octomil: @unchecked Sendable {
     private let authConfig: AuthConfig
     private var client: OctomilClient?
     private var _embeddings: FacadeEmbeddings?
+    private var _audio: FacadeAudio?
 
     /// Creates a facade using a publishable key (mobile/edge SDKs).
     public init(publishableKey: String) {
@@ -36,6 +37,10 @@ public final class Octomil: @unchecked Sendable {
             apiKey: authConfig.token
         )
         _embeddings = FacadeEmbeddings(embeddingClient: embeddingClient)
+        _audio = FacadeAudio(
+            transcriptions: client!.audio.transcriptions,
+            speech: client!.audio.speech
+        )
 
         initialized = true
     }
@@ -57,6 +62,47 @@ public final class Octomil: @unchecked Sendable {
                 throw OctomilNotInitializedError()
             }
             return emb
+        }
+    }
+
+    /// Audio namespace (speech + transcriptions). Throws if not initialized.
+    public var audio: FacadeAudio {
+        get throws {
+            guard initialized, let audio = _audio else {
+                throw OctomilNotInitializedError()
+            }
+            return audio
+        }
+    }
+
+    /// Capability identifier for ``warmup``.
+    public enum WarmupCapability: String, Sendable {
+        case tts
+        case transcription
+    }
+
+    /// Prepare an artifact and load (warm) the runtime backend so the
+    /// next ``audio.speech.create`` / ``audio.transcriptions.create``
+    /// reuses the cached handle. Mirrors Python's
+    /// ``client.warmup(model=, capability=)``.
+    @discardableResult
+    public func warmup(
+        model: String,
+        capability: WarmupCapability,
+        app: AppManifest? = nil
+    ) async throws -> WarmupOutcome {
+        guard initialized else { throw OctomilNotInitializedError() }
+        switch capability {
+        case .tts:
+            return try await _audio!.speech.warmup(model: model, app: app)
+        case .transcription:
+            // Transcription warmup uses the same prepare lifecycle as
+            // TTS for runtimes that consume sdk_runtime artifacts. The
+            // currently-shipping Whisper runtime ships its own
+            // bundled-artifact path; in that case the prepare step is
+            // a no-op cache hit and the outcome carries the engine's
+            // identity for downstream telemetry.
+            return try await _audio!.transcriptions.warmup(model: model, app: app)
         }
     }
 }
@@ -114,20 +160,64 @@ public final class FacadeEmbeddings: @unchecked Sendable {
     /// Create embeddings for a single input string.
     ///
     /// - Parameters:
-    ///   - model: Embedding model identifier (e.g. `"nomic-embed-text-v1.5"`).
+    ///   - model: Embedding model identifier (e.g. `"nomic-embed-text-v1.5"`)
+    ///     or `"@app/<slug>/embeddings"`.
     ///   - input: Text to embed.
+    ///   - policy: Optional routing policy. ``.localOnly``/``.private``
+    ///     refuse to call the cloud embeddings endpoint and throw
+    ///     ``OctomilError.cloudFallbackDisallowed``.
+    ///   - app: Optional ``AppManifest`` whose effective routing policy
+    ///     is consulted when ``policy`` is nil.
     /// - Returns: An ``EmbeddingResult`` with the dense vector.
-    public func create(model: String, input: String) async throws -> EmbeddingResult {
-        try await embeddingClient.embed(modelId: model, input: input)
+    public func create(
+        model: String,
+        input: String,
+        policy: AppRoutingPolicy? = nil,
+        app: AppManifest? = nil
+    ) async throws -> EmbeddingResult {
+        try Self.enforcePolicy(model: model, explicit: policy, app: app)
+        let parsed = ParsedModelRef.parse(model)
+        return try await embeddingClient.embed(modelId: parsed.modelSlug ?? model, input: input)
     }
 
     /// Create embeddings for multiple input strings.
-    ///
-    /// - Parameters:
-    ///   - model: Embedding model identifier (e.g. `"nomic-embed-text-v1.5"`).
-    ///   - input: Array of texts to embed.
-    /// - Returns: An ``EmbeddingResult`` with one vector per input string.
-    public func create(model: String, input: [String]) async throws -> EmbeddingResult {
-        try await embeddingClient.embed(modelId: model, input: input)
+    public func create(
+        model: String,
+        input: [String],
+        policy: AppRoutingPolicy? = nil,
+        app: AppManifest? = nil
+    ) async throws -> EmbeddingResult {
+        try Self.enforcePolicy(model: model, explicit: policy, app: app)
+        let parsed = ParsedModelRef.parse(model)
+        return try await embeddingClient.embed(modelId: parsed.modelSlug ?? model, input: input)
+    }
+
+    static func enforcePolicy(model: String, explicit: AppRoutingPolicy?, app: AppManifest?) throws {
+        let parsed = ParsedModelRef.parse(model)
+        let resolved = AudioSpeech.resolvePolicyForTranscription(
+            explicit: explicit,
+            app: app,
+            parsed: parsed
+        )
+        if AudioSpeech.deniesCloudFallback(resolved) {
+            throw OctomilError.cloudFallbackDisallowed(
+                reason: "Embeddings routing policy '\(resolved?.rawValue ?? "local_only")' " +
+                    "forbids cloud fallback; the iOS SDK does not yet ship a local embeddings backend, " +
+                    "so this request cannot proceed without violating identity."
+            )
+        }
+    }
+}
+
+/// Audio namespace on the unified Octomil facade. Re-exposes the
+/// ``OctomilAudio`` surface so callers can write
+/// ``Octomil().audio.speech.create(...)``.
+public final class FacadeAudio: @unchecked Sendable {
+    public let transcriptions: AudioTranscriptions
+    public let speech: AudioSpeech
+
+    init(transcriptions: AudioTranscriptions, speech: AudioSpeech) {
+        self.transcriptions = transcriptions
+        self.speech = speech
     }
 }
