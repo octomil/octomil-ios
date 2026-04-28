@@ -108,10 +108,12 @@ final class APIClientTests: XCTestCase {
             _ = try await client.sendHeartbeat(deviceId: "device-1")
             XCTFail("Expected error")
         } catch let error as OctomilError {
-            if case .invalidAPIKey = error {
-                // Expected
+            // APIClient.swift maps 401 → authenticationFailed(reason)
+            // when the response body lacks a contract ``code`` field.
+            if case .authenticationFailed(let reason) = error {
+                XCTAssertEqual(reason, "Token expired")
             } else {
-                XCTFail("Expected invalidAPIKey, got \(error)")
+                XCTFail("Expected authenticationFailed, got \(error)")
             }
         } catch {
             XCTFail("Unexpected error: \(error)")
@@ -130,10 +132,11 @@ final class APIClientTests: XCTestCase {
             _ = try await client.sendHeartbeat(deviceId: "device-1")
             XCTFail("Expected error")
         } catch let error as OctomilError {
-            if case .authenticationFailed(let reason) = error {
+            // APIClient.swift maps 403 → forbidden(reason).
+            if case .forbidden(let reason) = error {
                 XCTAssertEqual(reason, "Forbidden access")
             } else {
-                XCTFail("Expected authenticationFailed, got \(error)")
+                XCTFail("Expected forbidden, got \(error)")
             }
         } catch {
             XCTFail("Unexpected error: \(error)")

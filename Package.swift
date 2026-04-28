@@ -53,8 +53,18 @@ let package = Package(
         // ──────────────────────────────────────────────
         .target(
             name: "Octomil",
-            dependencies: [],
+            dependencies: ["COctomilBZ2"],
             path: "Sources/Octomil"
+        ),
+
+        // System library wrapper for libbz2; used by the prepare-
+        // lifecycle Materializer to extract Kokoro-style tar.bz2
+        // archives without shelling out to /usr/bin/tar (which iOS
+        // doesn't have). Pure-Swift TAR parsing pairs with this on
+        // top of the streaming decompressor.
+        .systemLibrary(
+            name: "COctomilBZ2",
+            path: "Sources/COctomilBZ2"
         ),
 
         // ──────────────────────────────────────────────
