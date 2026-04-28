@@ -98,7 +98,14 @@ public final class OctomilResponses: @unchecked Sendable {
         cacheResponse(response)
 
         // Emit route telemetry (privacy-safe, no content)
-        emitRouteTelemetry(metadata: metadata, requestId: response.id, capability: routingContext.capability)
+        emitRouteTelemetry(
+            metadata: metadata,
+            requestId: response.id,
+            capability: routingContext.capability,
+            candidateAttempts: attemptResult.attempts.count,
+            fallbackTriggerCode: attemptResult.fallbackTrigger?.code,
+            fallbackTriggerStage: attemptResult.fallbackTrigger?.stage
+        )
 
         return response
     }
@@ -292,7 +299,10 @@ public final class OctomilResponses: @unchecked Sendable {
                     self.emitRouteTelemetry(
                         metadata: metadata,
                         requestId: responseId,
-                        capability: routingContext.capability
+                        capability: routingContext.capability,
+                        candidateAttempts: candidateAttemptCount,
+                        fallbackTriggerCode: fallbackTriggerCode ?? attemptReadiness.fallbackTrigger?.code,
+                        fallbackTriggerStage: attemptReadiness.fallbackTrigger?.stage
                     )
 
                     continuation.yield(.done(response))
@@ -493,7 +503,14 @@ public final class OctomilResponses: @unchecked Sendable {
     }
 
     /// Emit route telemetry event. Privacy-safe: no prompt/output/content.
-    private func emitRouteTelemetry(metadata: RouteMetadata, requestId: String, capability: String) {
+    private func emitRouteTelemetry(
+        metadata: RouteMetadata,
+        requestId: String,
+        capability: String,
+        candidateAttempts: Int,
+        fallbackTriggerCode: String? = nil,
+        fallbackTriggerStage: String? = nil
+    ) {
         let routeEvent = RouteEvent(
             requestId: requestId,
             capability: capability,
@@ -502,6 +519,9 @@ public final class OctomilResponses: @unchecked Sendable {
             finalMode: metadata.execution?.mode ?? "unavailable",
             engine: metadata.execution?.engine,
             fallbackUsed: metadata.fallback.used,
+            fallbackTriggerCode: fallbackTriggerCode,
+            fallbackTriggerStage: fallbackTriggerStage,
+            candidateAttempts: candidateAttempts,
             modelRef: metadata.model.requested.ref,
             modelRefKind: metadata.model.requested.kind,
             artifactId: metadata.artifact?.id,
