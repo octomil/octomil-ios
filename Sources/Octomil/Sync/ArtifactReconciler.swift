@@ -398,11 +398,14 @@ public actor ArtifactReconciler {
         if lower.hasSuffix("tokenizer_config.json") {
             return ArtifactResourceKind.tokenizerConfig.rawValue
         }
-        if lower.hasSuffix("config.json") || lower.hasSuffix("model_config.json") {
-            return ArtifactResourceKind.modelConfig.rawValue
-        }
+        // ``generation_config.json`` ends with ``config.json`` too —
+        // check the more specific suffix first so it doesn't get
+        // shadowed by the general model-config branch.
         if lower.hasSuffix("generation_config.json") {
             return ArtifactResourceKind.generationConfig.rawValue
+        }
+        if lower.hasSuffix("config.json") || lower.hasSuffix("model_config.json") {
+            return ArtifactResourceKind.modelConfig.rawValue
         }
         if lower.hasSuffix("vocab.json") || lower.hasSuffix("vocab.txt") {
             return ArtifactResourceKind.vocab.rawValue
