@@ -158,14 +158,32 @@ final class OutputQualityGatesTests: XCTestCase {
         }
     }
 
-    func testClassifyGateAll18CodesAreMapped() {
-        // Every GateCode case should have an entry in GATE_CLASSIFICATION
+    func testClassifyGateAllCodesAreMapped() {
+        // Every GateCode case must have an entry in GATE_CLASSIFICATION.
         for gateCode in GateCode.allCases {
             let classification = GATE_CLASSIFICATION[gateCode.rawValue]
             XCTAssertNotNil(classification, "GateCode.\(gateCode) (\(gateCode.rawValue)) must be in GATE_CLASSIFICATION")
         }
-        XCTAssertEqual(GateCode.allCases.count, 18, "Should have exactly 18 gate codes")
-        XCTAssertEqual(GATE_CLASSIFICATION.count, 18, "GATE_CLASSIFICATION should have exactly 18 entries")
+        XCTAssertEqual(GateCode.allCases.count, 18, "Should have exactly 18 GateCode enum cases")
+
+        // GATE_CLASSIFICATION also includes device-environment gates that are
+        // intentionally string-keyed only (not part of the GateCode enum because
+        // they originate from device telemetry rather than the planner).
+        let deviceEnvironmentGates = [
+            "min_battery_pct",
+            "max_thermal_state",
+            "require_charging",
+            "require_wifi",
+        ]
+        for code in deviceEnvironmentGates {
+            XCTAssertNotNil(GATE_CLASSIFICATION[code], "Device-environment gate \(code) must be in GATE_CLASSIFICATION")
+        }
+
+        XCTAssertEqual(
+            GATE_CLASSIFICATION.count,
+            GateCode.allCases.count + deviceEnvironmentGates.count,
+            "GATE_CLASSIFICATION should cover every GateCode plus the device-environment gates (currently 22 total)"
+        )
     }
 
     func testClassifyGateUnknownCodeReturnsReadinessDefault() {
