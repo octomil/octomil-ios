@@ -410,7 +410,11 @@ final class TryItOutViewModelTests: XCTestCase {
 
         if case .result(let output, let latency) = vm.inferenceState {
             XCTAssertFalse(output.isEmpty)
-            XCTAssertGreaterThan(latency, 0)
+            // Mock-model fast-path completes within sub-microsecond
+            // resolution; CFAbsoluteTimeGetCurrent can return a delta
+            // of exactly 0.0 on fast runners. The test only cares
+            // that ``inferenceState`` carries a non-negative latency.
+            XCTAssertGreaterThanOrEqual(latency, 0)
         } else {
             XCTFail("Expected result state, got \(vm.inferenceState)")
         }
@@ -501,7 +505,11 @@ final class TryItOutViewModelTests: XCTestCase {
 
         if case .result(let output, let latency) = vm.inferenceState {
             XCTAssertFalse(output.isEmpty)
-            XCTAssertGreaterThan(latency, 0)
+            // Mock-model fast-path completes within sub-microsecond
+            // resolution; CFAbsoluteTimeGetCurrent can return a delta
+            // of exactly 0.0 on fast runners. The test only cares
+            // that ``inferenceState`` carries a non-negative latency.
+            XCTAssertGreaterThanOrEqual(latency, 0)
         } else {
             XCTFail("Expected result state, got \(vm.inferenceState)")
         }
