@@ -272,9 +272,12 @@ final class ModelFormatClientTests: XCTestCase {
     }
 
     func testModelFormatPreferenceCodingKeysSnakeCase() throws {
+        // fallbackFormat must be non-nil — JSONEncoder omits nil Optional
+        // properties from the output, so `nil` would not exercise the
+        // CodingKey for `fallback_format` even if it is correctly mapped.
         let preference = ModelFormatPreference(
             format: "mlx",
-            fallbackFormat: nil,
+            fallbackFormat: "coreml",
             ttlSeconds: 600,
             fetchedAt: 0,
             etag: ""
@@ -286,6 +289,10 @@ final class ModelFormatClientTests: XCTestCase {
         XCTAssertNotNil(json["fallback_format"])
         XCTAssertNotNil(json["ttl_seconds"])
         XCTAssertNotNil(json["fetched_at"])
+        // Camel-case keys must NOT appear in the encoded form.
+        XCTAssertNil(json["fallbackFormat"])
+        XCTAssertNil(json["ttlSeconds"])
+        XCTAssertNil(json["fetchedAt"])
     }
 
     func testModelFormatPreferenceDeserializationFromServerJSON() throws {
