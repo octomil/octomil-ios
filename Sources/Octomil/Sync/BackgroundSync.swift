@@ -104,6 +104,17 @@ public final class BackgroundSync: @unchecked Sendable {
         self.deviceId = deviceId
     }
 
+    /// Test-only: clear the reconciler / deviceId state. The
+    /// singleton retains both across the suite otherwise, which
+    /// makes ``testIsReconcileEnabledDefaultsFalse`` flake on
+    /// any test that runs ``configureReconciler`` first.
+    internal func _resetReconcilerForTesting() {
+        lock.lock()
+        defer { lock.unlock() }
+        self.reconciler = nil
+        self.deviceId = nil
+    }
+
     // MARK: - Scheduling
 
     /// Schedules the next background training opportunity.

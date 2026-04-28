@@ -200,7 +200,12 @@ final class QueryRoutingClientTests: XCTestCase {
     // MARK: - Server Weights Affect Routing
 
     func testServerWeightsShiftTierBoundaries() async {
-        // With a very low qualityThreshold (0.2), even moderate queries hit "quality".
+        // The 4-word query "explain this short thing" has wordScore=0 (under
+        // fastMaxWords=10) and 1 indicator match against indicator_normalizor=3.0,
+        // giving indicatorScore = 1/3 ≈ 0.333. With lengthWeight=indicatorWeight=0.5
+        // the composite score is 0.5 * 0 + 0.5 * 0.333 ≈ 0.167. Setting
+        // quality_threshold below that pushes it to "quality"; the prior fixture
+        // used quality_threshold=0.2 which the math never crossed.
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SharedMockURLProtocol.self]
         let session = URLSession(configuration: config)
@@ -214,7 +219,7 @@ final class QueryRoutingClientTests: XCTestCase {
                 "length_weight": 0.5,
                 "indicator_weight": 0.5,
                 "fast_threshold": 0.05,
-                "quality_threshold": 0.2,
+                "quality_threshold": 0.15,
                 "indicator_normalizor": 3.0,
             ] as [String: Any],
             "complex_indicators": ["explain"],
@@ -237,8 +242,9 @@ final class QueryRoutingClientTests: XCTestCase {
             enableDeterministic: false
         )
 
-        // A moderately short query with one indicator — would be "balanced" under defaults,
-        // but with qualityThreshold=0.2 it should become "quality".
+        // A moderately short query with one indicator — would be "balanced" under
+        // standard 0.7 quality threshold, but with quality_threshold=0.15 it
+        // becomes "quality".
         let decision = await router.route(messages: [
             ["role": "user", "content": "explain this short thing"]
         ])
@@ -332,6 +338,56 @@ final class QueryRoutingClientTests: XCTestCase {
 
     // MARK: - Query Routing Tiers
 
+    /// Build a router whose PolicyClient returns a "rich" complexity policy,
+    /// matching the heuristics that used to live in defaultRoutingPolicy before
+    /// PR #95 simplified the offline fallback. Tier-routing tests need real
+    /// thresholds and indicator vocabulary to produce non-trivial scores; the
+    /// post-PR #95 default intentionally collapses everything to "fast" so the
+    /// server can drive routing.
+    private static let richIndicators: [String] = [
+        "code", "explain", "compare", "analyze", "implement",
+        "algorithm", "step by step", "debug", "optimize", "refactor",
+        "architecture", "design pattern", "trade-off", "proof",
+    ]
+
+    private func makeRichRouter() async -> QueryRouter {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SharedMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        SharedMockURLProtocol.reset()
+        SharedMockURLProtocol.responses.append(.success(statusCode: 200, json: [
+            "version": 1,
+            "thresholds": [
+                "fast_max_words": 10,
+                "quality_min_words": 50,
+                "length_weight": 0.5,
+                "indicator_weight": 0.5,
+                "fast_threshold": 0.3,
+                "quality_threshold": 0.7,
+                "indicator_normalizor": 3.0,
+            ] as [String: Any],
+            "complex_indicators": Self.richIndicators,
+            "deterministic_enabled": false,
+            "ttl_seconds": 300,
+            "fetched_at": 0,
+            "etag": "",
+        ] as [String: Any]))
+
+        let client = PolicyClient(
+            apiBase: URL(string: "https://api.octomil.com")!,
+            apiKey: "test-key",
+            session: session
+        )
+        await client.clearCache()
+
+        return QueryRouter(
+            models: Self.testModels,
+            policyClient: client,
+            enableDeterministic: false
+        )
+    }
+
     func testShortQueryRoutesToFast() async {
         let router = QueryRouter(
             models: Self.testModels,
@@ -350,11 +406,7 @@ final class QueryRoutingClientTests: XCTestCase {
     }
 
     func testLongQueryRoutesToQuality() async {
-        let router = QueryRouter(
-            models: Self.testModels,
-            policyClient: nil,
-            enableDeterministic: false
-        )
+        let router = await makeRichRouter()
 
         // Should route to quality tier.
         let words = (0..<60).map { "word\($0)" }.joined(separator: " ")
@@ -369,11 +421,7 @@ final class QueryRoutingClientTests: XCTestCase {
     }
 
     func testMediumQueryRoutesToBalanced() async {
-        let router = QueryRouter(
-            models: Self.testModels,
-            policyClient: nil,
-            enableDeterministic: false
-        )
+        let router = await makeRichRouter()
 
         // Should route to balanced tier.
         let mediumText = (0..<35).map { "word\($0)" }.joined(separator: " ")
@@ -386,11 +434,7 @@ final class QueryRoutingClientTests: XCTestCase {
     }
 
     func testComplexKeywordsBoostScore() async {
-        let router = QueryRouter(
-            models: Self.testModels,
-            policyClient: nil,
-            enableDeterministic: false
-        )
+        let router = await makeRichRouter()
 
         // Short text but with complex indicators — should boost score.
         let decision = await router.route(messages: [
@@ -403,11 +447,7 @@ final class QueryRoutingClientTests: XCTestCase {
     }
 
     func testComplexKeywordsWithLengthPushToQuality() async {
-        let router = QueryRouter(
-            models: Self.testModels,
-            policyClient: nil,
-            enableDeterministic: false
-        )
+        let router = await makeRichRouter()
 
         // Should route to quality tier.
         let words = (0..<47).map { "word\($0)" }.joined(separator: " ")
