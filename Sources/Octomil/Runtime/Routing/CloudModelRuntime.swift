@@ -132,10 +132,20 @@ public final class CloudModelRuntime: ModelRuntime, @unchecked Sendable {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let prompt = ChatMLRenderer.render(request)
+        // Cloud endpoints (OpenAI-compatible /v1/chat/completions) apply their
+        // own chat template server-side. Send structured messages directly
+        // rather than pre-rendering ChatML — pre-rendering would result in
+        // double-templating (raw ChatML tokens wrapped in another user turn).
+        let messages: [[String: Any]] = request.messages.map { msg in
+            let text = msg.parts.compactMap { part -> String? in
+                if case .text(let t) = part { return t }
+                return nil
+            }.joined(separator: "\n")
+            return ["role": msg.role.rawValue, "content": text]
+        }
         var body: [String: Any] = [
             "model": model,
-            "messages": [["role": "user", "content": prompt]],
+            "messages": messages,
             "max_tokens": request.generationConfig.maxTokens,
             "temperature": request.generationConfig.temperature,
             "stream": stream,
