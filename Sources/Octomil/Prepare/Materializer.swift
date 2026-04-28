@@ -14,18 +14,14 @@
 //
 // Design notes:
 //
-//   - On macOS, archive extraction shells out to ``/usr/bin/tar`` /
-//     ``/usr/bin/unzip``, which ship with every macOS image. This
-//     keeps unit tests fast and matches what real developers see
-//     when they curl + tar a Kokoro release manually.
-//   - On iOS, ``Foundation.Process`` is unavailable AND the iOS
-//     sandbox forbids spawning subprocesses anyway, so a follow-up
-//     PR will wire the iOS path to ``libbz2`` (system library) +
-//     a pure-Swift tar reader. Until then, materialize() throws
-//     ``unsupportedOnPlatform`` on iOS — this is no worse than the
-//     pre-Materializer behavior (where prepare returned the raw
-//     archive that no engine could open), and produces a clear
-//     actionable error rather than a silent half-prepared cache.
+//   - Archive extraction is implemented in pure Swift on top of
+//     ``COctomilBZ2`` (system libbz2 wrapper) + ``TarReader`` (a
+//     small TAR parser). The same code path works on macOS and
+//     iOS — no ``Foundation.Process`` shell-out, no
+//     ``/usr/bin/tar`` dependency, no iOS-sandbox blockers. ZIP
+//     extraction is gated to platforms where ``Compression`` /
+//     unzip is available; today only macOS uses ``/usr/bin/unzip``
+//     because no current recipe ships ZIP.
 //   - The marker file (``.octomil-materialized``) is written LAST,
 //     after every ``requiredOutputs`` entry is verified on disk.
 //     A partial extraction (interrupted before the marker) is
@@ -142,53 +138,108 @@ public enum Materializer {
         _ = try FileManager.default.replaceItemAt(markerURL, withItemAt: tmpMarker)
     }
 
-    /// Platform-specific archive extraction. macOS shells out to
-    /// ``/usr/bin/tar`` / ``/usr/bin/unzip``; iOS throws
-    /// ``unsupportedOnPlatform`` until the libbz2-based path lands.
+    /// Cross-platform archive extraction. tar / tar.bz2 / tar.gz
+    /// use a pure-Swift reader on top of libbz2 / Compression, so
+    /// macOS and iOS share one code path. ZIP is gated to macOS
+    /// because no current recipe ships ZIP (and zlib's deflate is
+    /// already in Compression — straightforward when needed).
     private static func extractArchive(_ archive: URL, into staging: URL, format: MaterializationPlan.ArchiveFormat) throws {
-        #if os(macOS)
-            switch format {
-            case .tarBz2, .tarGz, .tar:
-                try runTar(archive: archive, into: staging, format: format)
-            case .zip:
+        switch format {
+        case .tarBz2:
+            // Decompress to a sibling temp .tar then run TarReader.
+            // bz2 streaming + tar parsing in one pass would save
+            // disk but Kokoro is small enough that the simpler
+            // two-step pipeline is the right tradeoff.
+            let tarURL = staging.appendingPathComponent(".decompressed.tar")
+            try BZ2Decompressor.decompress(from: archive, to: tarURL)
+            try extractTar(tarURL, into: staging)
+            try? FileManager.default.removeItem(at: tarURL)
+        case .tarGz:
+            // Compression framework natively supports zlib (gzip)
+            // streaming. Mirrors the bz2 path: decompress to a
+            // staging .tar, then TarReader.
+            let tarURL = staging.appendingPathComponent(".decompressed.tar")
+            try GzipDecompressor.decompress(from: archive, to: tarURL)
+            try extractTar(tarURL, into: staging)
+            try? FileManager.default.removeItem(at: tarURL)
+        case .tar:
+            try extractTar(archive, into: staging)
+        case .zip:
+            #if os(macOS)
                 try runUnzip(archive: archive, into: staging)
+            #else
+                throw MaterializerError.unsupportedOnPlatform(
+                    "ZIP extraction is not yet wired up on this platform; ship a tar.bz2/tar.gz recipe instead."
+                )
+            #endif
+        }
+    }
+
+    /// Apply a fully-decompressed tar file to ``staging``,
+    /// honoring the safety boundary: refuse path-traversal
+    /// entries, drop in-archive symlinks, and only write under
+    /// ``staging``.
+    private static func extractTar(_ tarURL: URL, into staging: URL) throws {
+        let stagingResolved = staging.resolvingSymlinksInPath().standardizedFileURL
+        let stagingPath = stagingResolved.path
+        try TarReader.read(from: tarURL) { entry, drain in
+            // Reject path-traversal segments before computing the
+            // destination URL; ``TarReader`` already trims to the
+            // header's null-terminated name but never validates.
+            for seg in entry.name.split(separator: "/") {
+                if seg == ".." {
+                    throw MaterializerError.invalidPlan("tar entry contains a path-traversal segment: \(entry.name)")
+                }
             }
-        #else
-            // iOS: Foundation.Process is unavailable AND the iOS
-            // sandbox forbids spawning subprocesses. Surface a clear
-            // error instead of silently producing a half-prepared
-            // cache. Follow-up: wire libbz2 (system library on iOS)
-            // + a pure-Swift tar reader so this path becomes a
-            // first-class implementation.
-            throw MaterializerError.unsupportedOnPlatform(
-                "archive extraction (format=\(format.rawValue)) is not yet implemented on this platform; " +
-                    "host or pre-extract the archive on a platform with /usr/bin/tar."
-            )
-        #endif
+            // Drop in-archive symlinks/hardlinks; we don't follow
+            // them during materialization. Other typeflags (e.g.
+            // sparse files) are also dropped with a clear error.
+            switch entry.kind {
+            case .symbolicLink, .hardLink:
+                // Skip but still drain the (typically zero-byte) payload.
+                try drain { _ in }
+                return
+            case .other(let typeflag):
+                // GNU/PAX special types are filtered upstream in
+                // TarReader. Anything that reaches here is unsupported.
+                throw MaterializerError.invalidPlan("tar entry typeflag \(typeflag) not supported")
+            case .file, .directory:
+                break
+            }
+
+            let destination = stagingResolved.appendingPathComponent(entry.name).standardizedFileURL
+            // Containment check: even after the traversal-segment
+            // refusal above, defense in depth.
+            let destPath = destination.path
+            guard destPath == stagingPath || destPath.hasPrefix(stagingPath + "/") else {
+                throw MaterializerError.invalidPlan("tar entry resolves outside staging dir: \(entry.name)")
+            }
+            switch entry.kind {
+            case .directory:
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+                try drain { _ in }
+            case .file:
+                try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                FileManager.default.createFile(atPath: destination.path, contents: nil)
+                let handle = try FileHandle(forWritingTo: destination)
+                defer { try? handle.close() }
+                try drain { chunk in
+                    try handle.write(contentsOf: chunk)
+                }
+            default:
+                break // already returned above
+            }
+        }
     }
 
     #if os(macOS)
-    private static func runTar(archive: URL, into staging: URL, format: MaterializationPlan.ArchiveFormat) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-        var args: [String] = ["-x", "-f", archive.path, "-C", staging.path]
-        switch format {
-        case .tarBz2: args.append(contentsOf: ["-j"])
-        case .tarGz: args.append(contentsOf: ["-z"])
-        case .tar: break
-        case .zip: throw MaterializerError.unsupportedArchiveFormat(format.rawValue)
-        }
-        try runTool(process, args: args, name: "tar")
-    }
-
     private static func runUnzip(archive: URL, into staging: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        try runTool(process, args: ["-q", archive.path, "-d", staging.path], name: "unzip")
-    }
-
-    private static func runTool(_ process: Process, args: [String], name: String) throws {
-        process.arguments = args
+        process.arguments = ["-q", archive.path, "-d", staging.path]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
@@ -201,7 +252,7 @@ public enum Materializer {
             output = ""
         }
         if process.terminationStatus != 0 {
-            throw MaterializerError.toolFailed(tool: name, status: process.terminationStatus, output: output)
+            throw MaterializerError.toolFailed(tool: "unzip", status: process.terminationStatus, output: output)
         }
     }
     #endif
@@ -251,11 +302,17 @@ public enum Materializer {
                 continue
             }
             let relativePath = String(resolvedPath.dropFirst(prefixWithSep.count))
-            let destination = artifactDir.appendingPathComponent(relativePath)
+            // Reviewer P1: route every destination path through
+            // safeJoin so a pre-existing symlink in artifactDir
+            // (planted earlier or by a hostile sibling artifact)
+            // can't redirect copyItem outside the artifact dir.
+            // Mirrors the durable-downloader's per-write check.
+            let destination = try DurableDownloader.safeJoin(destDir: artifactDir, relativePath: relativePath)
             if attrs.isDirectory == true {
                 try fm.createDirectory(at: destination, withIntermediateDirectories: true)
             } else {
-                try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                let destParent = destination.deletingLastPathComponent()
+                try fm.createDirectory(at: destParent, withIntermediateDirectories: true)
                 if fm.fileExists(atPath: destination.path) {
                     try fm.removeItem(at: destination)
                 }

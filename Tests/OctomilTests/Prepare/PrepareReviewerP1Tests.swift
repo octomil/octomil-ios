@@ -13,6 +13,12 @@ import XCTest
 ///      backend-ready layout (model.onnx / voices.bin / etc.) AND
 ///      the cache-hit branch idempotently re-runs materialization
 ///      so a partial extraction completes.
+///
+/// The Materializer-archive tests use a fixture tarball built with
+/// ``Foundation.Process``, which is unavailable on iOS. They are
+/// gated to macOS; once the iOS libbz2/pure-Swift tar path lands
+/// these tests run on iOS too. Symlink + canPrepare regressions
+/// run on every platform.
 final class PrepareReviewerP1Tests: XCTestCase {
     var tmpDir: URL!
 
@@ -67,6 +73,7 @@ final class PrepareReviewerP1Tests: XCTestCase {
         XCTAssertFalse(pm.canPrepare(candidate))
     }
 
+    #if os(macOS)
     func testStaticRecipePrepareMaterializesBackendReadyLayout() async throws {
         // Build a tarball with the canonical Kokoro layout and
         // register a recipe whose digest matches it, then pre-stage
@@ -168,6 +175,9 @@ final class PrepareReviewerP1Tests: XCTestCase {
         XCTAssertEqual(before, after, "second materialize should be a no-op when marker is valid")
     }
 
+    #endif // os(macOS) — testStaticRecipePrepareMaterializesBackendReadyLayout
+
+    #if os(macOS)
     func testMaterializerRecoversFromPartialExtraction() throws {
         // Reviewer P1 (#2) follow-on: a previous run that crashed
         // before writing the marker leaves a partial layout. The
@@ -196,8 +206,11 @@ final class PrepareReviewerP1Tests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: artifactDir.appendingPathComponent(".octomil-materialized").path))
     }
 
+    #endif // os(macOS) — testMaterializerRecoversFromPartialExtraction
+
     // MARK: - helpers
 
+    #if os(macOS)
     private func makeKokoroLayoutTarball(in dir: URL) throws -> URL {
         // Build a Kokoro-shape tarball under tmpDir and return its
         // URL. Uses the system ``tar`` tool — same one the
@@ -235,6 +248,7 @@ final class PrepareReviewerP1Tests: XCTestCase {
         hasher.update(data: data)
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
+    #endif // os(macOS) — fixture helpers
 }
 
 import CryptoKit
