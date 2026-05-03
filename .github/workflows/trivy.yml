@@ -10,6 +10,7 @@ permissions: {}
 
 jobs:
   fs-scan:
+    timeout-minutes: 15
     name: Filesystem Scan
     runs-on: ubuntu-latest
     permissions:

@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   analysis:
+    timeout-minutes: 15
     name: Scorecard Analysis
     runs-on: ubuntu-latest
     permissions:
