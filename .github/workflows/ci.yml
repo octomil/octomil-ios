@@ -10,6 +10,7 @@ permissions: {}
 
 jobs:
   test:
+    timeout-minutes: 25
     name: Test & Analysis
     runs-on: macos-15
     permissions:
@@ -101,6 +102,7 @@ jobs:
           SONAR_HOST_URL: https://sonarcloud.io
 
   swiftlint:
+    timeout-minutes: 10
     name: SwiftLint
     runs-on: macos-14
     permissions:

@@ -1,0 +1,164 @@
+name: Timeout Minutes Lint
+
+# Fails CI when any job in any workflow under .github/workflows/ lacks
+# `timeout-minutes`. Defense-in-depth against the runaway-cost class
+# of incident: any single deadlocked job runs to GitHub's 6-hour
+# default ceiling without an explicit per-job ceiling. Cumulative
+# wasted minutes from missing fences is the single largest source
+# of Actions-budget burn we've observed across the org.
+#
+# This workflow is intentionally self-contained — no separate Python
+# script in the repo, no shared composite action. The check is small
+# enough that inlining it here keeps blast-radius local.
+#
+# Triggers on pull-request changes to workflow files (cheap fast
+# feedback) and on push to main (catches any direct-merge regression).
+#
+# Override per-job: not supported on purpose. If a job legitimately
+# needs no ceiling, set a high explicit value (e.g.,
+# `timeout-minutes: 360`) and document why in a comment. The check
+# is presence-not-value to keep the policy auditable without
+# bikeshedding numbers.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**.yml"
+      - ".github/workflows/**.yaml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**.yml"
+      - ".github/workflows/**.yaml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: timeout-minutes-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  lint:
+    name: Require timeout-minutes on every job
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        # Floor pin (>=6.0.2) but no upper cap so pyyaml security
+        # patches flow without manual bumps. <7 keeps the lint stable
+        # across the next major (which would change the API).
+        run: pip install "pyyaml>=6.0.2,<7"
+
+      - name: Lint workflow timeouts
+        run: |
+          python3 <<'PYEOF'
+          """Fail if any job in .github/workflows/*.y(a)ml lacks timeout-minutes.
+
+          Special cases:
+          - Reusable workflows called via ``uses:`` are skipped — the timeout
+            lives in the called workflow, not the caller.
+          - Jobs that themselves declare ``strategy.matrix`` with a single
+            non-matrix-axis entry still need a job-level ``timeout-minutes``.
+          - This linter does NOT inspect the value (presence-only); a job
+            that declares ``timeout-minutes: 360`` passes. That is intentional:
+            value bikeshedding belongs in code review, the floor of "any
+            ceiling at all" belongs in CI.
+          """
+
+          from __future__ import annotations
+          import sys
+          from pathlib import Path
+
+          import yaml
+
+          WORKFLOW_DIR = Path(".github/workflows")
+          failures: list[tuple[str, str, str]] = []  # (file, job_id, reason)
+
+          if not WORKFLOW_DIR.is_dir():
+              print(f"no {WORKFLOW_DIR} directory; nothing to lint")
+              sys.exit(0)
+
+          files = sorted(
+              p for p in WORKFLOW_DIR.iterdir()
+              if p.suffix in (".yml", ".yaml") and p.is_file()
+          )
+
+          # Track separately: total jobs scanned, jobs we actually
+          # checked (excluding reusable-workflow callers). Reporting
+          # both keeps the success message honest when callers exist
+          # — otherwise the message could imply a check that never ran.
+          total_jobs = 0
+          checked_jobs = 0
+          skipped_callers = 0
+
+          for path in files:
+              try:
+                  data = yaml.safe_load(path.read_text(encoding="utf-8"))
+              except yaml.YAMLError as e:
+                  failures.append((str(path), "<parse error>", str(e)))
+                  continue
+
+              if not isinstance(data, dict):
+                  continue
+
+              jobs = data.get("jobs")
+              if not isinstance(jobs, dict):
+                  continue
+
+              for job_id, job in jobs.items():
+                  total_jobs += 1
+                  if not isinstance(job, dict):
+                      continue
+                  # Skip reusable-workflow callers — timeout is owned by callee.
+                  if "uses" in job and "steps" not in job:
+                      skipped_callers += 1
+                      continue
+                  checked_jobs += 1
+                  if "timeout-minutes" not in job:
+                      failures.append(
+                          (str(path), str(job_id), "missing timeout-minutes")
+                      )
+
+          if failures:
+              print("::error::Workflow jobs are missing timeout-minutes:")
+              for file_, job_id, reason in failures:
+                  print(f"::error file={file_}::{job_id}: {reason}")
+              print()
+              print(
+                  "Add ``timeout-minutes: <N>`` to each job above. The value "
+                  "should be a credible ceiling for the work the job does — "
+                  "not the GitHub-default 360 (6h). Common ceilings:"
+              )
+              print("  - lint / type / quick test:    5–15 minutes")
+              print("  - full unit-test suite:        20–30 minutes")
+              print("  - integration / e2e:           45–60 minutes")
+              print("  - release / publish:           15–20 minutes")
+              sys.exit(1)
+
+          n_files = len(files)
+          # Honest accounting: report the checked count separately
+          # from the skipped-caller count so the success message
+          # doesn't imply we checked jobs we deliberately bypassed.
+          summary = (
+              f"clean: {checked_jobs} of {total_jobs} job(s) across {n_files} "
+              "workflow file(s) declare timeout-minutes"
+          )
+          if skipped_callers:
+              summary += (
+                  f" ({skipped_callers} reusable-workflow caller(s) skipped — "
+                  "timeout owned by callee)"
+              )
+          print(summary)
+          PYEOF
