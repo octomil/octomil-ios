@@ -6,10 +6,10 @@ import XCTest
 /// and ``InstrumentedStreamWrapper``.
 final class StreamingInferenceTests: XCTestCase {
 
-    // MARK: - Modality
+    // MARK: - InferenceModality (engine-layer enum; includes .timeSeries unlike contract Modality)
 
     func testModalityAllCases() {
-        let cases = Modality.allCases
+        let cases = InferenceModality.allCases
         XCTAssertEqual(cases.count, 5)
         XCTAssertTrue(cases.contains(.text))
         XCTAssertTrue(cases.contains(.image))
@@ -19,20 +19,20 @@ final class StreamingInferenceTests: XCTestCase {
     }
 
     func testModalityRawValues() {
-        XCTAssertEqual(Modality.text.rawValue, "text")
-        XCTAssertEqual(Modality.image.rawValue, "image")
-        XCTAssertEqual(Modality.audio.rawValue, "audio")
-        XCTAssertEqual(Modality.video.rawValue, "video")
-        XCTAssertEqual(Modality.timeSeries.rawValue, "time_series")
+        XCTAssertEqual(InferenceModality.text.rawValue, "text")
+        XCTAssertEqual(InferenceModality.image.rawValue, "image")
+        XCTAssertEqual(InferenceModality.audio.rawValue, "audio")
+        XCTAssertEqual(InferenceModality.video.rawValue, "video")
+        XCTAssertEqual(InferenceModality.timeSeries.rawValue, "time_series")
     }
 
     func testModalityCodableRoundtrip() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
-        for modality in Modality.allCases {
+        for modality in InferenceModality.allCases {
             let data = try encoder.encode(modality)
-            let decoded = try decoder.decode(Modality.self, from: data)
+            let decoded = try decoder.decode(InferenceModality.self, from: data)
             XCTAssertEqual(decoded, modality)
         }
     }

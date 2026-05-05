@@ -17,7 +17,7 @@ final class CanonicalRouteSurfaceTests: XCTestCase {
         XCTAssertEqual(meta.execution?.locality, "cloud")
         XCTAssertEqual(meta.execution?.mode, "hosted_gateway")
         XCTAssertEqual(meta.model.requested.ref, "phi-4")
-        XCTAssertEqual(meta.model.requested.kind, "model")
+        XCTAssertEqual(meta.model.requested.kind.rawValue, "model")
         XCTAssertEqual(meta.planner.source, "offline")
         XCTAssertEqual(meta.fallback.used, false)
     }
@@ -61,7 +61,7 @@ final class CanonicalRouteSurfaceTests: XCTestCase {
         XCTAssertEqual(meta.status, "selected")
         XCTAssertNotNil(meta.execution)
         XCTAssertEqual(meta.model.requested.ref, "@app/myapp/chat")
-        XCTAssertEqual(meta.model.requested.kind, "app")
+        XCTAssertEqual(meta.model.requested.kind.rawValue, "app")
         XCTAssertFalse(meta.planner.source.isEmpty)
         XCTAssertEqual(meta.fallback.used, false)
     }
