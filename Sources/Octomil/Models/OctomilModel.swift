@@ -200,6 +200,7 @@ public final class OctomilModel: @unchecked Sendable {
         modality: Modality,
         engine: StreamingInferenceEngine? = nil
     ) -> (stream: AsyncThrowingStream<InferenceChunk, Error>, result: @Sendable () -> StreamingInferenceResult?) {
+        let inferenceModality = InferenceModality(rawValue: modality.rawValue) ?? .text
         let resolvedEngine: StreamingInferenceEngine
         if let engine = engine {
             resolvedEngine = engine
@@ -207,7 +208,7 @@ public final class OctomilModel: @unchecked Sendable {
             do {
                 let inferredEngine = EngineRegistry.engineFromURL(compiledModelURL)
                 resolvedEngine = try EngineRegistry.shared.resolve(
-                    modality: modality,
+                    modality: inferenceModality,
                     engine: inferredEngine,
                     modelURL: compiledModelURL
                 )
@@ -217,7 +218,7 @@ public final class OctomilModel: @unchecked Sendable {
             }
         }
 
-        let wrapper = InstrumentedStreamWrapper(modality: modality)
+        let wrapper = InstrumentedStreamWrapper(modality: inferenceModality)
         return wrapper.wrap(resolvedEngine, input: input)
     }
 

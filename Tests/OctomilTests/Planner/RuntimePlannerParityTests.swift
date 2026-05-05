@@ -89,14 +89,17 @@ final class RuntimePlannerParityTests: XCTestCase {
 
     func testRouteMetadataNestedFieldsPresent() {
         let model = RouteModel(
-            requested: RouteModelRequested(ref: "gemma-2b", kind: "model", capability: "text")
+            requested: RouteModelRequested(ref: "gemma-2b", kind: .model, capability: "text"),
+            resolved: nil
         )
-        let metadata = PlannerRouteMetadata(
+        let metadata = RouteMetadata(
             status: "selected",
             execution: RouteExecution(locality: "local", mode: "sdk_runtime", engine: "mlx-lm"),
             model: model,
+            artifact: nil,
             planner: PlannerInfo(source: "server"),
-            fallback: FallbackInfo(used: false),
+            fallback: FallbackInfo(used: false, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
             reason: RouteReason(code: "server_plan", message: "test reason")
         )
 
@@ -105,7 +108,7 @@ final class RuntimePlannerParityTests: XCTestCase {
         XCTAssertEqual(metadata.execution?.mode, "sdk_runtime")
         XCTAssertEqual(metadata.execution?.engine, "mlx-lm")
         XCTAssertEqual(metadata.model.requested.ref, "gemma-2b")
-        XCTAssertEqual(metadata.model.requested.kind, "model")
+        XCTAssertEqual(metadata.model.requested.kind.rawValue, "model")
         XCTAssertEqual(metadata.model.requested.capability, "text")
         XCTAssertEqual(metadata.planner.source, "server")
         XCTAssertFalse(metadata.fallback.used)
@@ -115,17 +118,28 @@ final class RuntimePlannerParityTests: XCTestCase {
 
     func testRouteMetadataLocalityValues() {
         let localModel = RouteModel(
-            requested: RouteModelRequested(ref: "test-model")
+            requested: RouteModelRequested(ref: "test-model", kind: .unknown, capability: nil),
+            resolved: nil
         )
-        let local = PlannerRouteMetadata(
-            execution: RouteExecution(locality: "local", mode: "sdk_runtime"),
+        let local = RouteMetadata(
+            status: "selected",
+            execution: RouteExecution(locality: "local", mode: "sdk_runtime", engine: nil),
             model: localModel,
-            planner: PlannerInfo(source: "cache")
+            artifact: nil,
+            planner: PlannerInfo(source: "cache"),
+            fallback: FallbackInfo(used: false, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
+            reason: RouteReason(code: "ok", message: "")
         )
-        let cloud = PlannerRouteMetadata(
-            execution: RouteExecution(locality: "cloud", mode: "hosted_gateway"),
+        let cloud = RouteMetadata(
+            status: "selected",
+            execution: RouteExecution(locality: "cloud", mode: "hosted_gateway", engine: nil),
             model: localModel,
-            planner: PlannerInfo(source: "server")
+            artifact: nil,
+            planner: PlannerInfo(source: "server"),
+            fallback: FallbackInfo(used: false, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
+            reason: RouteReason(code: "ok", message: "")
         )
 
         XCTAssertEqual(local.execution?.locality, "local")
@@ -150,7 +164,7 @@ final class RuntimePlannerParityTests: XCTestCase {
         XCTAssertEqual(metadata.execution?.mode, "sdk_runtime")
         XCTAssertEqual(metadata.execution?.engine, "llama.cpp")
         XCTAssertEqual(metadata.model.requested.ref, "gemma-2b")
-        XCTAssertEqual(metadata.model.requested.kind, "model")
+        XCTAssertEqual(metadata.model.requested.kind.rawValue, "model")
         XCTAssertEqual(metadata.model.requested.capability, "text")
         XCTAssertEqual(metadata.planner.source, "server",
                        "Internal 'server_plan' must normalize to contract 'server'")
@@ -263,7 +277,7 @@ final class RuntimePlannerParityTests: XCTestCase {
         let metadata = selection.routeMetadata()
 
         XCTAssertEqual(metadata.model.requested.ref, "phi-3")
-        XCTAssertEqual(metadata.model.requested.kind, "model")
+        XCTAssertEqual(metadata.model.requested.kind.rawValue, "model")
         XCTAssertEqual(metadata.model.requested.capability, "embeddings")
         XCTAssertNil(metadata.model.resolved,
                      "Resolved should be nil when planner does not resolve a specific version")
@@ -275,7 +289,7 @@ final class RuntimePlannerParityTests: XCTestCase {
 
         let metadata = selection.routeMetadata()
 
-        XCTAssertEqual(metadata.model.requested.kind, "unknown")
+        XCTAssertEqual(metadata.model.requested.kind.rawValue, "unknown")
         XCTAssertNil(metadata.model.requested.capability)
     }
 

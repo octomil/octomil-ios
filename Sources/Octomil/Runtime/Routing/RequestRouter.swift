@@ -134,11 +134,6 @@ public struct RequestRoutingContext: Sendable {
     }
 }
 
-// MARK: - RouteMetadata
-
-/// Contract-backed route metadata shape attached to every routed request.
-public typealias RouteMetadata = PlannerRouteMetadata
-
 // MARK: - RoutingDecisionResult
 
 /// The resolved routing decision for a single request.
@@ -263,14 +258,18 @@ public final class RequestRouter: @unchecked Sendable {
                     model: RouteModel(
                         requested: RouteModelRequested(
                             ref: parsedRef.raw,
-                            kind: parsedRef.kind.rawValue
-                        )
+                            kind: ContractModelRefKind(rawValue: parsedRef.kind.rawValue) ?? .unknown,
+                            capability: nil
+                        ),
+                        resolved: nil
                     ),
                     artifact: selected.artifact.map { att in
-                        RouteArtifact(cache: ArtifactCache(status: att.cache.status))
+                        RouteArtifact(id: nil, version: nil, format: nil, digest: nil, cache: ArtifactCache(status: att.cache.status, managed_by: nil))
                     },
                     planner: PlannerInfo(source: "cache"),
-                    fallback: FallbackInfo(used: loopResult.fallbackUsed)
+                    fallback: FallbackInfo(used: loopResult.fallbackUsed, from_attempt: nil, to_attempt: nil, trigger: nil),
+                    attempts: nil,
+                    reason: RouteReason(code: "ok", message: "")
                 )
 
                 return RoutingDecisionResult(
@@ -301,11 +300,15 @@ public final class RequestRouter: @unchecked Sendable {
                 model: RouteModel(
                     requested: RouteModelRequested(
                         ref: parsedRef.raw,
-                        kind: parsedRef.kind.rawValue
-                    )
+                        kind: ContractModelRefKind(rawValue: parsedRef.kind.rawValue) ?? .unknown,
+                        capability: nil
+                    ),
+                    resolved: nil
                 ),
+                artifact: nil,
                 planner: PlannerInfo(source: "cache"),
-                fallback: FallbackInfo(used: false),
+                fallback: FallbackInfo(used: false, from_attempt: nil, to_attempt: nil, trigger: nil),
+                attempts: nil,
                 reason: RouteReason(
                     code: "no_candidate_passed",
                     message: "All plan candidates failed and fallback is not allowed"
@@ -410,16 +413,22 @@ public final class RequestRouter: @unchecked Sendable {
             status: "selected",
             execution: RouteExecution(
                 locality: "cloud",
-                mode: "hosted_gateway"
+                mode: "hosted_gateway",
+                engine: nil
             ),
             model: RouteModel(
                 requested: RouteModelRequested(
                     ref: parsedRef.raw,
-                    kind: parsedRef.kind.rawValue
-                )
+                    kind: ContractModelRefKind(rawValue: parsedRef.kind.rawValue) ?? .unknown,
+                    capability: nil
+                ),
+                resolved: nil
             ),
+            artifact: nil,
             planner: PlannerInfo(source: plannerSource),
-            fallback: FallbackInfo(used: attemptResult?.fallbackUsed ?? false)
+            fallback: FallbackInfo(used: attemptResult?.fallbackUsed ?? false, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
+            reason: RouteReason(code: "ok", message: "")
         )
 
         return RoutingDecisionResult(

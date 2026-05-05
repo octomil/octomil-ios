@@ -29,7 +29,7 @@ public final class LLMEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - StreamingInferenceEngine
 
-    public func generate(input: Any, modality _: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input: Any, modality _: InferenceModality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
             prompt = str

@@ -22,7 +22,7 @@ final class LlamaCppEngine: StreamingInferenceEngine, @unchecked Sendable {
         self.temperature = temperature
     }
 
-    func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
+    func generate(input: Any, modality: InferenceModality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
             prompt = str

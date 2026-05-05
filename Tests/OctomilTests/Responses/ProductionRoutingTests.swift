@@ -324,11 +324,14 @@ final class ProductionRoutingTests: XCTestCase {
             status: "selected",
             execution: RouteExecution(locality: "local", mode: "sdk_runtime", engine: "coreml"),
             model: RouteModel(
-                requested: RouteModelRequested(ref: "deploy_abc", kind: "deployment")
+                requested: RouteModelRequested(ref: "deploy_abc", kind: .deployment, capability: nil),
+                resolved: nil
             ),
-            artifact: RouteArtifact(cache: ArtifactCache(status: "hit")),
+            artifact: RouteArtifact(id: nil, version: nil, format: nil, digest: nil, cache: ArtifactCache(status: "hit", managed_by: nil)),
             planner: PlannerInfo(source: "cache"),
-            fallback: FallbackInfo(used: true)
+            fallback: FallbackInfo(used: true, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
+            reason: RouteReason(code: "ok", message: "")
         )
 
         let decision = RoutingDecisionResult(

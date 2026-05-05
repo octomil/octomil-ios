@@ -57,7 +57,7 @@ public final class MLXDeployedModel: @unchecked Sendable {
     /// Generate text with a specific modality (for protocol flexibility).
     public func predictStream(
         input: Any,
-        modality: Modality
+        modality: InferenceModality
     ) -> (
         stream: AsyncThrowingStream<InferenceChunk, Error>,
         result: @Sendable () -> StreamingInferenceResult?

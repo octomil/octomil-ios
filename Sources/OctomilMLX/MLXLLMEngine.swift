@@ -52,7 +52,7 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
     /// Set by the deploy path so benchmarks are attributed to the correct model.
     public var modelId: String?
 
-    public func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input: Any, modality: InferenceModality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
             prompt = str

@@ -252,19 +252,26 @@ public final class AudioSpeech: @unchecked Sendable {
             model: RouteModel(
                 requested: RouteModelRequested(
                     ref: parsed.raw,
-                    kind: parsed.kind.rawValue,
+                    kind: ContractModelRefKind(rawValue: parsed.kind.rawValue) ?? .unknown,
                     capability: "tts"
                 ),
                 resolved: RouteModelResolved(
                     id: outcome.artifactId,
-                    slug: appSlug
+                    slug: appSlug,
+                    version_id: nil,
+                    variant_id: nil
                 )
             ),
             artifact: RouteArtifact(
-                cache: ArtifactCache(status: outcome.cached ? "hit" : "miss")
+                id: nil,
+                version: nil,
+                format: nil,
+                digest: nil,
+                cache: ArtifactCache(status: outcome.cached ? "hit" : "miss", managed_by: nil)
             ),
             planner: PlannerInfo(source: parsed.kind == .app ? "cache" : "offline"),
-            fallback: FallbackInfo(used: false),
+            fallback: FallbackInfo(used: false, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
             reason: RouteReason(code: "ok", message: resolvedPolicy?.rawValue ?? "")
         )
 

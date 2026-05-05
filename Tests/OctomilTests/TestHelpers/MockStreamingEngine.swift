@@ -36,7 +36,7 @@ final class MockStreamingEngine: StreamingInferenceEngine, @unchecked Sendable {
     /// Records every `config` received.
     private(set) var recordedConfigs: [GenerationConfig] = []
 
-    func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
+    func generate(input: Any, modality: InferenceModality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         recordedInputs.append(input)
         recordedConfigs.append(config)
         let specs = chunks

@@ -100,7 +100,7 @@ public struct AppModelEntry: Sendable, Codable {
     /// Output modalities this model produces (e.g. `[.text]`).
     ///
     /// When nil, defaults to `[.text]`.
-    public let outputModalities: [OutputModality]?
+    public let outputModalities: [Modality]?
 
     /// Explicit mapping of resource kinds to file paths within the model package.
     ///
@@ -157,7 +157,7 @@ public struct AppModelEntry: Sendable, Codable {
         bundledPath: String? = nil,
         required: Bool = true,
         inputModalities: [InputModality]? = nil,
-        outputModalities: [OutputModality]? = nil,
+        outputModalities: [Modality]? = nil,
         resourceBindings: [ResourceBinding]? = nil,
         engineConfig: EngineConfig? = nil
     ) {

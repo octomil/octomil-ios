@@ -275,10 +275,11 @@ public final class OctomilResponses: @unchecked Sendable {
                         ),
                         model: decision.routeMetadata.model,
                         artifact: selectedAttempt.artifact.map { artifact in
-                            RouteArtifact(cache: ArtifactCache(status: artifact.cache.status))
+                            RouteArtifact(id: nil, version: nil, format: nil, digest: nil, cache: ArtifactCache(status: artifact.cache.status, managed_by: nil))
                         },
                         planner: decision.routeMetadata.planner,
-                        fallback: FallbackInfo(used: fallbackUsed || attemptReadiness.fallbackUsed),
+                        fallback: FallbackInfo(used: fallbackUsed || attemptReadiness.fallbackUsed, from_attempt: nil, to_attempt: nil, trigger: nil),
+                        attempts: nil,
                         reason: RouteReason(
                             code: fallbackTriggerCode ?? attemptReadiness.fallbackTrigger?.code ?? "ok",
                             message: "streaming route selected"
@@ -491,10 +492,11 @@ public final class OctomilResponses: @unchecked Sendable {
             },
             model: decision.routeMetadata.model,
             artifact: selected?.artifact.map { artifact in
-                RouteArtifact(cache: ArtifactCache(status: artifact.cache.status))
+                RouteArtifact(id: nil, version: nil, format: nil, digest: nil, cache: ArtifactCache(status: artifact.cache.status, managed_by: nil))
             } ?? decision.routeMetadata.artifact,
             planner: decision.routeMetadata.planner,
-            fallback: FallbackInfo(used: attemptResult.fallbackUsed),
+            fallback: FallbackInfo(used: attemptResult.fallbackUsed, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
             reason: RouteReason(
                 code: attemptResult.fallbackTrigger?.code ?? (selected == nil ? "no_candidate" : "ok"),
                 message: selected?.reason.message ?? "route resolved"
@@ -523,9 +525,9 @@ public final class OctomilResponses: @unchecked Sendable {
             fallbackTriggerStage: fallbackTriggerStage,
             candidateAttempts: candidateAttempts,
             modelRef: metadata.model.requested.ref,
-            modelRefKind: metadata.model.requested.kind,
+            modelRefKind: metadata.model.requested.kind.rawValue,
             artifactId: metadata.artifact?.id,
-            cacheStatus: metadata.artifact?.cache.status
+            cacheStatus: metadata.artifact?.cache?.status
         )
         TelemetryQueue.shared?.reportRouteEvent(routeEvent)
     }
