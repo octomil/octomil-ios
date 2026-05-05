@@ -15,7 +15,17 @@ jobs:
       sdk: ios
       contract-version: "1.23.0"
       codegen-command: "python3 .contract/scripts/sync_generated.py --sdk ios --check --target-dir Sources/Octomil/Generated"
-      test-command: "xcodebuild -scheme Octomil -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:OctomilTests/ContractConformanceTests test && python3 .contract/ci/audit-sdks.py --sdk ios --sdk-path . --out parity_report.json"
+      # 'Any iOS Simulator Device' rather than a pinned model (e.g. 'iPhone 15'):
+      # GitHub-hosted runners don't pre-create named simulator devices, so a pinned
+      # name fails destination resolution even when the runtime is present. xcrun simctl
+      # create is not a reliable fix on ephemeral runners because it requires the target
+      # runtime to already be installed and adds fragile image-version coupling.
+      # This is an acceptable tradeoff: ContractConformanceTests exercise contract shape,
+      # codegen correctness, and routing logic — none of which vary by device model or
+      # iOS minor version. Tests that depend on device class (Metal feature sets, CoreML
+      # compute units, MLX memory pressure) belong in a separate hardware-pinned job,
+      # not in a contract gate.
+      test-command: "xcodebuild -scheme Octomil -destination 'platform=iOS Simulator,name=Any iOS Simulator Device' -only-testing:OctomilTests/ContractConformanceTests test && python3 .contract/ci/audit-sdks.py --sdk ios --sdk-path . --out parity_report.json"
       parity-report-path: parity_report.json
       parity-score-floor: 60
     secrets: inherit
