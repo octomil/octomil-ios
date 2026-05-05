@@ -1,0 +1,11 @@
+coverage:
+  status:
+    patch:
+      default:
+        # 85% patch floor — accounts for routing/inference paths that require
+        # a compiled model artifact on disk and are integration-tested separately.
+        target: 85%
+
+ignore:
+  # Auto-generated from octomil-contracts — no hand-written logic to unit-test.
+  - "Sources/Octomil/Generated/**"
