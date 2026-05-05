@@ -1,0 +1,26 @@
+// Auto-generated from octomil-contracts. Do not edit.
+
+public enum ContractGateCode: String, Codable, Sendable {
+    case artifactVerified = "artifact_verified"
+    case runtimeAvailable = "runtime_available"
+    case modelLoads = "model_loads"
+    case contextFits = "context_fits"
+    case modalitySupported = "modality_supported"
+    case toolSupport = "tool_support"
+    case minTokensPerSecond = "min_tokens_per_second"
+    case maxTtftMs = "max_ttft_ms"
+    case maxErrorRate = "max_error_rate"
+    case minFreeMemoryBytes = "min_free_memory_bytes"
+    case minFreeStorageBytes = "min_free_storage_bytes"
+    case benchmarkFresh = "benchmark_fresh"
+    case minBatteryPct = "min_battery_pct"
+    case maxThermalState = "max_thermal_state"
+    case requireCharging = "require_charging"
+    case requireWifi = "require_wifi"
+    case schemaValid = "schema_valid"
+    case toolCallValid = "tool_call_valid"
+    case safetyPassed = "safety_passed"
+    case evaluatorScoreMin = "evaluator_score_min"
+    case jsonParseable = "json_parseable"
+    case maxRefusalRate = "max_refusal_rate"
+}

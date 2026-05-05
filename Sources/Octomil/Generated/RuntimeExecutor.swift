@@ -15,4 +15,5 @@ public enum RuntimeExecutor: String, Codable, Sendable {
     case samsungOne = "samsung_one"
     case executorch = "executorch"
     case echo = "echo"
+    case sherpaOnnx = "sherpa-onnx"
 }

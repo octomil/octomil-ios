@@ -9,6 +9,7 @@ public enum ContractFallbackTriggerStage: String, Codable, Sendable {
     case benchmark = "benchmark"
     case gate = "gate"
     case inference = "inference"
+    case outputQuality = "output_quality"
     case timeout = "timeout"
     case notApplicable = "not_applicable"
 }
