@@ -61,7 +61,7 @@ private final class MockLLMRuntime: LLMRuntime, @unchecked Sendable {
 
     init(tokens: [String]) { self.tokens = tokens }
 
-    func generate(prompt: String, config: GenerateConfig) -> AsyncThrowingStream<String, Error> {
+    func generate(prompt: String, config: GenerationConfig) -> AsyncThrowingStream<String, Error> {
         let tokens = self.tokens
         return AsyncThrowingStream { continuation in
             for token in tokens { continuation.yield(token) }
@@ -73,9 +73,9 @@ private final class MockLLMRuntime: LLMRuntime, @unchecked Sendable {
 }
 
 private final class CapturingLLMRuntime: LLMRuntime, @unchecked Sendable {
-    var capturedConfig: GenerateConfig?
+    var capturedConfig: GenerationConfig?
 
-    func generate(prompt: String, config: GenerateConfig) -> AsyncThrowingStream<String, Error> {
+    func generate(prompt: String, config: GenerationConfig) -> AsyncThrowingStream<String, Error> {
         capturedConfig = config
         return AsyncThrowingStream { continuation in
             continuation.yield("ok")
