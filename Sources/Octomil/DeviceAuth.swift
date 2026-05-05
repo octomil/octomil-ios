@@ -102,14 +102,16 @@ public actor DeviceAuthManager {
     private let deviceIdentifier: String
     private let keychainService: String
     private let storage: TokenStorage
+    private let session: URLSession
 
     // swiftlint:disable:next line_length
-    public init(baseURL: URL, orgId: String, deviceIdentifier: String, keychainService: String = "ai.octomil", storage: TokenStorage = KeychainTokenStorage()) {
+    public init(baseURL: URL, orgId: String, deviceIdentifier: String, keychainService: String = "ai.octomil", storage: TokenStorage = KeychainTokenStorage(), session: URLSession = .shared) {
         self.baseURL = baseURL
         self.orgId = orgId
         self.deviceIdentifier = deviceIdentifier
         self.keychainService = keychainService
         self.storage = storage
+        self.session = session
     }
 
     private var storageAccount: String {
@@ -203,7 +205,7 @@ public actor DeviceAuthManager {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: jsonBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if !expectedStatusCodes.contains(status) {
             throw NSError(
