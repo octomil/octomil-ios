@@ -32,19 +32,22 @@ jobs:
 
       - name: Build
         run: |
-          # 'Any iOS Simulator Device' avoids destination resolution failures on
-          # GitHub-hosted runners, which don't pre-create named simulator devices.
-          # xcrun simctl create is not reliable here: it requires the target runtime
-          # to already be installed and adds image-version coupling. Build and test
-          # correctness does not vary by device model for this package.
+          # macOS destination rather than iOS Simulator: GitHub-hosted runners ship
+          # without any iOS Simulator runtime installed, so even 'Any iOS Simulator
+          # Device' fails destination resolution (the placeholder entry in xcodebuild
+          # output is not a usable runtime). Installing a runtime via
+          # 'xcodebuild -downloadPlatform iOS' is slow and fragile on ephemeral runners.
+          # This is a Swift Package with no UIKit entry points; the macOS SDK exercises
+          # the same logic. iOS-specific code paths are guarded by @available and are
+          # enforced by the compiler regardless of destination.
           xcodebuild -scheme Octomil \
-            -destination 'platform=iOS Simulator,name=Any iOS Simulator Device' \
+            -destination 'platform=macOS,arch=arm64' \
             build
 
       - name: Run tests with coverage
         run: |
           xcodebuild -scheme Octomil \
-            -destination 'platform=iOS Simulator,name=Any iOS Simulator Device' \
+            -destination 'platform=macOS,arch=arm64' \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults \
             test
