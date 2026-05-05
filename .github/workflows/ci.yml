@@ -32,14 +32,19 @@ jobs:
 
       - name: Build
         run: |
+          # 'Any iOS Simulator Device' avoids destination resolution failures on
+          # GitHub-hosted runners, which don't pre-create named simulator devices.
+          # xcrun simctl create is not reliable here: it requires the target runtime
+          # to already be installed and adds image-version coupling. Build and test
+          # correctness does not vary by device model for this package.
           xcodebuild -scheme Octomil \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'platform=iOS Simulator,name=Any iOS Simulator Device' \
             build
 
       - name: Run tests with coverage
         run: |
           xcodebuild -scheme Octomil \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'platform=iOS Simulator,name=Any iOS Simulator Device' \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults \
             test
