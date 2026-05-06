@@ -1,9 +1,12 @@
 import Foundation
 
-// MARK: - Modality
+// MARK: - InferenceModality
 
-/// The modality of a generative model's output.
-public enum Modality: String, Codable, Hashable, Sendable, CaseIterable {
+/// The modality of a generative model's output within the SDK engine layer.
+///
+/// Extends the contract-level ``Modality`` enum with `.timeSeries`, which is
+/// an iOS-runtime-only modality not part of the cross-SDK API contract.
+public enum InferenceModality: String, Codable, Hashable, Sendable, CaseIterable {
     case text
     case image
     case audio
@@ -25,7 +28,7 @@ public struct InferenceChunk: Sendable {
     public let data: Data
 
     /// The modality this chunk belongs to.
-    public let modality: Modality
+    public let modality: InferenceModality
 
     /// Absolute timestamp when the chunk was produced.
     public let timestamp: Date
@@ -33,7 +36,7 @@ public struct InferenceChunk: Sendable {
     /// Milliseconds elapsed since the previous chunk (or since session start for the first chunk).
     public let latencyMs: Double
 
-    public init(index: Int, data: Data, modality: Modality, timestamp: Date, latencyMs: Double) {
+    public init(index: Int, data: Data, modality: InferenceModality, timestamp: Date, latencyMs: Double) {
         self.index = index
         self.data = data
         self.modality = modality
@@ -50,7 +53,7 @@ public struct StreamingInferenceResult: Sendable, Codable {
     public let sessionId: String
 
     /// The modality of the generation.
-    public let modality: Modality
+    public let modality: InferenceModality
 
     /// Time to first chunk in milliseconds.
     public let ttfcMs: Double
@@ -92,7 +95,7 @@ public protocol StreamingInferenceEngine: Sendable {
     ///   - modality: The output modality.
     ///   - config: Per-request generation parameters (maxTokens, temperature, etc.).
     /// - Returns: An async stream of inference chunks.
-    func generate(input: Any, modality: Modality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error>
+    func generate(input: Any, modality: InferenceModality, config: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error>
 }
 
 // MARK: - Timing Wrapper
@@ -102,10 +105,10 @@ public protocol StreamingInferenceEngine: Sendable {
 public final class InstrumentedStreamWrapper: @unchecked Sendable {
 
     private let sessionId: String
-    private let modality: Modality
+    private let modality: InferenceModality
     private let modelId: String?
 
-    public init(sessionId: String = UUID().uuidString, modality: Modality, modelId: String? = nil) {
+    public init(sessionId: String = UUID().uuidString, modality: InferenceModality, modelId: String? = nil) {
         self.sessionId = sessionId
         self.modality = modality
         self.modelId = modelId

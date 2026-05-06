@@ -5,7 +5,7 @@ import Foundation
 /// Errors thrown when the ``EngineRegistry`` cannot resolve an engine.
 public enum EngineResolutionError: Error, LocalizedError {
     /// No factory registered for the requested modality/engine combination.
-    case noEngineRegistered(modality: Modality, engine: Engine?)
+    case noEngineRegistered(modality: InferenceModality, engine: Engine?)
 
     public var errorDescription: String? {
         switch self {
@@ -20,7 +20,7 @@ public enum EngineResolutionError: Error, LocalizedError {
 
 // MARK: - EngineRegistry
 
-/// Thread-safe registry mapping (Modality, Engine?) pairs to engine factories.
+/// Thread-safe registry mapping (InferenceModality, Engine?) pairs to engine factories.
 ///
 /// The registry follows a two-step resolution chain:
 /// 1. Exact match on `(modality, engine)`
@@ -36,10 +36,10 @@ public final class EngineRegistry: @unchecked Sendable {
 
     /// Composite key for the factory dictionary.
     public struct EngineKey: Hashable, Sendable {
-        public let modality: Modality
+        public let modality: InferenceModality
         public let engine: Engine?
 
-        public init(modality: Modality, engine: Engine? = nil) {
+        public init(modality: InferenceModality, engine: Engine? = nil) {
             self.modality = modality
             self.engine = engine
         }
@@ -72,7 +72,7 @@ public final class EngineRegistry: @unchecked Sendable {
     ///   - modality: The output modality.
     ///   - engine: The specific engine, or `nil` for the modality default.
     ///   - factory: Closure that creates a ``StreamingInferenceEngine`` from a model URL.
-    public func register(modality: Modality, engine: Engine? = nil, factory: @escaping EngineFactory) {
+    public func register(modality: InferenceModality, engine: Engine? = nil, factory: @escaping EngineFactory) {
         let key = EngineKey(modality: modality, engine: engine)
         lock.lock()
         defer { lock.unlock() }
@@ -85,7 +85,7 @@ public final class EngineRegistry: @unchecked Sendable {
     ///
     /// Resolution chain:
     /// 1. Exact match `(modality, engine)` if engine is non-nil
-    /// 2. Modality default `(modality, nil)`
+    /// 2. InferenceModality default `(modality, nil)`
     /// 3. Throw ``EngineResolutionError``
     ///
     /// - Parameters:
@@ -94,7 +94,7 @@ public final class EngineRegistry: @unchecked Sendable {
     ///   - modelURL: URL passed to the factory to construct the engine.
     /// - Returns: A configured ``StreamingInferenceEngine``.
     /// - Throws: ``EngineResolutionError`` if no matching factory is found.
-    public func resolve(modality: Modality, engine: Engine? = nil, modelURL: URL) throws -> StreamingInferenceEngine {
+    public func resolve(modality: InferenceModality, engine: Engine? = nil, modelURL: URL) throws -> StreamingInferenceEngine {
         lock.lock()
         let snapshot = factories
         lock.unlock()
@@ -107,7 +107,7 @@ public final class EngineRegistry: @unchecked Sendable {
             }
         }
 
-        // 2. Modality default
+        // 2. InferenceModality default
         let defaultKey = EngineKey(modality: modality, engine: nil)
         if let factory = snapshot[defaultKey] {
             return try factory(modelURL)
@@ -157,7 +157,7 @@ public final class EngineRegistry: @unchecked Sendable {
     /// Detect which engines are available for the given modality on this device.
     /// - Parameter modality: The target modality.
     /// - Returns: Detection results for each known engine.
-    public func detectAll(modality: Modality) -> [DetectionResult] {
+    public func detectAll(modality: InferenceModality) -> [DetectionResult] {
         // TODO: Implement
         let engines: [Engine] = [.coreml, .mlx]
         return engines.map { engine in
@@ -171,7 +171,7 @@ public final class EngineRegistry: @unchecked Sendable {
     ///   - modelURL: URL of the model to benchmark.
     ///   - nTokens: Number of tokens to generate during benchmark (default: 32).
     /// - Returns: Ranked engines sorted by tokens-per-second descending.
-    public func benchmarkAll(modality: Modality, modelURL: URL, nTokens: Int = 32) async -> [RankedEngine] {
+    public func benchmarkAll(modality: InferenceModality, modelURL: URL, nTokens: Int = 32) async -> [RankedEngine] {
         // TODO: Implement
         return []
     }

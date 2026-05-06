@@ -6,10 +6,10 @@ import XCTest
 /// and ``InstrumentedStreamWrapper``.
 final class StreamingInferenceTests: XCTestCase {
 
-    // MARK: - Modality
+    // MARK: - InferenceModality (engine-layer enum; includes .timeSeries unlike contract Modality)
 
     func testModalityAllCases() {
-        let cases = Modality.allCases
+        let cases = InferenceModality.allCases
         XCTAssertEqual(cases.count, 5)
         XCTAssertTrue(cases.contains(.text))
         XCTAssertTrue(cases.contains(.image))
@@ -19,20 +19,20 @@ final class StreamingInferenceTests: XCTestCase {
     }
 
     func testModalityRawValues() {
-        XCTAssertEqual(Modality.text.rawValue, "text")
-        XCTAssertEqual(Modality.image.rawValue, "image")
-        XCTAssertEqual(Modality.audio.rawValue, "audio")
-        XCTAssertEqual(Modality.video.rawValue, "video")
-        XCTAssertEqual(Modality.timeSeries.rawValue, "time_series")
+        XCTAssertEqual(InferenceModality.text.rawValue, "text")
+        XCTAssertEqual(InferenceModality.image.rawValue, "image")
+        XCTAssertEqual(InferenceModality.audio.rawValue, "audio")
+        XCTAssertEqual(InferenceModality.video.rawValue, "video")
+        XCTAssertEqual(InferenceModality.timeSeries.rawValue, "time_series")
     }
 
     func testModalityCodableRoundtrip() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
-        for modality in Modality.allCases {
+        for modality in InferenceModality.allCases {
             let data = try encoder.encode(modality)
-            let decoded = try decoder.decode(Modality.self, from: data)
+            let decoded = try decoder.decode(InferenceModality.self, from: data)
             XCTAssertEqual(decoded, modality)
         }
     }
@@ -273,12 +273,14 @@ final class StreamingInferenceTests: XCTestCase {
         let result = try XCTUnwrap(getResult())
         XCTAssertEqual(result.totalChunks, 5)
 
-        // With 5 chunks and ~50ms total duration, throughput should be ~100 chunks/sec.
-        // Allow generous bounds for CI variability: 20-500 chunks/sec.
-        XCTAssertGreaterThan(result.throughput, 20.0,
-                             "Throughput should be > 20 chunks/sec for 5 chunks with 10ms delays")
-        XCTAssertLessThan(result.throughput, 500.0,
-                          "Throughput should be < 500 chunks/sec (sanity upper bound)")
+        // Sanity bound only: throughput must be positive and finite. Do NOT assert
+        // wall-clock-derived bounds here — `Task.sleep` precision and async-stream
+        // hop overhead make absolute throughput non-deterministic on CI runners.
+        // The formula assertion below is the actual unit-of-behavior under test.
+        XCTAssertGreaterThan(result.throughput, 0.0,
+                             "Throughput must be positive when chunks were produced")
+        XCTAssertTrue(result.throughput.isFinite,
+                      "Throughput must be finite (guards against div-by-zero)")
 
         // Verify the formula: throughput = totalChunks / (totalDurationMs / 1000)
         let expectedThroughput = Double(result.totalChunks) / (result.totalDurationMs / 1000)

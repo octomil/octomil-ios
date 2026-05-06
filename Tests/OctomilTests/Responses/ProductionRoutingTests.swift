@@ -28,7 +28,7 @@ final class ProductionRoutingTests: XCTestCase {
         let meta = response.routeMetadata!
         XCTAssertEqual(meta.status, "selected")
         XCTAssertNotNil(meta.execution)
-        XCTAssertEqual(meta.model.requested.kind, "model")
+        XCTAssertEqual(meta.model.requested.kind.rawValue, "model")
         XCTAssertEqual(meta.model.requested.ref, "phi-4-mini")
         XCTAssertFalse(meta.execution?.locality.isEmpty ?? true)
     }
@@ -54,7 +54,7 @@ final class ProductionRoutingTests: XCTestCase {
 
         let meta = doneResponse!.routeMetadata!
         XCTAssertEqual(meta.status, "selected")
-        XCTAssertEqual(meta.model.requested.kind, "model")
+        XCTAssertEqual(meta.model.requested.kind.rawValue, "model")
     }
 
     func testRouteMetadataContainsPlannerSource() async throws {
@@ -206,7 +206,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.model.requested.kind, "deployment",
+            response.routeMetadata?.model.requested.kind.rawValue, "deployment",
             "Route metadata must reflect the deployment ref kind"
         )
     }
@@ -220,7 +220,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.model.requested.kind, "experiment",
+            response.routeMetadata?.model.requested.kind.rawValue, "experiment",
             "Route metadata must reflect the experiment ref kind"
         )
     }
@@ -234,7 +234,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            response.routeMetadata?.model.requested.kind, "app",
+            response.routeMetadata?.model.requested.kind.rawValue, "app",
             "Route metadata must reflect the app ref kind"
         )
     }
@@ -249,7 +249,7 @@ final class ProductionRoutingTests: XCTestCase {
         let decision = router.resolve(context: context)
 
         // Without a plan, should fall back to hosted gateway
-        XCTAssertEqual(decision.routeMetadata.model.requested.kind, "deployment")
+        XCTAssertEqual(decision.routeMetadata.model.requested.kind.rawValue, "deployment")
         XCTAssertEqual(decision.locality, "cloud")
         XCTAssertEqual(decision.mode, "hosted_gateway")
     }
@@ -263,7 +263,7 @@ final class ProductionRoutingTests: XCTestCase {
         )
         let decision = router.resolve(context: context)
 
-        XCTAssertEqual(decision.routeMetadata.model.requested.kind, "experiment")
+        XCTAssertEqual(decision.routeMetadata.model.requested.kind.rawValue, "experiment")
     }
 
     func testStreamWithDeploymentRefAttachesCorrectKind() async throws {
@@ -280,7 +280,7 @@ final class ProductionRoutingTests: XCTestCase {
         }
 
         XCTAssertNotNil(doneResponse)
-        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind, "deployment")
+        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind.rawValue, "deployment")
     }
 
     func testStreamWithAppRefAttachesCorrectKind() async throws {
@@ -297,7 +297,7 @@ final class ProductionRoutingTests: XCTestCase {
         }
 
         XCTAssertNotNil(doneResponse)
-        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind, "app")
+        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind.rawValue, "app")
     }
 
     func testStreamWithExperimentRefAttachesCorrectKind() async throws {
@@ -314,7 +314,7 @@ final class ProductionRoutingTests: XCTestCase {
         }
 
         XCTAssertNotNil(doneResponse)
-        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind, "experiment")
+        XCTAssertEqual(doneResponse?.routeMetadata?.model.requested.kind.rawValue, "experiment")
     }
 
     // MARK: - 4. Telemetry event matches contract shape
@@ -324,11 +324,14 @@ final class ProductionRoutingTests: XCTestCase {
             status: "selected",
             execution: RouteExecution(locality: "local", mode: "sdk_runtime", engine: "coreml"),
             model: RouteModel(
-                requested: RouteModelRequested(ref: "deploy_abc", kind: "deployment")
+                requested: RouteModelRequested(ref: "deploy_abc", kind: .deployment, capability: nil),
+                resolved: nil
             ),
-            artifact: RouteArtifact(cache: ArtifactCache(status: "hit")),
+            artifact: RouteArtifact(id: nil, version: nil, format: nil, digest: nil, cache: ArtifactCache(status: "hit", managed_by: nil)),
             planner: PlannerInfo(source: "cache"),
-            fallback: FallbackInfo(used: true)
+            fallback: FallbackInfo(used: true, from_attempt: nil, to_attempt: nil, trigger: nil),
+            attempts: nil,
+            reason: RouteReason(code: "ok", message: "")
         )
 
         let decision = RoutingDecisionResult(

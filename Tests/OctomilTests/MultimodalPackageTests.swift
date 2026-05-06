@@ -351,19 +351,19 @@ final class MultimodalPackageTests: XCTestCase {
         XCTAssertEqual(ArtifactResourceKind.vocab.rawValue, "vocab")
     }
 
-    // MARK: - OutputModality
+    // MARK: - OutputModality (now Modality — OutputModality removed in contracts 1.23.0)
 
     func testOutputModalityRawValues() {
-        XCTAssertEqual(OutputModality.text.rawValue, "text")
-        XCTAssertEqual(OutputModality.image.rawValue, "image")
-        XCTAssertEqual(OutputModality.audio.rawValue, "audio")
-        XCTAssertEqual(OutputModality.video.rawValue, "video")
+        XCTAssertEqual(Modality.text.rawValue, "text")
+        XCTAssertEqual(Modality.image.rawValue, "image")
+        XCTAssertEqual(Modality.audio.rawValue, "audio")
+        XCTAssertEqual(Modality.video.rawValue, "video")
     }
 
     func testOutputModalityCodable() throws {
-        let modality = OutputModality.text
+        let modality = Modality.text
         let data = try JSONEncoder().encode(modality)
-        let decoded = try JSONDecoder().decode(OutputModality.self, from: data)
+        let decoded = try JSONDecoder().decode(Modality.self, from: data)
         XCTAssertEqual(decoded, modality)
     }
 

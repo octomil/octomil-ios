@@ -9,4 +9,5 @@ public enum ContractModelCapability: String, Codable, Sendable {
     case classification = "classification"
     case reasoning = "reasoning"
     case vision = "vision"
+    case tts = "tts"
 }

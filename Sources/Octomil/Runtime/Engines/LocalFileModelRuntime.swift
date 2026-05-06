@@ -39,7 +39,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     public let engine: Engine?
 
     /// Resolved engine instances keyed by modality, lazily created on first use.
-    private var resolvedEngines: [Modality: StreamingInferenceEngine] = [:]
+    private var resolvedEngines: [InferenceModality: StreamingInferenceEngine] = [:]
     private let lock = NSLock()
 
     public let capabilities: RuntimeCapabilities
@@ -183,13 +183,13 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
 
     // MARK: - Private
 
-    /// Determine the output ``Modality`` from a ``RuntimeRequest``.
+    /// Determine the output ``InferenceModality`` from a ``RuntimeRequest``.
     ///
     /// Pure audio requests (audio parts, no user text, no images) resolve as
     /// `.audio` so transcription engines (Sherpa, Whisper) are selected.
     /// Everything else — text-only, text+image, text+audio — resolves as `.text`
     /// so text-generating engines (llama.cpp, MLX, CoreML) are selected.
-    static func modality(for request: RuntimeRequest) -> Modality {
+    static func modality(for request: RuntimeRequest) -> InferenceModality {
         var hasAudio = false
         var hasUserText = false
         var hasImage = false
@@ -222,7 +222,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
     /// - Text with media (`.text` modality + media parts): returns ``MultimodalInput``
     ///   containing the rendered prompt and the first media attachment.
     /// - Text-only: returns the ChatML-rendered prompt string.
-    static func engineInput(for request: RuntimeRequest, modality: Modality) -> Any {
+    static func engineInput(for request: RuntimeRequest, modality: InferenceModality) -> Any {
         // Pure audio: return raw bytes for transcription engines
         if modality == .audio {
             for msg in request.messages {
@@ -253,7 +253,7 @@ public final class LocalFileModelRuntime: ModelRuntime, @unchecked Sendable {
         return prompt
     }
 
-    private func resolveEngine(modality: Modality) throws -> StreamingInferenceEngine {
+    private func resolveEngine(modality: InferenceModality) throws -> StreamingInferenceEngine {
         lock.lock()
         defer { lock.unlock() }
 

@@ -12,16 +12,6 @@ final class DeviceAuthManagerTests: XCTestCase {
         SharedMockURLProtocol.allowedHost = Self.testHost
     }
 
-    override static func setUp() {
-        super.setUp()
-        URLProtocol.registerClass(SharedMockURLProtocol.self)
-    }
-
-    override static func tearDown() {
-        URLProtocol.unregisterClass(SharedMockURLProtocol.self)
-        super.tearDown()
-    }
-
     func testBootstrapRefreshRevokeLifecycle() async throws {
         let manager = makeManager().manager
         let formatter = ISO8601DateFormatter.withFractional
@@ -215,13 +205,16 @@ final class DeviceAuthManagerTests: XCTestCase {
         let unique = UUID().uuidString
         let orgId = "org-\(unique)"
         let deviceIdentifier = "device-\(unique)"
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SharedMockURLProtocol.self]
         return (
             DeviceAuthManager(
-            baseURL: Self.testBaseURL,
-            orgId: orgId,
-            deviceIdentifier: deviceIdentifier,
-            keychainService: "ai.octomil.tests.\(unique)",
-            storage: InMemoryTokenStorage()
+                baseURL: Self.testBaseURL,
+                orgId: orgId,
+                deviceIdentifier: deviceIdentifier,
+                keychainService: "ai.octomil.tests.\(unique)",
+                storage: InMemoryTokenStorage(),
+                session: URLSession(configuration: config)
             ),
             orgId,
             deviceIdentifier

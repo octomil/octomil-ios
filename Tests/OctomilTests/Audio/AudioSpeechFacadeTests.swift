@@ -112,7 +112,7 @@ final class AudioSpeechFacadeTests: XCTestCase {
             app: app
         )
 
-        XCTAssertEqual(result.route.model.requested.kind, "app")
+        XCTAssertEqual(result.route.model.requested.kind.rawValue, "app")
         XCTAssertEqual(result.route.model.requested.ref, "@app/notes/tts")
     }
 
@@ -286,7 +286,16 @@ final class FakeTtsBackend: TtsBackend, @unchecked Sendable {
             model: modelId,
             route: RouteMetadata(
                 status: "selected",
-                model: RouteModel(requested: RouteModelRequested(ref: modelId, kind: "model"))
+                execution: nil,
+                model: RouteModel(
+                    requested: RouteModelRequested(ref: modelId, kind: .model, capability: nil),
+                    resolved: nil
+                ),
+                artifact: nil,
+                planner: PlannerInfo(source: "offline"),
+                fallback: FallbackInfo(used: false, from_attempt: nil, to_attempt: nil, trigger: nil),
+                attempts: nil,
+                reason: RouteReason(code: "ok", message: "")
             ),
             preparedDir: artifactDir
         )

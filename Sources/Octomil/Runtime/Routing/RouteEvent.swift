@@ -186,9 +186,9 @@ public struct RouteEvent: Codable, Sendable, Equatable {
             fallbackTriggerStage: decision.attemptResult.fallbackTrigger?.stage,
             candidateAttempts: decision.attemptResult.attempts.count,
             modelRef: route.model.requested.ref,
-            modelRefKind: route.model.requested.kind,
+            modelRefKind: route.model.requested.kind.rawValue,
             artifactId: route.artifact?.id,
-            cacheStatus: route.artifact?.cache.status
+            cacheStatus: route.artifact?.cache?.status
         )
     }
 

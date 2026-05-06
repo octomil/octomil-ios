@@ -30,19 +30,28 @@ jobs:
         run: |
           swift package resolve
 
-      - name: Build
+      - name: Build for testing
         run: |
+          # macOS destination rather than iOS Simulator: GitHub-hosted runners ship
+          # without any iOS Simulator runtime installed, so even 'Any iOS Simulator
+          # Device' fails destination resolution (the placeholder is not a usable
+          # runtime). This is a Swift Package with no UIKit entry points; the macOS
+          # SDK exercises the same logic. iOS-specific paths are guarded by @available.
+          #
+          # build-for-testing rather than build: compiles once and produces a reusable
+          # test bundle consumed by test-without-building below, avoiding a second full
+          # compile pass. See OCT-99.
           xcodebuild -scheme Octomil \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
-            build
+            -destination 'platform=macOS,arch=arm64' \
+            build-for-testing
 
       - name: Run tests with coverage
         run: |
           xcodebuild -scheme Octomil \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'platform=macOS,arch=arm64' \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults \
-            test
+            test-without-building
 
       - name: Generate coverage report
         run: |

@@ -17,7 +17,7 @@ public final class TimeSeriesEngine: StreamingInferenceEngine, @unchecked Sendab
 
     // MARK: - StreamingInferenceEngine
 
-    public func generate(input: Any, modality: Modality, config _: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input: Any, modality: InferenceModality, config _: GenerationConfig) -> AsyncThrowingStream<InferenceChunk, Error> {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {

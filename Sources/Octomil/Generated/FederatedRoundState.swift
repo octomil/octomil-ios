@@ -3,7 +3,7 @@
 public enum FederatedRoundState: String, Codable, Sendable {
     case draft = "draft"
     case scheduled = "scheduled"
-    case open = "open"
+    case `open` = "open"
     case acceptingParticipants = "accepting_participants"
     case trainingInProgress = "training_in_progress"
     case aggregating = "aggregating"
