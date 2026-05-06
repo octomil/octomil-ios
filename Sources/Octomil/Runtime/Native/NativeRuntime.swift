@@ -124,6 +124,13 @@ public struct NativeOperationalEnvelope: Sendable {
     }
 }
 
+// MARK: - Sample format (runtime.h:831-832)
+
+public enum NativeSampleFormat: UInt32, Sendable {
+    case pcmS16LE = 1
+    case pcmF32LE = 2
+}
+
 // MARK: - Event payloads (subset of the oct_event union)
 //
 // Only payloads the stub fires are modelled. Runtime-scope events
@@ -134,12 +141,20 @@ public struct NativeOperationalEnvelope: Sendable {
 public struct NativeAudioChunkPayload: Sendable {
     public let pcm: Data
     public let sampleRate: UInt32
+    public let sampleFormat: NativeSampleFormat
     public let channels: UInt16
     public let isFinal: Bool
 
-    public init(pcm: Data, sampleRate: UInt32, channels: UInt16, isFinal: Bool) {
+    public init(
+        pcm: Data,
+        sampleRate: UInt32,
+        sampleFormat: NativeSampleFormat,
+        channels: UInt16,
+        isFinal: Bool
+    ) {
         self.pcm = pcm
         self.sampleRate = sampleRate
+        self.sampleFormat = sampleFormat
         self.channels = channels
         self.isFinal = isFinal
     }
@@ -402,6 +417,9 @@ public protocol NativeModel: Actor {
 }
 
 public protocol NativeSession: Actor {
+    /// `pcm` is interleaved float32 LE (matches `oct_audio_view_t.samples` —
+    /// input is always f32; output `audioChunk` events carry an explicit
+    /// format).
     func sendAudio(_ pcm: Data, sampleRate: UInt32, channels: UInt16) async throws
     func sendText(_ utf8: String) async throws
 
