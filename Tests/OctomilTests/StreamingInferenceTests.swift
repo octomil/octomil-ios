@@ -273,12 +273,14 @@ final class StreamingInferenceTests: XCTestCase {
         let result = try XCTUnwrap(getResult())
         XCTAssertEqual(result.totalChunks, 5)
 
-        // With 5 chunks and ~50ms total duration, throughput should be ~100 chunks/sec.
-        // Allow generous bounds for CI variability: 20-500 chunks/sec.
-        XCTAssertGreaterThan(result.throughput, 20.0,
-                             "Throughput should be > 20 chunks/sec for 5 chunks with 10ms delays")
-        XCTAssertLessThan(result.throughput, 500.0,
-                          "Throughput should be < 500 chunks/sec (sanity upper bound)")
+        // Sanity bound only: throughput must be positive and finite. Do NOT assert
+        // wall-clock-derived bounds here — `Task.sleep` precision and async-stream
+        // hop overhead make absolute throughput non-deterministic on CI runners.
+        // The formula assertion below is the actual unit-of-behavior under test.
+        XCTAssertGreaterThan(result.throughput, 0.0,
+                             "Throughput must be positive when chunks were produced")
+        XCTAssertTrue(result.throughput.isFinite,
+                      "Throughput must be finite (guards against div-by-zero)")
 
         // Verify the formula: throughput = totalChunks / (totalDurationMs / 1000)
         let expectedThroughput = Double(result.totalChunks) / (result.totalDurationMs / 1000)
