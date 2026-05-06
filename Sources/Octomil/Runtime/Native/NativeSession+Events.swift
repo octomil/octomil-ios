@@ -14,6 +14,9 @@ extension NativeSession {
                 do {
                     while !Task.isCancelled {
                         guard let event = try await self.pollEvent(timeout: pollInterval) else {
+                            if pollInterval == 0 {
+                                await Task.yield()
+                            }
                             continue
                         }
                         continuation.yield(event)

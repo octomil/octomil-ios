@@ -214,6 +214,9 @@ public actor StubSession: NativeSession {
             // subsequent polls return CANCELLED (runtime.h: OCT_STATUS_CANCELLED).
             throw NativeRuntimeError(status: .cancelled)
         }
+        if isClosed {
+            throw NativeRuntimeError(status: .invalidInput)
+        }
         if index < script.count {
             let event = script[index]
             index += 1

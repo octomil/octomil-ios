@@ -402,7 +402,7 @@ public protocol NativeRuntime: Actor {
     ) async throws -> any NativeSession
 
     /// Precondition: all models opened via this runtime have been
-    /// closed first. Violation traps in dev builds.
+    /// closed first. Violation triggers a precondition failure.
     func close() async
 }
 
