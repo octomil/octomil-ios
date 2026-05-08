@@ -42,11 +42,22 @@ public final class OctomilClient: @unchecked Sendable {
 
     // MARK: - Constants
 
-    /// Default Octomil server host.
+    /// Production Octomil server host. Static literal — call sites
+    /// pinning the prod host as a known constant should keep using
+    /// this. Dynamic profile resolution (staging/dev) goes through
+    /// ``defaultServerURL`` below.
     public static let defaultServerHost = "api.octomil.com"
 
-    /// Default Octomil server URL.
-    public static let defaultServerURL = URL(string: "https://\(defaultServerHost)")!
+    /// Default Octomil server URL — resolves through
+    /// ``OctomilProfileResolver`` so OCTOMIL_PROFILE=staging flips
+    /// every ``AuthConfig`` / ``OctomilFacade`` default to the
+    /// staging endpoint without per-call serverURL overrides
+    /// (codex post-debate B2 wiring). Falls back to the prod literal
+    /// host on any profile-resolution failure.
+    public static var defaultServerURL: URL {
+        (try? OctomilProfileResolver.resolveHostURL())
+            ?? URL(string: "https://\(defaultServerHost)")!
+    }
 
     // MARK: - Shared Instance
 
