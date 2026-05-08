@@ -15,8 +15,11 @@ public enum Deploy {
 
     private static let logger = Logger(subsystem: "ai.octomil.sdk", category: "Deploy")
 
-    /// Default server URL used when none is supplied.
-    private static let defaultServerURL = URL(string: "https://api.octomil.com")!
+    /// Default server URL used when none is supplied. Profile-aware
+    /// — flips to staging when OCTOMIL_PROFILE=staging (codex R3 B).
+    private static var defaultServerURL: URL {
+        OctomilClient.defaultServerURL
+    }
 
     /// Deploy a model from a local file URL.
     ///
