@@ -272,4 +272,57 @@ final class ProfileTests: XCTestCase {
         let urls = Set(OctomilProfile.allCases.map { OctomilProfileResolver.hostURL(for: $0) })
         XCTAssertEqual(urls.count, OctomilProfile.allCases.count)
     }
+
+    // MARK: - Hostile-URL inference safety (codex post-debate B1)
+
+    func testMarkerInQueryStringDoesNotSpoofProfile() throws {
+        let res = try OctomilProfileResolver.resolveProfile(
+            environment: ["OCTOMIL_API_BASE": "https://evil.test/?next=api.staging.octomil.com"]
+        )
+        XCTAssertEqual(res.profile, .production)
+        XCTAssertEqual(res.source, .default)
+    }
+
+    func testMarkerInPathDoesNotSpoofProfile() throws {
+        let res = try OctomilProfileResolver.resolveProfile(
+            environment: ["OCTOMIL_API_BASE": "https://evil.test/api.octomil.com/v1"]
+        )
+        XCTAssertEqual(res.profile, .production)
+    }
+
+    func testMarkerInUserinfoDoesNotSpoofProfile() throws {
+        let res = try OctomilProfileResolver.resolveProfile(
+            environment: ["OCTOMIL_API_BASE": "https://api.staging.octomil.com@evil.test/v1"]
+        )
+        // URLComponents.host is evil.test, not api.staging.octomil.com.
+        XCTAssertEqual(res.profile, .production)
+    }
+
+    func testSuperdomainDoesNotSpoofProduction() throws {
+        let res = try OctomilProfileResolver.resolveProfile(
+            environment: ["OCTOMIL_API_BASE": "https://api.octomil.com.evil.test/v1"]
+        )
+        XCTAssertEqual(res.profile, .production)
+        XCTAssertEqual(res.source, .default)
+    }
+
+    func testUnparseableURLFallsThroughSafely() throws {
+        let res = try OctomilProfileResolver.resolveProfile(
+            environment: ["OCTOMIL_API_BASE": "not a url"]
+        )
+        XCTAssertEqual(res.profile, .production)
+    }
+
+    // MARK: - Whitespace fallback (codex post-debate N1)
+
+    func testWhitespaceAPIBaseFallsBackToAPIURL() throws {
+        let res = try OctomilProfileResolver.resolveProfile(
+            environment: [
+                "OCTOMIL_API_BASE": "   ",
+                "OCTOMIL_API_URL": "https://api.staging.octomil.com",
+            ]
+        )
+        XCTAssertEqual(res.profile, .staging)
+        XCTAssertEqual(res.source, .urlInferred)
+    }
 }

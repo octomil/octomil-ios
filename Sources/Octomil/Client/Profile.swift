@@ -112,9 +112,11 @@ public enum OctomilProfileResolver {
         .dev: "octomil-models-dev",
     ]
 
-    // Heuristic host substrings, ordered: staging FIRST (more specific
-    // host) so api.staging.octomil.com matches before api.octomil.com.
-    static let hostInferenceMarkers: [(OctomilProfile, [String])] = [
+    // Exact-host markers used for URL inference. Match is against the
+    // *parsed hostname*, never a substring of the raw URL — a hostile
+    // URL like https://evil.test/?next=api.staging.octomil.com or
+    // api.octomil.com.evil.test MUST NOT spoof a profile.
+    static let hostInferenceMarkers: [(OctomilProfile, Set<String>)] = [
         (.staging, ["api.staging.octomil.com"]),
         (.production, ["api.octomil.com"]),
         (.dev, ["localhost", "127.0.0.1", "0.0.0.0"]),
@@ -137,8 +139,16 @@ public enum OctomilProfileResolver {
     }
 
     /// Canonical R2 bucket for model artifacts in the given profile.
+    /// Crashes (preconditionFailure) on table drift — falling back to
+    /// the prod bucket would risk cross-env artifact leakage (codex
+    /// post-debate B2).
     public static func artifactBucket(for profile: OctomilProfile) -> String {
-        artifactBuckets[profile] ?? "octomil-models"
+        guard let bucket = artifactBuckets[profile] else {
+            preconditionFailure(
+                "OctomilProfile \(profile.rawValue) missing from artifactBuckets table"
+            )
+        }
+        return bucket
     }
 
     /// Cache key prefix for planner/capability caches — prevents
@@ -171,10 +181,14 @@ public enum OctomilProfileResolver {
             return OctomilProfileResolution(profile: try OctomilProfile.from(rawEnv), source: .env)
         }
 
-        // 3. URL inference.
-        let explicitURL = (env["OCTOMIL_API_BASE"] ?? "").isEmpty
-            ? (env["OCTOMIL_API_URL"] ?? "")
-            : (env["OCTOMIL_API_BASE"] ?? "")
+        // 3. URL inference. Trim BEFORE selecting so a whitespace
+        //    OCTOMIL_API_BASE doesn't mask a valid OCTOMIL_API_URL
+        //    (codex post-debate N1).
+        let baseTrimmed = (env["OCTOMIL_API_BASE"] ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        let urlTrimmed = (env["OCTOMIL_API_URL"] ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        let explicitURL = baseTrimmed.isEmpty ? urlTrimmed : baseTrimmed
         if let inferred = inferFromURL(explicitURL) {
             return OctomilProfileResolution(profile: inferred, source: .urlInferred)
         }
@@ -209,12 +223,21 @@ public enum OctomilProfileResolver {
     }
 
     private static func inferFromURL(_ raw: String) -> OctomilProfile? {
-        guard !raw.isEmpty else { return nil }
-        let lowered = raw.trimmingCharacters(in: .whitespaces).lowercased()
-        for (profile, markers) in hostInferenceMarkers {
-            for marker in markers where lowered.contains(marker) {
-                return profile
-            }
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        // Use URLComponents to parse; substring matching the raw URL
+        // would let evil.test/?next=api.staging.octomil.com or
+        // api.octomil.com.evil.test spoof a profile (codex post-
+        // debate B1).
+        guard
+            let components = URLComponents(string: trimmed),
+            let host = components.host?.lowercased(),
+            !host.isEmpty
+        else {
+            return nil
+        }
+        for (profile, markers) in hostInferenceMarkers where markers.contains(host) {
+            return profile
         }
         return nil
     }
