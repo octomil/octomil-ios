@@ -44,10 +44,10 @@ public enum OctomilProfile: String, CaseIterable, Sendable {
     /// Case-insensitive lookup with helpful error.
     /// Accepts ``prod`` / ``stg`` aliases that operators commonly type.
     public static func from(_ raw: String) throws -> OctomilProfile {
-        guard !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw OctomilProfileError.invalid("profile name must be non-empty")
         }
-        let normalized = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let aliases: [String: String] = [
             "prod": "production",
             "stg": "staging",
@@ -171,12 +171,12 @@ public enum OctomilProfileResolver {
         let env = environment ?? ProcessInfo.processInfo.environment
 
         // 1. Explicit argument wins.
-        if let raw = explicit?.trimmingCharacters(in: .whitespaces), !raw.isEmpty {
+        if let raw = explicit?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
             return OctomilProfileResolution(profile: try OctomilProfile.from(raw), source: .explicit)
         }
 
         // 2. OCTOMIL_PROFILE env var.
-        let rawEnv = (env["OCTOMIL_PROFILE"] ?? "").trimmingCharacters(in: .whitespaces)
+        let rawEnv = (env["OCTOMIL_PROFILE"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !rawEnv.isEmpty {
             return OctomilProfileResolution(profile: try OctomilProfile.from(rawEnv), source: .env)
         }
@@ -185,9 +185,9 @@ public enum OctomilProfileResolver {
         //    OCTOMIL_API_BASE doesn't mask a valid OCTOMIL_API_URL
         //    (codex post-debate N1).
         let baseTrimmed = (env["OCTOMIL_API_BASE"] ?? "")
-            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let urlTrimmed = (env["OCTOMIL_API_URL"] ?? "")
-            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let explicitURL = baseTrimmed.isEmpty ? urlTrimmed : baseTrimmed
         if let inferred = inferFromURL(explicitURL) {
             return OctomilProfileResolution(profile: inferred, source: .urlInferred)
@@ -223,7 +223,7 @@ public enum OctomilProfileResolver {
     }
 
     private static func inferFromURL(_ raw: String) -> OctomilProfile? {
-        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         // Use URLComponents to parse; substring matching the raw URL
         // would let evil.test/?next=api.staging.octomil.com or
