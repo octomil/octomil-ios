@@ -52,11 +52,29 @@ public final class OctomilClient: @unchecked Sendable {
     /// ``OctomilProfileResolver`` so OCTOMIL_PROFILE=staging flips
     /// every ``AuthConfig`` / ``OctomilFacade`` default to the
     /// staging endpoint without per-call serverURL overrides
-    /// (codex post-debate B2 wiring). Falls back to the prod literal
-    /// host on any profile-resolution failure.
+    /// (codex post-debate B2 wiring).
+    ///
+    /// Fail-closed: if OCTOMIL_PROFILE is set to an unrecognized value
+    /// (e.g. a typo like "stagng"), this property calls fatalError rather
+    /// than silently routing SDK traffic to production. The empty / unset
+    /// case is the ONLY legitimate fallback to the default prod URL
+    /// (codex B1 fix).
     public static var defaultServerURL: URL {
-        (try? OctomilProfileResolver.resolveHostURL())
-            ?? URL(string: "https://\(defaultServerHost)")!
+        do {
+            return try OctomilProfileResolver.resolveHostURL()
+        } catch let err as OctomilProfileError {
+            let raw = ProcessInfo.processInfo.environment["OCTOMIL_PROFILE"] ?? ""
+            let valid = OctomilProfile.allCases.map(\.rawValue).joined(separator: ", ")
+            fatalError(
+                "[Octomil] OCTOMIL_PROFILE='\(raw)' is not a recognized profile. "
+                    + "Valid profiles: \(valid). "
+                    + "Underlying error: \(err). "
+                    + "Unset OCTOMIL_PROFILE or correct the typo — do not rely on "
+                    + "silent prod fallback."
+            )
+        } catch {
+            fatalError("[Octomil] Profile resolution failed unexpectedly: \(error)")
+        }
     }
 
     // MARK: - Shared Instance
