@@ -422,8 +422,8 @@ final class NativeCapabilityConformanceTests: XCTestCase {
     // Each test below is a scaffold that will execute when the bridge lands.
     // Reason: "Swift C-interop to liboctomil_runtime not yet wired — TODO: Swift FFI bridge"
 
-    private func skipNativePath(capability: String, file: StaticString = #file, line: UInt = #line) {
-        XCTSkip(
+    private func skipNativePath(capability: String, file: StaticString = #file, line: UInt = #line) throws {
+        throw XCTSkip(
             "SKIP_WITH_EXPLICIT_REASON: native lifecycle for '\(capability)' requires " +
             "Swift C-interop to liboctomil_runtime (oct_runtime_open / oct_session_open / " +
             "oct_session_poll). The FFI bridge is not yet wired. " +
