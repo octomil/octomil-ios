@@ -18,9 +18,11 @@ import XCTest
 //   - audio.diarization, audio.realtime.session, embeddings.image,
 //     index.vector.query, audio.stt.*
 //
-// SKIP policy: all native paths are SKIP_WITH_EXPLICIT_REASON because the
-// Swift C-interop bridge to liboctomil_runtime (oct_runtime_open /
-// oct_session_open / oct_session_poll) is not yet wired in this SDK.
+// SKIP policy: all native lifecycle paths are SKIP_WITH_EXPLICIT_REASON
+// because the Swift C-interop bridge currently covers only runtime open,
+// capabilities, ABI checks, close, and last-error mapping. Model/session/
+// event calls (oct_model_open / oct_session_open / oct_session_poll) are
+// not yet wired in this SDK.
 // See TODO: https://github.com/octomil/octomil-ios/issues (Swift FFI bridge).
 //
 // SDK-layer constant checks (enum raw values, error-code mapping, event
@@ -417,16 +419,15 @@ final class NativeCapabilityConformanceTests: XCTestCase {
 
     // MARK: - Native Path SKIP_WITH_EXPLICIT_REASON
     //
-    // All 7 capabilities require oct_runtime_open / oct_session_open / oct_session_poll
-    // via Swift C-interop FFI. That bridge is NOT yet wired.
-    // Each test below is a scaffold that will execute when the bridge lands.
-    // Reason: "Swift C-interop to liboctomil_runtime not yet wired — TODO: Swift FFI bridge"
+    // All 7 capability lifecycles require model/session/event FFI beyond
+    // the landed runtime-open/capabilities bridge. Each test below remains
+    // a scaffold until the full lifecycle bridge lands.
 
     private func skipNativePath(capability: String, file: StaticString = #file, line: UInt = #line) throws {
         throw XCTSkip(
             "SKIP_WITH_EXPLICIT_REASON: native lifecycle for '\(capability)' requires " +
-            "Swift C-interop to liboctomil_runtime (oct_runtime_open / oct_session_open / " +
-            "oct_session_poll). The FFI bridge is not yet wired. " +
+            "Swift C-interop to liboctomil_runtime model/session/event calls " +
+            "(oct_model_open / oct_session_open / oct_session_poll). The lifecycle FFI bridge is not yet wired. " +
             "TODO: https://github.com/octomil/octomil-ios/issues — Swift FFI bridge",
             file: file, line: line
         )

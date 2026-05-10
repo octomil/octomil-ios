@@ -75,7 +75,7 @@ final class NativeRuntimeTypeTests: XCTestCase {
 
     func testNativeABIPinnedVersion() {
         XCTAssertEqual(NativeABI.requiredMajor, 0)
-        XCTAssertEqual(NativeABI.requiredMinor, 7)
+        XCTAssertEqual(NativeABI.requiredMinor, 9)
     }
 
     func testNativeErrorPayloadInit() {
@@ -83,5 +83,17 @@ final class NativeRuntimeTypeTests: XCTestCase {
         XCTAssertEqual(payload.code, "E_BUSY")
         XCTAssertEqual(payload.message, "busy")
         XCTAssertEqual(payload.errorCode, 4)
+    }
+
+    func testNativeStatusDefaultBridgeErrorCodeMapping() {
+        XCTAssertNil(NativeStatus.ok.nativeBridgeErrorCode)
+        XCTAssertEqual(NativeStatus.invalidInput.nativeBridgeErrorCode, .invalidInput)
+        XCTAssertEqual(NativeStatus.unsupported.nativeBridgeErrorCode, .runtimeUnavailable)
+        XCTAssertEqual(NativeStatus.notFound.nativeBridgeErrorCode, .modelNotFound)
+        XCTAssertEqual(NativeStatus.busy.nativeBridgeErrorCode, .runtimeUnavailable)
+        XCTAssertEqual(NativeStatus.timeout.nativeBridgeErrorCode, .streamInterrupted)
+        XCTAssertEqual(NativeStatus.cancelled.nativeBridgeErrorCode, .cancelled)
+        XCTAssertEqual(NativeStatus.internalError.nativeBridgeErrorCode, .inferenceFailed)
+        XCTAssertEqual(NativeStatus.versionMismatch.nativeBridgeErrorCode, .runtimeUnavailable)
     }
 }

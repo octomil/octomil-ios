@@ -18,13 +18,18 @@ Swift mirror of the `octomil-runtime` C ABI (`octomil-runtime/include/octomil/ru
                                  |
                                  v
 +-----------------------------------------------------------------+
-|  Sprint 1 (this PR):                                            |
+|  Sprint 1:                                                      |
 |    StubRuntime  -- in-process actor, scripted timeline,         |
 |                    synthesized telemetry; no inference          |
 |                                                                 |
-|  Sprint 2 (planned):                                            |
-|    FFIRuntime   -- @convention(c) wrapper around                |
-|                    cross-compiled octomil_runtime.xcframework   |
+|  Sprint 2a:                                                     |
+|    FFINativeRuntime -- dlopen/dlsym wrapper for runtime open,   |
+|                        capability discovery, ABI/size checks,   |
+|                        close, and last-error status mapping     |
+|                                                                 |
+|  Sprint 2b (planned):                                           |
+|    FFINativeRuntime -- model/session/event bindings around      |
+|                        cross-compiled octomil_runtime.xcframework |
 +-----------------------------------------------------------------+
                                  |
                                  |  lifecycle + telemetry events
@@ -39,9 +44,21 @@ Swift mirror of the `octomil-runtime` C ABI (`octomil-runtime/include/octomil/ru
 
 The middle box is the **swap seam**. Only that layer changes between Sprint 1 and Sprint 2 — consumers above the protocol surface and engines below are identical across both.
 
-## Why a stub in Sprint 1
+## Current native bridge scope
 
-`octomil-runtime/CMakeLists.txt` has no iOS toolchain wiring; `BUILD.md` punts iOS to "slice 4". A real XCFramework cross-compile + `@convention(c)` Swift wrapper is 6–8 hr minimum, and absorbing that into Sprint 1's budget would cost the dashboard/canary deliverable.
+`FFINativeRuntime` dynamically loads `liboctomil_runtime` from:
+
+- the explicit `libraryPath` passed to `FFINativeRuntime.open(...)`
+- `OCTOMIL_RUNTIME_LIBRARY`
+- app private frameworks / `liboctomil_runtime.dylib` default lookup paths
+
+It validates `oct_runtime_abi_version_major/minor`, `oct_runtime_config_size`, and `oct_capabilities_size` before calling `oct_runtime_open`. If the library, a required symbol, ABI version, or struct size is unavailable, the bridge throws `NativeRuntimeError` and does not fall back to `StubRuntime`.
+
+The bridge currently supports only `oct_runtime_open`, `oct_runtime_capabilities`, `oct_runtime_capabilities_free`, `oct_runtime_close`, `oct_runtime_last_error`, and `oct_last_thread_error`. `openModel` and `openSession` fail closed with `.unsupported` until the model/session/event ABI is wired and tested. Passing a telemetry sink is also rejected because event marshalling is not implemented yet.
+
+## Why a stub remains
+
+The iOS package still does not ship a cross-compiled `octomil_runtime.xcframework`. Without that packaging, native conformance lifecycle tests cannot honestly run model/session/event paths.
 
 The demo still legitimately runs offline inference: `octomil-ios/Package.swift:139–158` already binds `llama`, `sherpa-onnx`, `whisper`, and `onnxruntime` XCFrameworks, and the iPad runs actual STT → LLM → TTS through those engines. The stub fakes only the orchestration + telemetry layer that the C runtime would normally provide — not audio in or audio out.
 
