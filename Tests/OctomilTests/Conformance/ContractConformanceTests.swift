@@ -364,14 +364,23 @@ final class ContractConformanceTests: XCTestCase {
         XCTAssertEqual(OTLPResourceAttribute.octomilPlatform, "octomil.platform")
     }
 
-    /// Telemetry event names match contract.
-    func testContractTelemetryEventNames() {
-        XCTAssertEqual(ContractTelemetryEventName.inferenceStarted, "inference.started")
-        XCTAssertEqual(ContractTelemetryEventName.inferenceCompleted, "inference.completed")
-        XCTAssertEqual(ContractTelemetryEventName.inferenceFailed, "inference.failed")
-        XCTAssertEqual(ContractTelemetryEventName.inferenceChunkProduced, "inference.chunk_produced")
-        XCTAssertEqual(ContractTelemetryEventName.deployStarted, "deploy.started")
-        XCTAssertEqual(ContractTelemetryEventName.deployCompleted, "deploy.completed")
+    /// Runtime metric names match the generated contract allowlist.
+    func testRuntimeMetricNames() {
+        XCTAssertEqual(RuntimeMetricName.cacheHitTotal, "cache.hit_total")
+        XCTAssertEqual(RuntimeMetricName.cacheMissTotal, "cache.miss_total")
+        XCTAssertEqual(RuntimeMetricName.cacheLookupMs, "cache.lookup_ms")
+        XCTAssertEqual(RuntimeMetricName.ttsAudioDurationMs, "tts.audio_duration_ms")
+        XCTAssertTrue(RuntimeMetricName.allRuntimeMetrics.contains(RuntimeMetricName.cacheHitTotal))
+    }
+
+    /// Cache policy enums match contract values.
+    func testCachePolicyEnums() {
+        XCTAssertEqual(CachePrivacyMode.strict.rawValue, "strict")
+        XCTAssertEqual(CachePrivacyMode.policyAllowed.rawValue, "policy_allowed")
+        XCTAssertEqual(CacheScope.request.rawValue, "request")
+        XCTAssertEqual(CacheScope.session.rawValue, "session")
+        XCTAssertEqual(CacheScope.runtime.rawValue, "runtime")
+        XCTAssertEqual(CacheScope.app.rawValue, "app")
     }
 
     // MARK: - Control.heartbeat contract
