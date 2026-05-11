@@ -1,9 +1,4 @@
 // Auto-generated from octomil-contracts runtime_planner schemas. Do not edit.
-//
-// Types prefixed with `Contract` indicate naming conflicts with hand-written
-// SDK types of higher fidelity (richer enums, nested types, or privacy logic).
-// The SDK-internal versions take precedence; these Contract* variants are kept
-// for future migration or for callers that need the raw wire shape.
 
 public struct RuntimePlannerJSONValue: Codable, Sendable {
     public init() {}
@@ -11,7 +6,7 @@ public struct RuntimePlannerJSONValue: Codable, Sendable {
     public func encode(to encoder: Encoder) throws {}
 }
 
-public struct ContractAppResolution: Codable, Sendable {
+public struct AppResolution: Codable, Sendable {
     public let app_id: String
     public let app_slug: String?
     public let capability: String
@@ -19,14 +14,14 @@ public struct ContractAppResolution: Codable, Sendable {
     public let selected_model: String
     public let selected_model_variant_id: String?
     public let selected_model_version: String?
-    public let artifact_candidates: [ContractRuntimeArtifactPlan]?
+    public let artifact_candidates: [RuntimeArtifactPlan]?
     public let preferred_engines: [String]?
     public let fallback_policy: String?
     public let plan_ttl_seconds: Int?
     public let public_client_allowed: Bool?
 }
 
-public struct ContractCandidateGate: Codable, Sendable {
+public struct CandidateGate: Codable, Sendable {
     public let code: String
     public let required: Bool
     public let threshold_number: Double?
@@ -39,7 +34,7 @@ public struct ContractCandidateGate: Codable, Sendable {
     public let blocking_default: Bool?
 }
 
-public struct ContractDeviceRuntimeProfile: Codable, Sendable {
+public struct DeviceRuntimeProfile: Codable, Sendable {
     public let sdk: String
     public let sdk_version: String
     public let platform: String
@@ -49,11 +44,11 @@ public struct ContractDeviceRuntimeProfile: Codable, Sendable {
     public let ram_total_bytes: Int?
     public let gpu_core_count: Int?
     public let accelerators: [String]?
-    public let installed_runtimes: [ContractInstalledRuntime]?
+    public let installed_runtimes: [InstalledRuntime]?
     public let supported_gate_codes: [String]?
 }
 
-public struct ContractInstalledRuntime: Codable, Sendable {
+public struct InstalledRuntime: Codable, Sendable {
     public let engine: String
     public let version: String?
     public let available: Bool?
@@ -61,25 +56,25 @@ public struct ContractInstalledRuntime: Codable, Sendable {
     public let metadata: [String: RuntimePlannerJSONValue]?
 }
 
-public struct ContractRouteAttempt: Codable, Sendable {
+public struct RouteAttempt: Codable, Sendable {
     public let index: Int
     public let locality: String
     public let mode: String
     public let engine: String?
-    public let artifact: ContractAttemptArtifact?
+    public let artifact: AttemptArtifact?
     public let status: String
     public let stage: String
-    public let gate_results: [ContractGateResult]?
+    public let gate_results: [GateResult]?
     public let reason: [String: RuntimePlannerJSONValue]
 }
 
-public struct ContractAttemptArtifact: Codable, Sendable {
+public struct AttemptArtifact: Codable, Sendable {
     public let id: String?
     public let digest: String?
     public let cache: [String: RuntimePlannerJSONValue]?
 }
 
-public struct ContractGateResult: Codable, Sendable {
+public struct GateResult: Codable, Sendable {
     public let code: String
     public let status: String
     public let observed_number: Double?
@@ -94,7 +89,7 @@ public struct ContractGateResult: Codable, Sendable {
     public let safe_metadata: [String: RuntimePlannerJSONValue]?
 }
 
-public struct ContractRouteEvent: Codable, Sendable {
+public struct RouteEvent: Codable, Sendable {
     public let route_id: String
     public let request_id: String
     public let plan_id: String?
@@ -118,14 +113,14 @@ public struct ContractRouteEvent: Codable, Sendable {
     public let fallback_trigger_code: String?
     public let fallback_trigger_stage: String?
     public let candidate_attempts: Int
-    public let attempt_details: [ContractRouteEventAttemptDetail]?
+    public let attempt_details: [RouteEventAttemptDetail]?
     public let ttft_ms: Double?
     public let tokens_per_second: Double?
     public let total_tokens: Int?
     public let duration_ms: Double?
 }
 
-public struct ContractRouteEventAttemptDetail: Codable, Sendable {
+public struct RouteEventAttemptDetail: Codable, Sendable {
     public let index: Int
     public let locality: String
     public let mode: String
@@ -143,7 +138,7 @@ public struct RouteMetadata: Codable, Sendable {
     public let artifact: RouteArtifact?
     public let planner: PlannerInfo
     public let fallback: FallbackInfo
-    public let attempts: [ContractRouteAttempt]?
+    public let attempts: [RouteAttempt]?
     public let reason: RouteReason
 }
 
@@ -192,10 +187,10 @@ public struct FallbackInfo: Codable, Sendable {
     public let used: Bool
     public let from_attempt: Int?
     public let to_attempt: Int?
-    public let trigger: ContractFallbackTrigger?
+    public let trigger: FallbackTrigger?
 }
 
-public struct ContractFallbackTrigger: Codable, Sendable {
+public struct FallbackTrigger: Codable, Sendable {
     public let code: String
     public let stage: String
     public let message: String
@@ -211,7 +206,7 @@ public struct RouteReason: Codable, Sendable {
     public let message: String
 }
 
-public struct ContractRuntimeBenchmarkSubmission: Codable, Sendable {
+public struct RuntimeBenchmarkSubmission: Codable, Sendable {
     public let source: String?
     public let model: String
     public let model_version: String?
@@ -220,7 +215,7 @@ public struct ContractRuntimeBenchmarkSubmission: Codable, Sendable {
     public let engine: String
     public let engine_version: String?
     public let quantization: String?
-    public let device: ContractDeviceRuntimeProfile
+    public let device: DeviceRuntimeProfile
     public let benchmark_tokens: Int?
     public let ttft_ms: Double?
     public let tokens_per_second: Double?
@@ -244,34 +239,34 @@ public struct RuntimeDefaultsResponse: Codable, Sendable {
     public let plan_ttl_seconds: Int
 }
 
-public struct ContractRuntimePlanRequest: Codable, Sendable {
+public struct RuntimePlanRequest: Codable, Sendable {
     public let model: String
     public let capability: String
     public let routing_policy: String?
     public let app_id: String?
     public let app_slug: String?
     public let org_id: String?
-    public let device: ContractDeviceRuntimeProfile
+    public let device: DeviceRuntimeProfile
     public let allow_cloud_fallback: Bool?
 }
 
-public struct ContractRuntimePlanResponse: Codable, Sendable {
+public struct RuntimePlanResponse: Codable, Sendable {
     public let plan_schema_version: Int?
     public let model: String
     public let capability: String
     public let policy: String
-    public let candidates: [ContractRuntimeCandidatePlan]
-    public let fallback_candidates: [ContractRuntimeCandidatePlan]?
+    public let candidates: [RuntimeCandidatePlan]
+    public let fallback_candidates: [RuntimeCandidatePlan]?
     public let plan_ttl_seconds: Int?
     public let fallback_allowed: Bool?
     public let public_client_allowed: Bool?
     public let server_generated_at: String
     public let plan_correlation_id: String?
-    public let app_resolution: ContractAppResolution?
-    public let resolution: ContractModelResolution?
+    public let app_resolution: AppResolution?
+    public let resolution: ModelResolution?
 }
 
-public struct ContractModelResolution: Codable, Sendable {
+public struct ModelResolution: Codable, Sendable {
     public let ref_kind: ContractModelRefKind
     public let original_ref: String
     public let resolved_model: String
@@ -284,22 +279,22 @@ public struct ContractModelResolution: Codable, Sendable {
     public let routing_policy: String?
 }
 
-public struct ContractRuntimeCandidatePlan: Codable, Sendable {
+public struct RuntimeCandidatePlan: Codable, Sendable {
     public let locality: String
     public let engine: String?
     public let engine_version_constraint: String?
-    public let artifact: ContractRuntimeArtifactPlan?
+    public let artifact: RuntimeArtifactPlan?
     public let priority: Int
     public let confidence: Double
     public let reason: String
     public let benchmark_required: Bool?
-    public let gates: [ContractCandidateGate]?
+    public let gates: [CandidateGate]?
     public let delivery_mode: String?
     public let prepare_required: Bool?
     public let prepare_policy: String?
 }
 
-public struct ContractRuntimeArtifactPlan: Codable, Sendable {
+public struct RuntimeArtifactPlan: Codable, Sendable {
     public let model_id: String
     public let artifact_id: String?
     public let model_version: String?
