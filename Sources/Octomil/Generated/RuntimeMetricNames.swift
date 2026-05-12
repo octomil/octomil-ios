@@ -41,7 +41,10 @@ public enum RuntimeMetricName {
     public static let ttsChunkCount = "tts.chunk_count"
     public static let ttsFirstAudioMs = "tts.first_audio_ms"
     public static let ttsFirstChunkAfterSynthMs = "tts.first_chunk_after_synth_ms"
+    public static let ttsFrontendCacheClearTotal = "tts.frontend_cache_clear_total"
     public static let ttsFrontendCacheHitTotal = "tts.frontend_cache_hit_total"
+    public static let ttsFrontendCacheRejectEmptyTotal = "tts.frontend_cache_reject_empty_total"
+    public static let ttsFrontendCacheRejectOversizeTotal = "tts.frontend_cache_reject_oversize_total"
     public static let ttsRealTimeFactor = "tts.real_time_factor"
     public static let ttsSessionOpenMs = "tts.session_open_ms"
     public static let ttsSynthesizeMs = "tts.synthesize_ms"
@@ -96,7 +99,10 @@ public enum RuntimeMetricName {
         ttsChunkCount,
         ttsFirstAudioMs,
         ttsFirstChunkAfterSynthMs,
+        ttsFrontendCacheClearTotal,
         ttsFrontendCacheHitTotal,
+        ttsFrontendCacheRejectEmptyTotal,
+        ttsFrontendCacheRejectOversizeTotal,
         ttsRealTimeFactor,
         ttsSessionOpenMs,
         ttsSynthesizeMs,
