@@ -6,23 +6,77 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   conformance:
-    uses: octomil/octomil-contracts/.github/workflows/sdk-conformance.yml@v1.23.0
-    with:
-      sdk: ios
-      contract-version: "1.23.0"
-      codegen-command: "python3 .contract/scripts/sync_generated.py --sdk ios --check --target-dir Sources/Octomil/Generated"
-      # macOS destination rather than iOS Simulator: GitHub-hosted runners ship without
-      # any iOS Simulator runtime installed — even 'Any iOS Simulator Device' fails
-      # because the placeholder entry is not a usable runtime. xcrun simctl create is
-      # not a reliable fix on ephemeral runners. ContractConformanceTests exercise
-      # contract shape, codegen correctness, and routing logic; none of that varies by
-      # destination. iOS-specific paths are guarded by @available and enforced by the
-      # compiler regardless of which SDK the test host uses.
-      test-command: "xcodebuild -scheme Octomil -destination 'platform=macOS,arch=arm64' -only-testing:OctomilTests/ContractConformanceTests test && python3 .contract/ci/audit-sdks.py --sdk ios --sdk-path . --out parity_report.json"
-      parity-report-path: parity_report.json
-      parity-score-floor: 60
-    secrets: inherit
+    name: ios conformance
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch contracts
+        uses: actions/checkout@v4
+        with:
+          repository: octomil/octomil-contracts
+          ref: main
+          path: .contract
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install codegen dependencies
+        run: python -m pip install --upgrade pip pyyaml
+
+      - name: Read contract version
+        id: contract
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import pathlib
+          import yaml
+
+          version = yaml.safe_load(pathlib.Path(".contract/contract.yaml").read_text())["version"]
+          print(f"version={version}")
+          PY
+
+      - name: Check generated contracts
+        run: python3 .contract/scripts/sync_generated.py --sdk ios --check --target-dir Sources/Octomil/Generated
+
+      - name: Run conformance tests
+        env:
+          CONTRACT_ROOT: ${{ github.workspace }}/.contract
+          CONTRACT_VERSION: ${{ steps.contract.outputs.version }}
+        run: |
+          xcodebuild -scheme Octomil -destination 'platform=macOS,arch=arm64' -only-testing:OctomilTests/ContractConformanceTests test
+          python3 .contract/ci/audit-sdks.py --sdk ios --sdk-path . --out parity_report.json
+
+      - name: Gate parity score
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report_path = pathlib.Path("parity_report.json")
+          if not report_path.exists():
+              print("::error::No parity report generated.")
+              sys.exit(1)
+          score = json.loads(report_path.read_text()).get("summary", {}).get("parityScore", 0)
+          print(f"Parity score: {score}% (floor: 60%)")
+          if float(score) < 60:
+              print(f"::error::Parity score {score}% is below floor 60%")
+              sys.exit(1)
+          PY
+
+      - name: Upload parity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-ios-${{ steps.contract.outputs.version }}
+          path: parity_report.json
+          retention-days: 90
