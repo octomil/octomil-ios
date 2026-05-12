@@ -65,6 +65,23 @@ final class FFINativeRuntimeTests: XCTestCase {
         }
     }
 
+    func testRuntimeOpenOkWithNullHandleFailsClosed() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+
+        do {
+            _ = try await FFINativeRuntime.open(
+                config: NativeRuntimeConfig(artifactRoot: "null-handle"),
+                telemetrySink: nil,
+                libraryPath: libraryPath
+            )
+            XCTFail("Expected oct_runtime_open OK with NULL handle to fail closed.")
+        } catch let error as NativeRuntimeError {
+            XCTAssertEqual(error.status, .internalError)
+            XCTAssertEqual(error.sdkErrorCode, .inferenceFailed)
+            XCTAssertTrue(error.message?.contains("NULL runtime handle") == true)
+        }
+    }
+
     func testCapabilitiesFailureCarriesRuntimeLastError() async throws {
         let libraryPath = try Self.buildFixtureDylib()
         let runtime = try await FFINativeRuntime.open(
@@ -80,6 +97,46 @@ final class FFINativeRuntimeTests: XCTestCase {
             XCTAssertEqual(error.status, .unsupported)
             XCTAssertEqual(error.sdkErrorCode, .runtimeUnavailable)
             XCTAssertTrue(error.message?.contains("fixture capabilities unavailable") == true)
+        }
+
+        await runtime.close()
+    }
+
+    func testCapabilitiesVersionMismatchFailsClosed() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+        let runtime = try await FFINativeRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "bad-caps-version"),
+            telemetrySink: nil,
+            libraryPath: libraryPath
+        )
+
+        do {
+            _ = try await runtime.capabilities()
+            XCTFail("Expected capabilities version mismatch to fail closed.")
+        } catch let error as NativeRuntimeError {
+            XCTAssertEqual(error.status, .versionMismatch)
+            XCTAssertEqual(error.sdkErrorCode, .runtimeUnavailable)
+            XCTAssertTrue(error.message?.contains("returned version 99") == true)
+        }
+
+        await runtime.close()
+    }
+
+    func testCapabilitiesNullArraysFailClosed() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+        let runtime = try await FFINativeRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "null-engines"),
+            telemetrySink: nil,
+            libraryPath: libraryPath
+        )
+
+        do {
+            _ = try await runtime.capabilities()
+            XCTFail("Expected NULL capabilities arrays to fail closed.")
+        } catch let error as NativeRuntimeError {
+            XCTAssertEqual(error.status, .internalError)
+            XCTAssertEqual(error.sdkErrorCode, .inferenceFailed)
+            XCTAssertTrue(error.message?.contains("NULL supported_engines") == true)
         }
 
         await runtime.close()
@@ -134,6 +191,27 @@ final class FFINativeRuntimeTests: XCTestCase {
         }
 
         await runtime.close()
+    }
+
+    func testOperationsAfterCloseFailClosed() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+        let runtime = try await FFINativeRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "ok"),
+            telemetrySink: nil,
+            libraryPath: libraryPath
+        )
+
+        await runtime.close()
+        await runtime.close()
+
+        do {
+            _ = try await runtime.capabilities()
+            XCTFail("Expected capabilities after close to fail closed.")
+        } catch let error as NativeRuntimeError {
+            XCTAssertEqual(error.status, .invalidInput)
+            XCTAssertEqual(error.sdkErrorCode, .invalidInput)
+            XCTAssertTrue(error.message?.contains("runtime is closed") == true)
+        }
     }
 
     private static func buildFixtureDylib() throws -> String {
@@ -225,6 +303,8 @@ typedef struct {
 
 typedef struct {
     int fail_caps;
+    int bad_caps_version;
+    int null_engines;
     char last_error[256];
 } oct_runtime_t;
 
@@ -271,6 +351,10 @@ oct_status_t oct_runtime_open(const oct_runtime_config_t* config, void** out) {
         set_error(g_thread_error, "fixture open failed");
         return OCT_STATUS_INTERNAL;
     }
+    if (config->artifact_root != NULL && strcmp(config->artifact_root, "null-handle") == 0) {
+        set_error(g_thread_error, "fixture null handle");
+        return OCT_STATUS_OK;
+    }
 
     oct_runtime_t* runtime = (oct_runtime_t*)calloc(1, sizeof(oct_runtime_t));
     if (runtime == NULL) {
@@ -278,6 +362,8 @@ oct_status_t oct_runtime_open(const oct_runtime_config_t* config, void** out) {
         return OCT_STATUS_INTERNAL;
     }
     runtime->fail_caps = config->artifact_root != NULL && strcmp(config->artifact_root, "fail-caps") == 0;
+    runtime->bad_caps_version = config->artifact_root != NULL && strcmp(config->artifact_root, "bad-caps-version") == 0;
+    runtime->null_engines = config->artifact_root != NULL && strcmp(config->artifact_root, "null-engines") == 0;
     set_error(runtime->last_error, "");
     *out = runtime;
     return OCT_STATUS_OK;
@@ -306,9 +392,9 @@ oct_status_t oct_runtime_capabilities(void* runtime_ptr, oct_capabilities_t* out
     const size_t caller_size = out->size;
     oct_capabilities_t staged;
     memset(&staged, 0, sizeof(staged));
-    staged.version = 1u;
+    staged.version = runtime->bad_caps_version ? 99u : 1u;
     staged.size = caller_size;
-    staged.supported_engines = g_engines;
+    staged.supported_engines = runtime->null_engines ? NULL : g_engines;
     staged.supported_capabilities = g_capabilities;
     staged.supported_archs = g_archs;
     staged.ram_total_bytes = 16u;
