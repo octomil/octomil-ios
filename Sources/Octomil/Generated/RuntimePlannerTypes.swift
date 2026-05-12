@@ -1,9 +1,8 @@
 // Auto-generated from octomil-contracts runtime_planner schemas. Do not edit.
 //
-// Types prefixed with `Contract` indicate naming conflicts with hand-written
-// SDK types of higher fidelity (richer enums, nested types, or privacy logic).
-// The SDK-internal versions take precedence; these Contract* variants are kept
-// for future migration or for callers that need the raw wire shape.
+// Types prefixed with `Contract` intentionally avoid collisions with
+// richer hand-written iOS SDK planner types. The SDK-internal versions
+// take precedence; these Contract* variants preserve the raw wire shape.
 
 public struct RuntimePlannerJSONValue: Codable, Sendable {
     public init() {}

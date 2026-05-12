@@ -10,7 +10,9 @@ on:
 
 jobs:
   analyze:
-    timeout-minutes: 15
+    # Swift package dependency resolution plus full-package build can exceed
+    # 30 minutes on cold macOS runners before CodeQL starts analysis.
+    timeout-minutes: 45
     name: Analyze
     runs-on: macos-latest
     permissions:

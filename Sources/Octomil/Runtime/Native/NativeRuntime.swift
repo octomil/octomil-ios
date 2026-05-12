@@ -18,7 +18,7 @@ import Foundation
 /// here to document intent for Approach B.
 public enum NativeABI {
     public static let requiredMajor: UInt32 = 0
-    public static let requiredMinor: UInt32 = 7
+    public static let requiredMinor: UInt32 = 9
 }
 
 // MARK: - Status (oct_status_t — runtime.h:161-169)
@@ -42,6 +42,35 @@ public struct NativeRuntimeError: Error, Sendable {
     public init(status: NativeStatus, message: String? = nil) {
         self.status = status
         self.message = message
+    }
+
+    public var sdkErrorCode: ErrorCode? {
+        status.nativeBridgeErrorCode
+    }
+}
+
+extension NativeStatus {
+    /// Default status-to-SDK-code mapping for the native bridge layer.
+    /// Capability-specific surfaces may refine `.unsupported` when they
+    /// have enough context; runtime open/capability discovery treats it
+    /// as `runtime_unavailable`.
+    public var nativeBridgeErrorCode: ErrorCode? {
+        switch self {
+        case .ok:
+            return nil
+        case .invalidInput:
+            return .invalidInput
+        case .unsupported, .busy, .versionMismatch:
+            return .runtimeUnavailable
+        case .notFound:
+            return .modelNotFound
+        case .timeout:
+            return .streamInterrupted
+        case .cancelled:
+            return .cancelled
+        case .internalError:
+            return .inferenceFailed
+        }
     }
 }
 

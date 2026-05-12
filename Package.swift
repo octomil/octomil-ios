@@ -53,7 +53,7 @@ let package = Package(
         // ──────────────────────────────────────────────
         .target(
             name: "Octomil",
-            dependencies: ["COctomilBZ2"],
+            dependencies: ["COctomilBZ2", "COctomilRuntimeBridge"],
             path: "Sources/Octomil"
         ),
 
@@ -65,6 +65,11 @@ let package = Package(
         .systemLibrary(
             name: "COctomilBZ2",
             path: "Sources/COctomilBZ2"
+        ),
+        .target(
+            name: "COctomilRuntimeBridge",
+            path: "Sources/COctomilRuntimeBridge",
+            publicHeadersPath: "include"
         ),
 
         // ──────────────────────────────────────────────

@@ -33,6 +33,12 @@ public struct PlanPricing: Sendable, Equatable {
     public let overagePerDeviceCents: Int?
 }
 
+public enum PlanSupportLevel: String, Codable, Sendable {
+    case community = "community"
+    case email = "email"
+    case dedicated = "dedicated"
+}
+
 public enum BillingPlan: String, Codable, Sendable {
     case free = "free"
     case team = "team"
@@ -72,5 +78,11 @@ extension BillingPlan {
         }
     }
 
+    public var support: PlanSupportLevel {
+        switch self {
+        case .free: return .community
+        case .team: return .email
+        case .enterprise: return .dedicated
+        }
+    }
 }
-
