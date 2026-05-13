@@ -546,9 +546,30 @@ public protocol NativeRuntime: Actor {
         model: any NativeModel
     ) async throws -> any NativeSession
 
+    /// Model-free session open for capabilities that do not consume an
+    /// ``oct_model_t`` (``audio.vad``, ``audio.diarization``). Passes
+    /// ``model = NULL`` in ``oct_session_config_t``; the runtime adapter
+    /// resolves the artifact from its own env-var path.
+    ///
+    /// Default implementation throws ``NativeRuntimeError(.unsupported)``
+    /// so existing conformers remain backward-compatible. Override in
+    /// ``FFINativeRuntime`` and ``StubRuntime`` to activate the path.
+    func openSessionModelFree(config: NativeSessionConfig) async throws -> any NativeSession
+
     /// Precondition: all models opened via this runtime have been
     /// closed first. Violation triggers a precondition failure.
     func close() async
+}
+
+extension NativeRuntime {
+    /// Fail-safe default: model-free sessions are unsupported unless the
+    /// concrete conformer overrides this method.
+    public func openSessionModelFree(config: NativeSessionConfig) async throws -> any NativeSession {
+        throw NativeRuntimeError(
+            status: .unsupported,
+            message: "openSessionModelFree is not implemented for this NativeRuntime conformer"
+        )
+    }
 }
 
 public protocol NativeModel: Actor {

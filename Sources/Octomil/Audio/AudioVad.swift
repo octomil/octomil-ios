@@ -130,10 +130,10 @@ public final class FacadeVad: @unchecked Sendable {
             )
         }
 
-        // openSession for audio.vad is not yet wired in FFINativeRuntime
-        // (openSession returns .unsupported today). Attempt a model-less
-        // session open; the runtime will reject with .unsupported, which
-        // we map to runtimeUnavailable per the fail-closed contract.
+        // audio.vad is model-free: the runtime adapter resolves the
+        // silero artifact from OCTOMIL_SILERO_VAD_MODEL internally.
+        // No oct_model_t is opened or passed — mirrors Python's
+        // open_session(capability="audio.vad") call.
         let sessionConfig = NativeSessionConfig(
             modelURI: "",
             capability: RuntimeCapability.audioVad.rawValue,
@@ -143,34 +143,15 @@ public final class FacadeVad: @unchecked Sendable {
             priority: .foreground
         )
 
-        // audio.vad does not consume an oct_model_t — it is a model-less
-        // session. We open a stub model whose handle the runtime ignores
-        // for this capability. The FFI will route through the silero
-        // adapter directly once openSession is wired.
-        let modelConfig = NativeModelConfig(
-            modelURI: "",
-            artifactDigest: "",
-            engineHint: "silero_vad"
-        )
-
-        let model: any NativeModel
-        do {
-            model = try await runtime.openModel(config: modelConfig)
-        } catch let nre as NativeRuntimeError {
-            throw nativeRuntimeErrorToOctomilError(nre, capability: "audio.vad", operation: "openModel")
-        }
-
         let session: any NativeSession
         do {
-            session = try await runtime.openSession(config: sessionConfig, model: model)
+            session = try await runtime.openSessionModelFree(config: sessionConfig)
         } catch let nre as NativeRuntimeError {
-            try? await model.close()
             throw nativeRuntimeErrorToOctomilError(nre, capability: "audio.vad", operation: "openSession")
         }
 
         defer {
             Task { await session.close() }
-            Task { try? await model.close() }
         }
 
         // Send audio chunk

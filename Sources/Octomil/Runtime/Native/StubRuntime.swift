@@ -96,6 +96,25 @@ public actor StubRuntime: NativeRuntime {
         )
     }
 
+    /// Model-free session open for capabilities that do not consume an
+    /// ``oct_model_t`` (``audio.vad``, ``audio.diarization``). No model
+    /// ownership checks are performed. The stub returns a ``StubSession``
+    /// with a throw-away ``StubModel`` whose close is a no-op in tests.
+    public func openSessionModelFree(config sessionConfig: NativeSessionConfig) async throws -> any NativeSession {
+        try checkOpen()
+        // Create an ephemeral model just to satisfy StubSession's
+        // initializer. Its close() is never called from model-free paths.
+        let ephemeralModel = StubModel(
+            config: NativeModelConfig(modelURI: "", artifactDigest: ""),
+            owner: self
+        )
+        return StubSession(
+            config: sessionConfig,
+            model: ephemeralModel,
+            artifactDigest: ""
+        )
+    }
+
     public func close() async {
         precondition(
             openModelIDs.isEmpty,

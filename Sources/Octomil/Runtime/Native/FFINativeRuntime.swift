@@ -196,6 +196,22 @@ public actor FFINativeRuntime: NativeRuntime {
         return session
     }
 
+    /// Model-free session open: passes ``model = NULL`` in
+    /// ``oct_session_config_t``. Used by capabilities that resolve their
+    /// artifact from env vars internally (``audio.vad``,
+    /// ``audio.diarization``). No ``FFINativeModel`` is kept alive.
+    public func openSessionModelFree(config: NativeSessionConfig) async throws -> any NativeSession {
+        let handle = try requireOpen(operation: "oct_session_open (model-free)")
+        let session = try await FFINativeSession.openModelFree(
+            runtime: self,
+            runtimeHandle: handle,
+            library: library,
+            config: config
+        )
+        openSessions.append(session)
+        return session
+    }
+
     public func close() async {
         guard let handle = runtimeHandle else {
             isClosed = true
@@ -871,7 +887,8 @@ public actor FFINativeSession: NativeSession {
     private let library: NativeRuntimeDynamicLibrary
     private var runtimeHandle: UnsafeMutableRawPointer?
     private var sessionHandle: UnsafeMutableRawPointer?
-    private let borrowedModel: FFINativeModel
+    /// `nil` for model-free sessions (``audio.vad``, ``audio.diarization``).
+    private let borrowedModel: FFINativeModel?
     private var isClosed = false
     private var isInvalidated = false
     private var hasReleasedModel = false
@@ -881,7 +898,7 @@ public actor FFINativeSession: NativeSession {
         runtimeHandle: UnsafeMutableRawPointer,
         library: NativeRuntimeDynamicLibrary,
         sessionHandle: UnsafeMutableRawPointer,
-        borrowedModel: FFINativeModel
+        borrowedModel: FFINativeModel?
     ) {
         self.runtime = runtime
         self.runtimeHandle = runtimeHandle
@@ -898,12 +915,63 @@ public actor FFINativeSession: NativeSession {
         model: FFINativeModel
     ) async throws -> FFINativeSession {
         let modelHandle = try await model.runtimeModelHandle()
+        let session = try await openCore(
+            runtime: runtime,
+            runtimeHandle: runtimeHandle,
+            library: library,
+            config: config,
+            modelHandle: modelHandle
+        )
+        await model.borrow()
+        return FFINativeSession(
+            runtime: runtime,
+            runtimeHandle: runtimeHandle,
+            library: library,
+            sessionHandle: session,
+            borrowedModel: model
+        )
+    }
+
+    /// Model-free session open: passes ``model = NULL`` in
+    /// ``oct_session_config_t``. The C runtime's capability adapter
+    /// resolves its artifact from env vars.
+    fileprivate static func openModelFree(
+        runtime: FFINativeRuntime,
+        runtimeHandle: UnsafeMutableRawPointer,
+        library: NativeRuntimeDynamicLibrary,
+        config: NativeSessionConfig
+    ) async throws -> FFINativeSession {
+        let sessionHandle = try await openCore(
+            runtime: runtime,
+            runtimeHandle: runtimeHandle,
+            library: library,
+            config: config,
+            modelHandle: nil
+        )
+        return FFINativeSession(
+            runtime: runtime,
+            runtimeHandle: runtimeHandle,
+            library: library,
+            sessionHandle: sessionHandle,
+            borrowedModel: nil
+        )
+    }
+
+    /// Shared C-ABI session-open path. Pass ``modelHandle = nil`` for
+    /// model-free sessions (``oct_session_config_t.model`` stays NULL).
+    private static func openCore(
+        runtime: FFINativeRuntime,
+        runtimeHandle: UnsafeMutableRawPointer,
+        library: NativeRuntimeDynamicLibrary,
+        config: NativeSessionConfig,
+        modelHandle: UnsafeMutableRawPointer?
+    ) async throws -> UnsafeMutableRawPointer {
         var cConfig = oct_session_config_t()
         cConfig.version = UInt32(OCT_SESSION_CONFIG_VERSION)
         cConfig.priority = config.priority.rawValue
         cConfig.sample_rate_in = config.sampleRateIn
         cConfig.sample_rate_out = config.sampleRateOut
-        cConfig.model = OpaquePointer(modelHandle)
+        cConfig.model = modelHandle.map { OpaquePointer($0) }
 
         var openedHandle: UnsafeMutableRawPointer?
         let status = try config.modelURI.withCString { modelURI in
@@ -942,15 +1010,7 @@ public actor FFINativeSession: NativeSession {
                 runtimeHandle: runtimeHandle
             )
         }
-
-        await model.borrow()
-        return FFINativeSession(
-            runtime: runtime,
-            runtimeHandle: runtimeHandle,
-            library: library,
-            sessionHandle: openedHandle,
-            borrowedModel: model
-        )
+        return openedHandle
     }
 
     public func sendAudio(_ pcm: Data, sampleRate: UInt32, channels: UInt16) async throws {
@@ -1015,7 +1075,7 @@ public actor FFINativeSession: NativeSession {
         }
         isClosed = true
         if !hasReleasedModel {
-            await borrowedModel.release()
+            await borrowedModel?.release()
             hasReleasedModel = true
         }
         guard !isInvalidated, let handle = sessionHandle else {
@@ -1032,7 +1092,7 @@ public actor FFINativeSession: NativeSession {
         isInvalidated = true
         isClosed = true
         if !hasReleasedModel {
-            await borrowedModel.release()
+            await borrowedModel?.release()
             hasReleasedModel = true
         }
         sessionHandle = nil

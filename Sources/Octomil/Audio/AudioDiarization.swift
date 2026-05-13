@@ -80,19 +80,21 @@ public final class FacadeDiarization: @unchecked Sendable {
     /// ``diarizationSegment`` events, and returns them in
     /// chronological order.
     ///
+    /// ``audio.diarization`` is a model-free capability: the runtime
+    /// adapter resolves its artifact from env vars. No model URI is
+    /// passed to the session; this mirrors Python's
+    /// ``open_session(capability="audio.diarization")`` contract.
+    ///
     /// - Parameters:
     ///   - audio: Raw PCM-f32-LE bytes, mono, 16 kHz. Non-empty,
     ///     length must be a multiple of 4 bytes.
     ///   - sampleRate: Must be 16 000.
-    ///   - model: Optional model identifier hint (default
-    ///     ``"sherpa-onnx-diarization"``).
     /// - Returns: Speaker segments in order of appearance.
     /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` until
     ///   the FFI session path is wired.
     public func create(
         audio: Data,
-        sampleRate: Int = 16000,
-        model: String = "sherpa-onnx-diarization"
+        sampleRate: Int = 16000
     ) async throws -> [DiarizationSegment] {
         guard sampleRate == 16000 else {
             throw OctomilError.invalidInput(
@@ -119,23 +121,12 @@ public final class FacadeDiarization: @unchecked Sendable {
             )
         }
 
-        let modelConfig = NativeModelConfig(
-            modelURI: model,
-            artifactDigest: "",
-            engineHint: "sherpa_onnx"
-        )
-
-        let nativeModel: any NativeModel
-        do {
-            nativeModel = try await runtime.openModel(config: modelConfig)
-        } catch let nre as NativeRuntimeError {
-            throw nativeRuntimeErrorToOctomilError(
-                nre, capability: "audio.diarization", operation: "openModel"
-            )
-        }
-
+        // audio.diarization is model-free: the runtime adapter resolves
+        // the sherpa-onnx diarization artifact from its env vars
+        // internally. No oct_model_t is opened or passed — mirrors
+        // Python's open_session(capability="audio.diarization") call.
         let sessionConfig = NativeSessionConfig(
-            modelURI: model,
+            modelURI: "",
             capability: RuntimeCapability.audioDiarization.rawValue,
             locality: "on-device",
             policyPreset: "private",
@@ -145,9 +136,8 @@ public final class FacadeDiarization: @unchecked Sendable {
 
         let session: any NativeSession
         do {
-            session = try await runtime.openSession(config: sessionConfig, model: nativeModel)
+            session = try await runtime.openSessionModelFree(config: sessionConfig)
         } catch let nre as NativeRuntimeError {
-            try? await nativeModel.close()
             throw nativeRuntimeErrorToOctomilError(
                 nre, capability: "audio.diarization", operation: "openSession"
             )
@@ -155,7 +145,6 @@ public final class FacadeDiarization: @unchecked Sendable {
 
         defer {
             Task { await session.close() }
-            Task { try? await nativeModel.close() }
         }
 
         do {
