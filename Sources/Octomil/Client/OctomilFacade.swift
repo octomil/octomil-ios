@@ -39,7 +39,11 @@ public final class Octomil: @unchecked Sendable {
         _embeddings = FacadeEmbeddings(embeddingClient: embeddingClient)
         _audio = FacadeAudio(
             transcriptions: client!.audio.transcriptions,
-            speech: client!.audio.speech
+            speech: client!.audio.speech,
+            vad: client!.audio.vad,
+            speakerEmbedding: client!.audio.speakerEmbedding,
+            diarization: client!.audio.diarization,
+            ttsStream: client!.audio.ttsStream
         )
 
         initialized = true
@@ -211,13 +215,33 @@ public final class FacadeEmbeddings: @unchecked Sendable {
 
 /// Audio namespace on the unified Octomil facade. Re-exposes the
 /// ``OctomilAudio`` surface so callers can write
-/// ``Octomil().audio.speech.create(...)``.
+/// ``Octomil().audio.speech.create(...)``,
+/// ``Octomil().audio.vad.detect(...)``, etc.
 public final class FacadeAudio: @unchecked Sendable {
     public let transcriptions: AudioTranscriptions
     public let speech: AudioSpeech
+    /// Voice-activity detection: ``client.audio.vad.detect(...)``.
+    public let vad: FacadeVad
+    /// Speaker embedding: ``client.audio.speakerEmbedding.create(...)``.
+    public let speakerEmbedding: FacadeSpeakerEmbedding
+    /// Speaker diarization: ``client.audio.diarization.create(...)``.
+    public let diarization: FacadeDiarization
+    /// Streaming TTS: ``client.audio.ttsStream.stream(...)``.
+    public let ttsStream: FacadeTtsStream
 
-    init(transcriptions: AudioTranscriptions, speech: AudioSpeech) {
+    init(
+        transcriptions: AudioTranscriptions,
+        speech: AudioSpeech,
+        vad: FacadeVad,
+        speakerEmbedding: FacadeSpeakerEmbedding,
+        diarization: FacadeDiarization,
+        ttsStream: FacadeTtsStream
+    ) {
         self.transcriptions = transcriptions
         self.speech = speech
+        self.vad = vad
+        self.speakerEmbedding = speakerEmbedding
+        self.diarization = diarization
+        self.ttsStream = ttsStream
     }
 }
