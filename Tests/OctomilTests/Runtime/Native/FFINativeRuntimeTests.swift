@@ -249,11 +249,22 @@ final class FFINativeRuntimeTests: XCTestCase {
         }
     }
 
-    private static func buildFixtureDylib() throws -> String {
+    private static func buildFixtureDylib(testFile: StaticString = #filePath) throws -> String {
         let fileManager = FileManager.default
         let clangPath = "/usr/bin/clang"
         guard fileManager.isExecutableFile(atPath: clangPath) else {
             throw XCTSkip("clang is unavailable; cannot build native bridge fixture dylib")
+        }
+
+        let bridgeIncludeDir = URL(fileURLWithPath: "\(testFile)")
+            .deletingLastPathComponent() // .../Tests/OctomilTests/Runtime/Native
+            .deletingLastPathComponent() // .../Tests/OctomilTests/Runtime
+            .deletingLastPathComponent() // .../Tests/OctomilTests
+            .deletingLastPathComponent() // .../Tests
+            .deletingLastPathComponent() // package root
+            .appendingPathComponent("Sources/COctomilRuntimeBridge/include", isDirectory: true)
+        guard fileManager.fileExists(atPath: bridgeIncludeDir.appendingPathComponent("COctomilRuntimeBridge.h").path) else {
+            throw XCTSkip("COctomilRuntimeBridge.h not found at \(bridgeIncludeDir.path)")
         }
 
         let directory = fileManager.temporaryDirectory
@@ -269,7 +280,7 @@ final class FFINativeRuntimeTests: XCTestCase {
         process.arguments = [
             "-dynamiclib",
             "-I",
-            "/Users/seanb/Developer/Octomil/octomil-ios/Sources/COctomilRuntimeBridge/include",
+            bridgeIncludeDir.path,
             sourceURL.path,
             "-o",
             dylibURL.path,
