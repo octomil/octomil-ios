@@ -5,25 +5,27 @@ import XCTest
 //
 // Contract: octomil-contracts/conformance/ (CONFORMANCE_VERSION: 0.1.5-rc1)
 //
-// Covers the 7 LIVE native capabilities:
+// Covers the 12 live native / live-conditional capabilities:
 //   1. chat.completion      (owning_engine: llama_cpp)
-//   2. embeddings.text      (owning_engine: llama_cpp)
-//   3. audio.transcription  (owning_engine: whisper_cpp)
-//   4. audio.vad            (owning_engine: silero_vad)
-//   5. audio.speaker.embedding (owning_engine: sherpa_onnx)
-//   6. audio.tts.batch      (owning_engine: sherpa_onnx)
-//   7. audio.tts.stream     (owning_engine: sherpa_onnx)
+//   2. chat.stream          (owning_engine: llama_cpp)
+//   3. embeddings.text      (owning_engine: llama_cpp)
+//   4. audio.transcription  (owning_engine: whisper_cpp)
+//   5. audio.stt.batch      (alias of audio.transcription)
+//   6. audio.stt.stream     (buffered stream alias of audio.transcription)
+//   7. audio.vad            (owning_engine: silero_vad)
+//   8. audio.speaker.embedding (owning_engine: sherpa_onnx)
+//   9. audio.diarization    (owning_engine: sherpa_onnx/diarization)
+//   10. audio.tts.batch     (owning_engine: sherpa_onnx)
+//   11. audio.tts.stream    (owning_engine: sherpa_onnx)
+//   12. cache.introspect    (runtime/cache ABI, not a session)
 //
 // NOT claimed (per contract exclusion list):
-//   - audio.diarization, audio.realtime.session, embeddings.image,
-//     index.vector.query, audio.stt.*
+//   - audio.realtime.session, embeddings.image, index.vector.query
 //
-// SKIP policy: all native lifecycle paths are SKIP_WITH_EXPLICIT_REASON
-// because the Swift C-interop bridge currently covers only runtime open,
-// capabilities, ABI checks, close, and last-error mapping. Model/session/
-// event calls (oct_model_open / oct_session_open / oct_session_poll) are
-// not yet wired in this SDK.
-// See TODO: https://github.com/octomil/octomil-ios/issues (Swift FFI bridge).
+// SKIP policy: generated artifact-backed lifecycle tests remain
+// SKIP_WITH_EXPLICIT_REASON unless a real liboctomil_runtime and required
+// model artifacts are available. The Swift FFI bridge itself is covered by
+// FFINativeRuntimeTests and stub event tests.
 //
 // SDK-layer constant checks (enum raw values, error-code mapping, event
 // names) DO NOT require the FFI bridge and run unconditionally.
@@ -34,28 +36,45 @@ import XCTest
 /// Any change here is a contract break.
 enum ContractCapabilityName {
     static let chatCompletion = "chat.completion"
+    static let chatStream = "chat.stream"
     static let embeddingsText = "embeddings.text"
     static let audioTranscription = "audio.transcription"
+    static let audioSttBatch = "audio.stt.batch"
+    static let audioSttStream = "audio.stt.stream"
     static let audioVad = "audio.vad"
     static let audioSpeakerEmbedding = "audio.speaker.embedding"
+    static let audioDiarization = "audio.diarization"
     static let audioTtsBatch = "audio.tts.batch"
     static let audioTtsStream = "audio.tts.stream"
+    static let cacheIntrospect = "cache.introspect"
 
     /// The full set of live capabilities — CLOSED. Do not add unless the
     /// contract YAML has is_advertised: true.
     static let liveCapabilities: Set<String> = [
         chatCompletion,
+        chatStream,
         embeddingsText,
         audioTranscription,
+        audioSttBatch,
+        audioSttStream,
         audioVad,
         audioSpeakerEmbedding,
+        audioDiarization,
         audioTtsBatch,
         audioTtsStream,
+        cacheIntrospect,
+    ]
+
+    /// Capabilities that are live-conditional, not reserved as hard exclusions.
+    static let conditionalCapabilities: Set<String> = [
+        "audio.diarization",
+        "audio.stt.batch",
+        "audio.stt.stream",
+        "cache.introspect",
     ]
 
     /// Capabilities that MUST NOT be claimed by this SDK (hard exclusion).
     static let excludedCapabilities: Set<String> = [
-        "audio.diarization",
         "audio.realtime.session",
         "embeddings.image",
         "index.vector.query",
@@ -169,14 +188,19 @@ final class NativeCapabilityConformanceTests: XCTestCase {
     /// If this fails, the SDK's capability identifier has drifted from the contract.
     func testCapabilityNameConstants() {
         XCTAssertEqual(ContractCapabilityName.chatCompletion, "chat.completion")
+        XCTAssertEqual(ContractCapabilityName.chatStream, "chat.stream")
         XCTAssertEqual(ContractCapabilityName.embeddingsText, "embeddings.text")
         XCTAssertEqual(ContractCapabilityName.audioTranscription, "audio.transcription")
+        XCTAssertEqual(ContractCapabilityName.audioSttBatch, "audio.stt.batch")
+        XCTAssertEqual(ContractCapabilityName.audioSttStream, "audio.stt.stream")
         XCTAssertEqual(ContractCapabilityName.audioVad, "audio.vad")
         XCTAssertEqual(ContractCapabilityName.audioSpeakerEmbedding, "audio.speaker.embedding")
+        XCTAssertEqual(ContractCapabilityName.audioDiarization, "audio.diarization")
         XCTAssertEqual(ContractCapabilityName.audioTtsBatch, "audio.tts.batch")
         XCTAssertEqual(ContractCapabilityName.audioTtsStream, "audio.tts.stream")
-        XCTAssertEqual(ContractCapabilityName.liveCapabilities.count, 7,
-            "Exactly 7 live capabilities — add none unless contract YAML has is_advertised: true")
+        XCTAssertEqual(ContractCapabilityName.cacheIntrospect, "cache.introspect")
+        XCTAssertEqual(ContractCapabilityName.liveCapabilities.count, 12,
+            "Exactly 12 live/native-conditional capabilities — add none unless Python/runtime truth has promoted it")
     }
 
     /// Excluded capabilities are NOT in the live set.
@@ -187,6 +211,43 @@ final class NativeCapabilityConformanceTests: XCTestCase {
                 "Excluded capability \(excluded) must not appear in the live set"
             )
         }
+    }
+
+    func testConditionalCapabilitiesAreNotReserved() {
+        XCTAssertTrue(ContractCapabilityName.conditionalCapabilities.contains("audio.diarization"))
+        XCTAssertTrue(ContractCapabilityName.conditionalCapabilities.contains("audio.stt.batch"))
+        XCTAssertTrue(ContractCapabilityName.conditionalCapabilities.contains("audio.stt.stream"))
+        XCTAssertTrue(ContractCapabilityName.conditionalCapabilities.contains("cache.introspect"))
+        XCTAssertTrue(ContractCapabilityName.liveCapabilities.contains("audio.diarization"))
+        XCTAssertTrue(ContractCapabilityName.liveCapabilities.contains("audio.stt.batch"))
+        XCTAssertTrue(ContractCapabilityName.liveCapabilities.contains("audio.stt.stream"))
+        XCTAssertTrue(ContractCapabilityName.liveCapabilities.contains("cache.introspect"))
+        XCTAssertFalse(ContractCapabilityName.excludedCapabilities.contains("audio.diarization"))
+    }
+
+    func testTranscriptionAliasAndCacheAbiSurfacesStayLive() {
+        let transcriptionFamily: Set<String> = [
+            ContractCapabilityName.audioTranscription,
+            ContractCapabilityName.audioSttBatch,
+            ContractCapabilityName.audioSttStream,
+        ]
+
+        XCTAssertEqual(transcriptionFamily.count, 3)
+        XCTAssertTrue(ContractCapabilityName.liveCapabilities.isSuperset(of: transcriptionFamily))
+        XCTAssertFalse(ContractCapabilityName.excludedCapabilities.contains(ContractCapabilityName.audioSttBatch))
+        XCTAssertFalse(ContractCapabilityName.excludedCapabilities.contains(ContractCapabilityName.audioSttStream))
+        XCTAssertTrue(ContractCapabilityName.conditionalCapabilities.contains(ContractCapabilityName.audioSttBatch))
+        XCTAssertTrue(ContractCapabilityName.conditionalCapabilities.contains(ContractCapabilityName.audioSttStream))
+
+        let cacheAbiSurface = ContractCapabilityName.cacheIntrospect
+        XCTAssertTrue(ContractCapabilityName.liveCapabilities.contains(cacheAbiSurface))
+        XCTAssertTrue(ContractCapabilityName.conditionalCapabilities.contains(cacheAbiSurface))
+        XCTAssertFalse(ContractCapabilityName.excludedCapabilities.contains(cacheAbiSurface))
+    }
+
+    func testChatStreamIsAdvertised() {
+        XCTAssertTrue(ContractCapabilityName.liveCapabilities.contains("chat.stream"))
+        XCTAssertFalse(ContractCapabilityName.excludedCapabilities.contains("chat.stream"))
     }
 
     // MARK: - Error Code Constants (byte-for-byte)
@@ -419,16 +480,14 @@ final class NativeCapabilityConformanceTests: XCTestCase {
 
     // MARK: - Native Path SKIP_WITH_EXPLICIT_REASON
     //
-    // All 7 capability lifecycles require model/session/event FFI beyond
-    // the landed runtime-open/capabilities bridge. Each test below remains
-    // a scaffold until the full lifecycle bridge lands.
+    // Generated lifecycle conformance still needs a real runtime/artifact
+    // harness. The FFI bridge path is covered separately by FFINativeRuntimeTests.
 
     private func skipNativePath(capability: String, file: StaticString = #file, line: UInt = #line) throws {
         throw XCTSkip(
-            "SKIP_WITH_EXPLICIT_REASON: native lifecycle for '\(capability)' requires " +
-            "Swift C-interop to liboctomil_runtime model/session/event calls " +
-            "(oct_model_open / oct_session_open / oct_session_poll). The lifecycle FFI bridge is not yet wired. " +
-            "TODO: https://github.com/octomil/octomil-ios/issues — Swift FFI bridge",
+            "SKIP_WITH_EXPLICIT_REASON: generated native lifecycle for '\(capability)' requires " +
+            "a real liboctomil_runtime plus env-backed model artifacts. The Swift FFI bridge is " +
+            "covered by FFINativeRuntimeTests; this generated conformance path is artifact-gated.",
             file: file, line: line
         )
     }
@@ -438,7 +497,7 @@ final class NativeCapabilityConformanceTests: XCTestCase {
     func testChatCompletionLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.chatCompletion)
         // When FFI bridge lands:
-        // 1. oct_runtime_open → check ABI (major=0, minor>=9)
+        // 1. oct_runtime_open → check ABI (major=0, minor>=10)
         // 2. oct_runtime_capabilities → assert "chat.completion" advertised
         //    (skip if OCTOMIL_LLAMA_CPP_MODEL unset)
         // 3. oct_model_open(OCTOMIL_LLAMA_CPP_MODEL) → ready

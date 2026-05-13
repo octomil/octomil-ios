@@ -2,9 +2,9 @@
 //
 // Both the in-process stub (Sprint 1, Approach A) and the real FFI
 // binding (Sprint 2, Approach B) conform to these protocols. The
-// surface is locked to python's `octomil/runtime/native/loader.py`
-// `_CDEF` block at lines 359–648; changes here require a matched
-// python change first.
+// surface follows `octomil-runtime/include/octomil/runtime.h` and the
+// matching native loader cdef; changes here require a matched runtime
+// contract update first.
 //
 // Spec: docs/specs/2026-05-06-ios-stub-runtime.md
 
@@ -18,7 +18,7 @@ import Foundation
 /// here to document intent for Approach B.
 public enum NativeABI {
     public static let requiredMajor: UInt32 = 0
-    public static let requiredMinor: UInt32 = 9
+    public static let requiredMinor: UInt32 = 10
 }
 
 // MARK: - Status (oct_status_t — runtime.h:161-169)
@@ -189,11 +189,75 @@ public struct NativeAudioChunkPayload: Sendable {
     }
 }
 
+public struct NativeEmbeddingVectorPayload: Sendable {
+    public let values: [Float]
+    public let dimension: UInt32
+    public let inputTokens: UInt32
+    public let index: UInt32
+    public let poolingType: UInt32
+    public let isNormalized: Bool
+
+    public init(
+        values: [Float],
+        dimension: UInt32,
+        inputTokens: UInt32,
+        index: UInt32,
+        poolingType: UInt32,
+        isNormalized: Bool
+    ) {
+        self.values = values
+        self.dimension = dimension
+        self.inputTokens = inputTokens
+        self.index = index
+        self.poolingType = poolingType
+        self.isNormalized = isNormalized
+    }
+}
+
 public struct NativeTranscriptChunkPayload: Sendable {
     public let utf8: String
 
     public init(utf8: String) {
         self.utf8 = utf8
+    }
+}
+
+public struct NativeTranscriptSegmentPayload: Sendable {
+    public let utf8: String
+    public let nBytes: UInt32
+    public let startMs: UInt32
+    public let endMs: UInt32
+    public let segmentIndex: UInt32
+    public let isFinal: Bool
+
+    public init(
+        utf8: String,
+        nBytes: UInt32,
+        startMs: UInt32,
+        endMs: UInt32,
+        segmentIndex: UInt32,
+        isFinal: Bool
+    ) {
+        self.utf8 = utf8
+        self.nBytes = nBytes
+        self.startMs = startMs
+        self.endMs = endMs
+        self.segmentIndex = segmentIndex
+        self.isFinal = isFinal
+    }
+}
+
+public struct NativeTranscriptFinalPayload: Sendable {
+    public let utf8: String
+    public let nBytes: UInt32
+    public let nSegments: UInt32
+    public let durationMs: UInt32
+
+    public init(utf8: String, nBytes: UInt32, nSegments: UInt32, durationMs: UInt32) {
+        self.utf8 = utf8
+        self.nBytes = nBytes
+        self.nSegments = nSegments
+        self.durationMs = durationMs
     }
 }
 
@@ -206,6 +270,42 @@ public struct NativeErrorPayload: Sendable {
         self.code = code
         self.message = message
         self.errorCode = errorCode
+    }
+}
+
+public struct NativeVADTransitionPayload: Sendable {
+    public let transitionKind: UInt32
+    public let timestampMs: UInt32
+    public let confidence: Float
+
+    public init(transitionKind: UInt32, timestampMs: UInt32, confidence: Float) {
+        self.transitionKind = transitionKind
+        self.timestampMs = timestampMs
+        self.confidence = confidence
+    }
+}
+
+public struct NativeDiarizationSegmentPayload: Sendable {
+    public let startMs: UInt32
+    public let endMs: UInt32
+    public let speakerID: UInt16
+    public let speakerLabel: String
+
+    public init(startMs: UInt32, endMs: UInt32, speakerID: UInt16, speakerLabel: String) {
+        self.startMs = startMs
+        self.endMs = endMs
+        self.speakerID = speakerID
+        self.speakerLabel = speakerLabel
+    }
+}
+
+public struct NativeCachePayload: Sendable {
+    public let layer: String
+    public let savedTokens: UInt32
+
+    public init(layer: String, savedTokens: UInt32) {
+        self.layer = layer
+        self.savedTokens = savedTokens
     }
 }
 
@@ -290,6 +390,14 @@ public enum NativeEvent: Sendable {
     case sessionStarted(NativeSessionStartedPayload, envelope: NativeOperationalEnvelope)
     case audioChunk(NativeAudioChunkPayload, envelope: NativeOperationalEnvelope)
     case transcriptChunk(NativeTranscriptChunkPayload, envelope: NativeOperationalEnvelope)
+    case transcriptSegment(NativeTranscriptSegmentPayload, envelope: NativeOperationalEnvelope)
+    case transcriptFinal(NativeTranscriptFinalPayload, envelope: NativeOperationalEnvelope)
+    case embeddingVector(NativeEmbeddingVectorPayload, envelope: NativeOperationalEnvelope)
+    case vadTransition(NativeVADTransitionPayload, envelope: NativeOperationalEnvelope)
+    case diarizationSegment(NativeDiarizationSegmentPayload, envelope: NativeOperationalEnvelope)
+    case ttsAudioChunk(NativeAudioChunkPayload, envelope: NativeOperationalEnvelope)
+    case cacheHit(NativeCachePayload, envelope: NativeOperationalEnvelope)
+    case cacheMiss(NativeCachePayload, envelope: NativeOperationalEnvelope)
     case turnEnded(envelope: NativeOperationalEnvelope)
     case error(NativeErrorPayload, envelope: NativeOperationalEnvelope)
     case sessionCompleted(NativeSessionCompletedPayload, envelope: NativeOperationalEnvelope)
@@ -300,6 +408,14 @@ public enum NativeEvent: Sendable {
         case .sessionStarted(_, let env),
              .audioChunk(_, let env),
              .transcriptChunk(_, let env),
+             .transcriptSegment(_, let env),
+             .transcriptFinal(_, let env),
+             .embeddingVector(_, let env),
+             .vadTransition(_, let env),
+             .diarizationSegment(_, let env),
+             .ttsAudioChunk(_, let env),
+             .cacheHit(_, let env),
+             .cacheMiss(_, let env),
              .error(_, let env),
              .sessionCompleted(_, let env),
              .modelLoaded(_, let env):

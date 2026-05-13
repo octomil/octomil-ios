@@ -162,4 +162,20 @@ final class GeneratedTypeAdoptionTests: XCTestCase {
         XCTAssertEqual(ContractArtifactCacheStatus.notApplicable.rawValue, "not_applicable")
         XCTAssertEqual(ContractArtifactCacheStatus.unavailable.rawValue, "unavailable")
     }
+
+    // MARK: - RuntimeCapability
+
+    func testRuntimeCapabilityIncludesTranscriptionAliasAndCacheAbiSurface() {
+        XCTAssertEqual(RuntimeCapability.audioTranscription.rawValue, "audio.transcription")
+        XCTAssertEqual(RuntimeCapability.audioSttBatch.rawValue, "audio.stt.batch")
+        XCTAssertEqual(RuntimeCapability.cacheIntrospect.rawValue, "cache.introspect")
+
+        let transcriptionFamily: Set<RuntimeCapability> = [
+            .audioTranscription,
+            .audioSttBatch,
+        ]
+        XCTAssertEqual(transcriptionFamily.count, 2)
+        XCTAssertTrue(transcriptionFamily.contains(.audioTranscription))
+        XCTAssertTrue(transcriptionFamily.contains(.audioSttBatch))
+    }
 }

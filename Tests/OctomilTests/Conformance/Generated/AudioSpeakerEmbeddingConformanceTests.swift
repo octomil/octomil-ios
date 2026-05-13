@@ -4,7 +4,7 @@
 // Conformance version: 0.1.5-rc1
 // Generator: scripts/gen_swift_conformance.py
 //
-// Required runtime ABI: major=0, minor>=9
+// Required runtime ABI: major=0, minor>=10
 // // is_advertised: true — runtime MUST include this capability in oct_runtime_capabilities()
 // // model_bound: true — lifecycle includes model_open/model_warm/model_close
 
@@ -15,8 +15,8 @@
 //
 // SKIP_WITH_EXPLICIT_REASON (all native lifecycle tests):
 //   Swift C-interop to liboctomil_runtime (oct_runtime_open / oct_session_open /
-//   oct_session_poll) is not yet wired in octomil-ios. All lifecycle paths skip
-//   until the FFI bridge lands.
+//   oct_session_poll) is exercised separately by FFINativeRuntimeTests. The
+//   generated lifecycle paths remain artifact-gated.
 //   TODO: https://github.com/octomil/octomil-ios/issues — Swift FFI bridge
 
 import XCTest
@@ -102,16 +102,16 @@ final class AudioSpeakerEmbeddingConformanceTests: XCTestCase {
         }
     }
 
-    // MARK: - Native Lifecycle (SKIP — FFI bridge not yet wired)
+    // MARK: - Native Lifecycle (SKIP — artifact-gated)
 
     func testAudioSpeakerEmbeddingLifecycle() throws {
         throw XCTSkip(
             "SKIP_WITH_EXPLICIT_REASON: native lifecycle for \"audio.speaker.embedding\" requires " +
-            "Swift C-interop to liboctomil_runtime. The FFI bridge is not yet wired. " +
+            "Swift C-interop to liboctomil_runtime. The bridge is covered separately by FFINativeRuntimeTests. " +
             "TODO: https://github.com/octomil/octomil-ios/issues — Swift FFI bridge"
         )
         // When FFI bridge lands:
-        // 1. oct_runtime_open → check ABI (major=0, minor>=9)
+        // 1. oct_runtime_open → check ABI (major=0, minor>=10)
         // 2. oct_runtime_capabilities → assert "audio.speaker.embedding" advertised
         guard ProcessInfo.processInfo.environment["OCTOMIL_SHERPA_SPEAKER_MODEL"] != nil else {
             throw XCTSkip("SKIP: required env var OCTOMIL_SHERPA_SPEAKER_MODEL is unset — capability not advertised by runtime")
