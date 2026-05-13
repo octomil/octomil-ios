@@ -26,30 +26,85 @@ jobs:
       contents: write
 
     steps:
+      - name: Generate version bot token
+        id: app-token
+        uses: actions/create-github-app-token@a8d616148505b5069dccd32f177bb87d7f39123b # v3.0.0
+        with:
+          app-id: ${{ secrets.VERSION_BOT_APP_ID }}
+          private-key: ${{ secrets.VERSION_BOT_PRIVATE_KEY }}
+          owner: octomil
+          repositories: octomil-ios
+
       - name: Determine version
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            TAG="$INPUT_VERSION"
+            RAW="$INPUT_VERSION"
           else
-            TAG="${GITHUB_REF#refs/tags/}"
+            RAW="$REF_NAME"
           fi
+          PLAIN="${RAW#v}"
+          if ! printf '%s' "$PLAIN" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Expected stable SemVer, got '$RAW'"
+            exit 1
+          fi
+          TAG="v${PLAIN}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "plain=${PLAIN}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: main
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Bump Version.swift (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PLAIN: ${{ steps.version.outputs.plain }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "octomil-release-bot"
+          git config user.email "release-bot@octomil.local"
+          CURRENT=$(grep -oE 'public static let current\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+"' Sources/Octomil/Version.swift | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          if [ "$CURRENT" != "$PLAIN" ]; then
+            python3 - "$PLAIN" <<'PY'
+            import pathlib, re, sys
+            plain = sys.argv[1]
+            p = pathlib.Path("Sources/Octomil/Version.swift")
+            text = p.read_text(encoding="utf-8")
+            new, n = re.subn(
+                r'(public static let current\s*=\s*")[0-9]+\.[0-9]+\.[0-9]+(")',
+                rf'\g<1>{plain}\g<2>',
+                text, count=1,
+            )
+            if n != 1:
+                raise SystemExit("expected exactly one version literal in Version.swift")
+            p.write_text(new, encoding="utf-8")
+            PY
+            git add Sources/Octomil/Version.swift
+            git commit -m "chore: release ${TAG}"
+            git push origin main
+          else
+            echo "Version.swift already at ${PLAIN}; no commit needed."
+          fi
 
       - name: Create tag if needed (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if ! git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists locally."
+          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists on origin."
+          else
             git tag "${TAG}"
             git push origin "${TAG}"
           fi
@@ -98,6 +153,15 @@ jobs:
       contents: write
 
     steps:
+      - name: Generate version bot token
+        id: app-token
+        uses: actions/create-github-app-token@a8d616148505b5069dccd32f177bb87d7f39123b # v3.0.0
+        with:
+          app-id: ${{ secrets.VERSION_BOT_APP_ID }}
+          private-key: ${{ secrets.VERSION_BOT_PRIVATE_KEY }}
+          owner: octomil
+          repositories: octomil-ios
+
       - name: Download artifact
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
@@ -110,11 +174,15 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION: ${{ needs.build.outputs.version }}
           ARCHIVE: ${{ needs.build.outputs.archive }}
           PROVENANCE: ${{ needs.provenance.outputs.provenance-name }}
         run: |
+          if gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${VERSION} already exists; skipping."
+            exit 0
+          fi
           gh release create "${VERSION}" \
             "${ARCHIVE}" \
             "${PROVENANCE}" \

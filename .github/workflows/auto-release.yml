@@ -1,0 +1,90 @@
+name: Auto Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  bump-and-release:
+    name: Dispatch next release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Compute next release version
+        id: version
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import pathlib, re, subprocess
+
+          stable_tag = re.compile(r"^v\d+\.\d+\.\d+$")
+          tags_at_head = {
+              line.strip()
+              for line in subprocess.check_output(
+                  ["git", "tag", "--points-at", "HEAD", "--list", "v*"], text=True
+              ).splitlines()
+              if stable_tag.fullmatch(line.strip())
+          }
+          if tags_at_head:
+              tag = sorted(tags_at_head)[-1]
+              print("already_released=true")
+              print(f"tag={tag}")
+              print(f"version={tag.removeprefix('v')}")
+              raise SystemExit(0)
+
+          src = pathlib.Path("Sources/Octomil/Version.swift").read_text(encoding="utf-8")
+          m = re.search(r'public static let current\s*=\s*"(\d+)\.(\d+)\.(\d+)"', src)
+          if m is None:
+              raise SystemExit("auto-release only supports stable SemVer in Version.swift")
+          major, minor, patch = map(int, m.groups())
+
+          existing = {
+              line.strip()
+              for line in subprocess.check_output(["git", "tag", "--list", "v*"], text=True).splitlines()
+          }
+          while True:
+              patch += 1
+              version = f"{major}.{minor}.{patch}"
+              tag = f"v{version}"
+              if tag not in existing:
+                  break
+          print("already_released=false")
+          print(f"version={version}")
+          print(f"tag={tag}")
+          PY
+
+      - name: Dispatch release workflow
+        if: steps.version.outputs.already_released != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; nothing to dispatch."
+            exit 0
+          fi
+
+          gh workflow run release.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main \
+            -f version="${VERSION}"
