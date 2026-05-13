@@ -16,7 +16,7 @@ jobs:
   bump-and-release:
     name: Dispatch next release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push'
@@ -30,39 +30,45 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
-      - name: Verify triggering SHA is still main HEAD
-        id: pin
-        env:
-          SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          ACTUAL=$(git rev-parse origin/main)
-          if [ "$ACTUAL" != "$SHA" ]; then
-            echo "::notice::main has advanced (${ACTUAL}) past triggering SHA (${SHA}); skipping release. Next push will retry."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Verify all check runs green at triggering SHA
+      - name: Wait for all check runs at triggering SHA, gate on green
         id: gate
-        if: steps.pin.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ github.event.workflow_run.head_sha }}
+          MAX_WAIT_SECONDS: '1800'
+          POLL_INTERVAL: '30'
         run: |
           set -euo pipefail
-          runs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" --jq '.check_runs[]' | jq -s '.')
-          filtered=$(echo "$runs" | jq '[.[] | select(.name != "Dispatch next release")]')
-          pending=$(echo "$filtered" | jq -r '.[] | select(.status != "completed") | .name')
-          failed=$(echo "$filtered"  | jq -r '.[] | select(.status == "completed") | select(.conclusion | IN("success","neutral","skipped") | not) | .name')
-          if [ -n "$pending" ]; then
-            echo "::notice::checks still in progress at ${SHA}; skipping release. Next push will retry."
-            printf 'pending:\n%s\n' "$pending"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          deadline=$(( $(date +%s) + MAX_WAIT_SECONDS ))
+          # Poll until every check run at the triggering SHA has settled, or
+          # main advances past it, or we hit the timeout. Excludes our own
+          # auto-release job to avoid self-deadlock.
+          while :; do
+            git fetch origin main --quiet
+            ACTUAL=$(git rev-parse origin/main)
+            if [ "$ACTUAL" != "$SHA" ]; then
+              echo "::notice::main has advanced (${ACTUAL}) past triggering SHA (${SHA}); abandoning. Next push will retry."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            runs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" --jq '.check_runs[]' | jq -s '.')
+            filtered=$(echo "$runs" | jq '[.[] | select(.name != "Dispatch next release")]')
+            pending=$(echo "$filtered" | jq -r '.[] | select(.status != "completed") | .name')
+            if [ -z "$pending" ]; then
+              break
+            fi
+            now=$(date +%s)
+            if [ "$now" -ge "$deadline" ]; then
+              echo "::warning::checks still pending after ${MAX_WAIT_SECONDS}s; abandoning. Next push will retry."
+              printf 'still pending:\n%s\n' "$pending"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Waiting on:"
+            echo "$pending"
+            sleep "${POLL_INTERVAL}"
+          done
+          failed=$(echo "$filtered" | jq -r '.[] | select(.status == "completed") | select(.conclusion | IN("success","neutral","skipped") | not) | .name')
           if [ -n "$failed" ]; then
             echo "::warning::checks failed at ${SHA}; skipping release."
             printf 'failed:\n%s\n' "$failed"
@@ -75,7 +81,7 @@ jobs:
 
       - name: Compute next release version
         id: version
-        if: steps.pin.outputs.skip != 'true' && steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true'
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import pathlib, re, subprocess
@@ -118,7 +124,6 @@ jobs:
 
       - name: Dispatch release workflow
         if: >
-          steps.pin.outputs.skip != 'true' &&
           steps.gate.outputs.skip != 'true' &&
           steps.version.outputs.already_released != 'true'
         env:
