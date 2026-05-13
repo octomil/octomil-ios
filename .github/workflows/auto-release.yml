@@ -27,11 +27,55 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          ref: main
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+
+      - name: Verify triggering SHA is still main HEAD
+        id: pin
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          ACTUAL=$(git rev-parse origin/main)
+          if [ "$ACTUAL" != "$SHA" ]; then
+            echo "::notice::main has advanced (${ACTUAL}) past triggering SHA (${SHA}); skipping release. Next push will retry."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify all check runs green at triggering SHA
+        id: gate
+        if: steps.pin.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          runs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" --jq '.check_runs[]' | jq -s '.')
+          filtered=$(echo "$runs" | jq '[.[] | select(.name != "Dispatch next release")]')
+          pending=$(echo "$filtered" | jq -r '.[] | select(.status != "completed") | .name')
+          failed=$(echo "$filtered"  | jq -r '.[] | select(.status == "completed") | select(.conclusion | IN("success","neutral","skipped") | not) | .name')
+          if [ -n "$pending" ]; then
+            echo "::notice::checks still in progress at ${SHA}; skipping release. Next push will retry."
+            printf 'pending:\n%s\n' "$pending"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$failed" ]; then
+            echo "::warning::checks failed at ${SHA}; skipping release."
+            printf 'failed:\n%s\n' "$failed"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          total=$(echo "$filtered" | jq 'length')
+          echo "All ${total} required checks green at ${SHA}."
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Compute next release version
         id: version
+        if: steps.pin.outputs.skip != 'true' && steps.gate.outputs.skip != 'true'
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import pathlib, re, subprocess
@@ -73,7 +117,10 @@ jobs:
           PY
 
       - name: Dispatch release workflow
-        if: steps.version.outputs.already_released != 'true'
+        if: >
+          steps.pin.outputs.skip != 'true' &&
+          steps.gate.outputs.skip != 'true' &&
+          steps.version.outputs.already_released != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}

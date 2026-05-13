@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -38,15 +35,9 @@ jobs:
       - name: Determine version
         id: version
         env:
-          EVENT_NAME: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            RAW="$INPUT_VERSION"
-          else
-            RAW="$REF_NAME"
-          fi
+          RAW="$INPUT_VERSION"
           PLAIN="${RAW#v}"
           if ! printf '%s' "$PLAIN" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::Expected stable SemVer, got '$RAW'"
@@ -63,8 +54,7 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Bump Version.swift (workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Bump Version.swift
         env:
           PLAIN: ${{ steps.version.outputs.plain }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -94,8 +84,7 @@ jobs:
             echo "Version.swift already at ${PLAIN}; no commit needed."
           fi
 
-      - name: Create tag if needed (workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Create tag if needed
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
