@@ -79,10 +79,24 @@ jobs:
           echo "All ${total} required checks green at ${SHA}."
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
-      - name: Compute next release version
-        id: version
+      - name: Skip release commits
+        id: release_commit
         if: steps.gate.outputs.skip != 'true'
         run: |
+          set -euo pipefail
+          subject=$(git log -1 --pretty=%s)
+          if printf '%s\n' "$subject" | grep -Eq '^chore: release v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::notice::triggering commit is already a release commit (${subject}); skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute next release version
+        id: version
+        if: steps.gate.outputs.skip != 'true' && steps.release_commit.outputs.skip != 'true'
+        run: |
+          git fetch --tags --force origin
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import pathlib, re, subprocess
 
@@ -125,6 +139,7 @@ jobs:
       - name: Dispatch release workflow
         if: >
           steps.gate.outputs.skip != 'true' &&
+          steps.release_commit.outputs.skip != 'true' &&
           steps.version.outputs.already_released != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
