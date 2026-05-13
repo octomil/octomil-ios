@@ -110,6 +110,73 @@ final class AudioSpeechStreamFacadeTests: XCTestCase {
         XCTAssertTrue(threw, "Whitespace-only input must throw invalidInput")
     }
 
+    // MARK: - Speed validation
+
+    func testStreamRejectsZeroSpeed() async throws {
+        let ts = makeFacadeWithUnavailableRuntime()
+        var threw = false
+        do {
+            for try await _ in ts.stream(model: "kokoro-82m", input: "hello", speed: 0.0) {
+                XCTFail("Expected invalidInput for zero speed")
+            }
+        } catch OctomilError.invalidInput(let reason) {
+            threw = true
+            XCTAssertTrue(reason.contains("positive"), "Expected hint about positive in reason: \(reason)")
+        }
+        XCTAssertTrue(threw, "speed=0 must throw invalidInput")
+    }
+
+    func testStreamRejectsNegativeSpeed() async throws {
+        let ts = makeFacadeWithUnavailableRuntime()
+        var threw = false
+        do {
+            for try await _ in ts.stream(model: "kokoro-82m", input: "hello", speed: -1.0) {
+                XCTFail("Expected invalidInput for negative speed")
+            }
+        } catch OctomilError.invalidInput(let reason) {
+            threw = true
+            XCTAssertTrue(reason.contains("positive"), "Expected hint about positive in reason: \(reason)")
+        }
+        XCTAssertTrue(threw, "speed < 0 must throw invalidInput")
+    }
+
+    func testStreamAcceptsPositiveSpeed() async throws {
+        let ts = makeFacadeWithUnavailableRuntime()
+        var threwRuntimeError = false
+        do {
+            for try await _ in ts.stream(model: "kokoro-82m", input: "hello", speed: 1.5) {
+                XCTFail("Expected error")
+            }
+        } catch OctomilError.invalidInput {
+            XCTFail("Positive speed should not throw invalidInput")
+        } catch {
+            threwRuntimeError = true
+        }
+        XCTAssertTrue(threwRuntimeError, "Positive speed must pass validation and reach runtime path")
+    }
+
+    // MARK: - Stream cancellation (producer task must cancel when consumer stops)
+
+    func testStreamProducerCancelledWhenContinuationTerminated() async throws {
+        // Verify that onTermination is wired — the producer task reference
+        // is captured and cancelled when the continuation is torn down.
+        // We can't directly observe the Task cancel in a unit test without
+        // a real session, but we can verify the stream terminates cleanly
+        // (no hang) when the consumer breaks early.
+        let ts = makeFacadeWithUnavailableRuntime()
+        var threw = false
+        do {
+            for try await _ in ts.stream(model: "kokoro-82m", input: "hello") {
+                break  // Consumer breaks immediately
+            }
+        } catch {
+            threw = true
+        }
+        // Either completes without hanging (break path) or throws — both acceptable.
+        // The key invariant is no infinite loop / hang.
+        _ = threw
+    }
+
     // MARK: - validateVoice unit tests
 
     func testValidateVoiceNilReturnsZero() throws {

@@ -138,6 +138,23 @@ public final class FacadeTtsStream: @unchecked Sendable {
             }
         }
 
+        // Speed validation: positive non-zero value only. Zero and
+        // negatives are a behavioral contract violation.
+        // NOTE: speed is NOT forwarded to the native session config — the
+        // runtime ABI has no speed field in oct_session_config_t. Speed
+        // is reserved for the future iOS frontend-cache normalization
+        // pipeline (mirrors Python's speed_x1000 cache-key encoding).
+        // Callers passing speed != 1.0 get syntactically valid output at
+        // the model's default rate until that pipeline lands.
+        guard speed > 0 else {
+            let error = OctomilError.invalidInput(
+                reason: "audio.tts.stream: speed must be positive; got \(speed)"
+            )
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: error)
+            }
+        }
+
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             let error = OctomilError.invalidInput(
@@ -151,7 +168,7 @@ public final class FacadeTtsStream: @unchecked Sendable {
         let runtimeProvider = nativeRuntimeProvider
 
         return AsyncThrowingStream { continuation in
-            Task {
+            let producerTask = Task {
                 do {
                     let runtime: any NativeRuntime
                     do {
@@ -225,6 +242,11 @@ public final class FacadeTtsStream: @unchecked Sendable {
                     }
 
                     while Date() < deadline {
+                        // Check for cooperative cancellation: if the consumer
+                        // stopped iterating and cancelled the parent task,
+                        // stop polling to avoid keeping session resources alive.
+                        try Task.checkCancellation()
+
                         let event: NativeEvent?
                         do {
                             event = try await session.pollEvent(timeout: 0.2)
@@ -285,6 +307,14 @@ public final class FacadeTtsStream: @unchecked Sendable {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+
+            // Cancel the producer task when the consumer stops iterating
+            // early (break / Task cancellation from the caller side).
+            // Without this, the poll loop can keep running until timeout,
+            // holding session + model resources after the consumer is gone.
+            continuation.onTermination = { _ in
+                producerTask.cancel()
             }
         }
     }
