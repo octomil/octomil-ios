@@ -79,14 +79,14 @@ jobs:
           echo "All ${total} required checks green at ${SHA}."
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
-      - name: Skip release commits
+      - name: Skip non-package commits
         id: release_commit
         if: steps.gate.outputs.skip != 'true'
         run: |
           set -euo pipefail
           subject=$(git log -1 --pretty=%s)
-          if printf '%s\n' "$subject" | grep -Eq '^chore: release v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::notice::triggering commit is already a release commit (${subject}); skipping."
+          if printf '%s\n' "$subject" | grep -Eq '^(chore: release v[0-9]+\.[0-9]+\.[0-9]+|ci:)'; then
+            echo "::notice::triggering commit should not create a package release (${subject}); skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
