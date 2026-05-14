@@ -2,10 +2,8 @@ name: Notify Server
 
 on:
   push:
-    branches: [main]
-    paths-ignore:
-      - '*.md'
-      - 'docs/**'
+    tags:
+      - 'v*'
 
 jobs:
   notify:
@@ -25,7 +23,9 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "version=$(grep 'current = ' Sources/Octomil/Version.swift | sed 's/.*"\(.*\)".*/\1/')" >> $GITHUB_OUTPUT
+        run: |
+          version=$(grep 'current = ' Sources/Octomil/Version.swift | sed 's/.*"\(.*\)".*/\1/')
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch to server
         uses: peter-evans/repository-dispatch@v3
