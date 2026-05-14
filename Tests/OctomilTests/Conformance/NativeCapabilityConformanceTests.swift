@@ -547,7 +547,7 @@ final class NativeCapabilityConformanceTests: XCTestCase {
 
     func testAudioTranscriptionLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTranscription)
-        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_WHISPER_MODEL.
+        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_WHISPER_BIN.
         // Send jfk_16k_mono_pcm_s16le.wav (only "tiny" model registered in v0.1.5).
         // Events: SESSION_STARTED × 1, METRIC × 0+, TRANSCRIPT_SEGMENT ≥ 1,
         //         TRANSCRIPT_FINAL × 1, SESSION_COMPLETED × 1.
