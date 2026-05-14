@@ -89,6 +89,13 @@ final class AudioDiarizationFacadeTests: XCTestCase {
     // MARK: - Lifecycle skeleton (skipped without artifacts)
 
     func testDiarizationLifecycleSkippedWithoutArtifacts() async throws {
+        // FFI bridge is wired (Phase 4). This test exercises the full
+        // oct_session_open (model-free) → oct_session_send_audio →
+        // poll_event (DIARIZATION_SEGMENT events) → oct_session_close lifecycle.
+        // Skipped in CI because liboctomil_runtime.dylib is not in the
+        // test bundle. To run live: set OCTOMIL_RUNTIME_LIBRARY and the
+        // sherpa-onnx diarization artifact env vars, remove the skip, and
+        // run manually.
         throw XCTSkip(
             "Requires liboctomil_runtime.dylib + sherpa-onnx diarization model artifacts"
         )

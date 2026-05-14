@@ -27,9 +27,10 @@ import Foundation
 /// // vecA and vecB are L2-normalized; cosine = dot product.
 /// ```
 ///
-/// `openSession` is not yet wired for this capability in the iOS FFI —
-/// all calls currently return ``OctomilError/runtimeUnavailable(reason:)``
-/// until that work lands.
+/// When ``liboctomil_runtime.dylib`` is loaded and
+/// ``OCTOMIL_SHERPA_SPEAKER_MODEL`` is set, calls route through the FFI
+/// session lifecycle and return real embedding vectors. When the dylib is
+/// absent, every call throws ``OctomilError/runtimeUnavailable(reason:)``.
 public final class FacadeSpeakerEmbedding: @unchecked Sendable {
 
     // MARK: - Dependencies
@@ -63,9 +64,9 @@ public final class FacadeSpeakerEmbedding: @unchecked Sendable {
     ///     `modelURI`; the runtime rejects unknown models with
     ///     ``NativeStatus/unsupported``.
     /// - Returns: L2-normalized embedding vector as `[Float]`.
-    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` until
-    ///   ``FFINativeRuntime/openSession(config:model:)`` is wired for
-    ///   ``audio.speaker.embedding``.
+    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` when
+    ///   ``liboctomil_runtime.dylib`` is unavailable or
+    ///   ``OCTOMIL_SHERPA_SPEAKER_MODEL`` is not set.
     public func create(
         audio: Data,
         sampleRate: Int = 16000,

@@ -53,9 +53,10 @@ public struct DiarizationSegment: Sendable {
 /// }
 /// ```
 ///
-/// `openSession` for ``audio.diarization`` is not yet wired in the iOS
-/// FFI — all calls return ``OctomilError/runtimeUnavailable(reason:)``
-/// until that work lands.
+/// When ``liboctomil_runtime.dylib`` is loaded and the sherpa-onnx
+/// diarization model artifacts are present, calls route through the FFI
+/// session lifecycle and return real segments. When the dylib is absent,
+/// every call throws ``OctomilError/runtimeUnavailable(reason:)``.
 public final class FacadeDiarization: @unchecked Sendable {
 
     // MARK: - Dependencies
@@ -90,8 +91,9 @@ public final class FacadeDiarization: @unchecked Sendable {
     ///     length must be a multiple of 4 bytes.
     ///   - sampleRate: Must be 16 000.
     /// - Returns: Speaker segments in order of appearance.
-    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` until
-    ///   the FFI session path is wired.
+    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` when
+    ///   ``liboctomil_runtime.dylib`` is unavailable or the sherpa-onnx
+    ///   diarization model artifacts are not present.
     public func create(
         audio: Data,
         sampleRate: Int = 16000

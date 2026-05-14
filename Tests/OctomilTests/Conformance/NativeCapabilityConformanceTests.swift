@@ -480,14 +480,24 @@ final class NativeCapabilityConformanceTests: XCTestCase {
 
     // MARK: - Native Path SKIP_WITH_EXPLICIT_REASON
     //
-    // Generated lifecycle conformance still needs a real runtime/artifact
-    // harness. The FFI bridge path is covered separately by FFINativeRuntimeTests.
+    // The Swift FFI bridge is fully wired (Phase 4): runtime open, model open,
+    // session open (model-bound and model-free), send_audio/send_text, poll_event,
+    // cancel, and close all dispatch to oct_* symbols via dlsym.
+    //
+    // These lifecycle tests are skipped because they require a real
+    // liboctomil_runtime dylib plus env-backed model artifacts, neither of which
+    // ships with the test bundle. The FFI dispatch path is covered by
+    // FFINativeRuntimeTests; these generated conformance bodies run against a
+    // real runtime when artifacts are present on a developer machine.
+    //
+    // To enable: set OCTOMIL_RUNTIME_LIBRARY and the capability-specific artifact
+    // env var, then remove the skipNativePath() call from the target test.
 
     private func skipNativePath(capability: String, file: StaticString = #file, line: UInt = #line) throws {
         throw XCTSkip(
-            "SKIP_WITH_EXPLICIT_REASON: generated native lifecycle for '\(capability)' requires " +
-            "a real liboctomil_runtime plus env-backed model artifacts. The Swift FFI bridge is " +
-            "covered by FFINativeRuntimeTests; this generated conformance path is artifact-gated.",
+            "SKIP_WITH_EXPLICIT_REASON: '\(capability)' lifecycle requires " +
+            "liboctomil_runtime + env-backed model artifacts (not in test bundle). " +
+            "FFI bridge is wired — set OCTOMIL_RUNTIME_LIBRARY + artifact env var to run live.",
             file: file, line: line
         )
     }
@@ -496,32 +506,25 @@ final class NativeCapabilityConformanceTests: XCTestCase {
 
     func testChatCompletionLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.chatCompletion)
-        // When FFI bridge lands:
-        // 1. oct_runtime_open → check ABI (major=0, minor>=10)
-        // 2. oct_runtime_capabilities → assert "chat.completion" advertised
-        //    (skip if OCTOMIL_LLAMA_CPP_MODEL unset)
-        // 3. oct_model_open(OCTOMIL_LLAMA_CPP_MODEL) → ready
-        // 4. oct_session_open(capability:"chat.completion") → started
-        // 5. oct_session_send(wrapped_messages_minimal.json)
-        // 6. drain poll_event → assert SESSION_STARTED × 1, TRANSCRIPT_CHUNK ≥ 1,
-        //    METRIC × 0+, SESSION_COMPLETED × 1 (terminal status OCT_STATUS_OK)
-        // 7. assert no event type outside allowed set
-        // 8. assert no deny_field_substring in event payloads
-        // 9. oct_session_close → oct_model_close → oct_runtime_close
+        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_LLAMA_CPP_MODEL.
+        // FFI path: oct_runtime_open → oct_runtime_capabilities (assert "chat.completion"
+        // advertised) → oct_model_open → oct_session_open → oct_session_send_text
+        // (wrapped_messages_minimal.json) → drain poll_event → assert SESSION_STARTED × 1,
+        // TRANSCRIPT_CHUNK ≥ 1, METRIC × 0+, SESSION_COMPLETED × 1 (terminal OK) →
+        // no event outside allowed set → no deny_field_substring →
+        // oct_session_close → oct_model_close → oct_runtime_close
     }
 
     func testChatCompletionInvalidInputRejectsWithBoundedError() throws {
         try skipNativePath(capability: ContractCapabilityName.chatCompletion)
-        // When FFI bridge lands:
-        // Send bare_string.json → expect OCT_STATUS_INVALID_INPUT
-        // SDK must surface ErrorCode.invalidInput (NOT a generic runtime error)
-        // last_error must contain "chat.completion"
+        // Artifact-gated. Send bare_string.json → OCT_STATUS_INVALID_INPUT.
+        // SDK must surface ErrorCode.invalidInput (NOT a generic runtime error).
+        // last_error must contain "chat.completion".
     }
 
     func testChatCompletionNoSilentCloudFallback() throws {
         try skipNativePath(capability: ContractCapabilityName.chatCompletion)
-        // When FFI bridge lands:
-        // If native advertised path unavailable → SKIP or fail-loud.
+        // Artifact-gated. If native advertised path unavailable → SKIP or fail-loud.
         // NEVER route to cloud to make the test pass.
     }
 
@@ -529,136 +532,138 @@ final class NativeCapabilityConformanceTests: XCTestCase {
 
     func testEmbeddingsTextLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.embeddingsText)
-        // When FFI bridge lands:
-        // Lifecycle mirrors chat.completion (same llama_cpp engine).
+        // Artifact-gated. Lifecycle mirrors chat.completion (same llama_cpp engine).
         // Session event: SESSION_STARTED × 1, EMBEDDING_VECTOR ≥ 1 (one per input),
-        // SESSION_COMPLETED × 1 (terminal OK)
+        // SESSION_COMPLETED × 1 (terminal OK).
     }
 
     func testEmbeddingsTextEmptyStringRejects() throws {
         try skipNativePath(capability: ContractCapabilityName.embeddingsText)
-        // Send empty_string.json → OCT_STATUS_INVALID_INPUT
-        // last_error must contain "empty / whitespace-only"
+        // Artifact-gated. Send empty_string.json → OCT_STATUS_INVALID_INPUT.
+        // last_error must contain "empty / whitespace-only".
     }
 
     // ── audio.transcription ───────────────────────────────────────────────
 
     func testAudioTranscriptionLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTranscription)
-        // When FFI bridge lands:
-        // Send jfk_16k_mono_pcm_s16le.wav (only "tiny" model registered in v0.1.5)
+        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_WHISPER_MODEL.
+        // Send jfk_16k_mono_pcm_s16le.wav (only "tiny" model registered in v0.1.5).
         // Events: SESSION_STARTED × 1, METRIC × 0+, TRANSCRIPT_SEGMENT ≥ 1,
-        //         TRANSCRIPT_FINAL × 1, SESSION_COMPLETED × 1
+        //         TRANSCRIPT_FINAL × 1, SESSION_COMPLETED × 1.
         // Expected metrics: whisper.audio_duration_ms, whisper.decode_ms,
-        //                   whisper.real_time_factor, whisper.session_open_ms
+        //                   whisper.real_time_factor, whisper.session_open_ms.
     }
 
     func testAudioTranscriptionWrongSampleRateRejects() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTranscription)
-        // Send 8khz_mono.wav → OCT_STATUS_INVALID_INPUT
-        // last_error must contain "sample_rate"
-        // SDK surfaces ErrorCode.invalidInput
+        // Artifact-gated. Send 8khz_mono.wav → OCT_STATUS_INVALID_INPUT.
+        // last_error must contain "sample_rate". SDK surfaces ErrorCode.invalidInput.
     }
 
     func testAudioTranscriptionOnlyTinyModelSupported() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTranscription)
-        // Non-tiny model name → OCT_STATUS_UNSUPPORTED
+        // Artifact-gated. Non-tiny model name → OCT_STATUS_UNSUPPORTED.
         // Audio backend maps to ErrorCode.runtimeUnavailable (NOT .unsupportedModality)
-        // per conformance/audio.transcription.yaml:37 note and error_mapping.yaml fork
+        // per conformance/audio.transcription.yaml:37 note and error_mapping.yaml fork.
     }
 
     // ── audio.vad ─────────────────────────────────────────────────────────
 
     func testAudioVadLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.audioVad)
-        // When FFI bridge lands:
-        // Model-free: skip oct_model_open. Lifecycle: runtime_open → session_open →
-        // send_audio → poll_event → session_close → runtime_close
+        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_SILERO_VAD_MODEL.
+        // Model-free path: no oct_model_open. Lifecycle: runtime_open →
+        // oct_session_open(model=NULL) → oct_session_send_audio →
+        // poll_event → oct_session_close → oct_runtime_close.
         // Events: SESSION_STARTED × 1, METRIC × 0+, VAD_TRANSITION ≥ 1,
-        //         SESSION_COMPLETED × 1
-        // jfk.wav should produce ≥ 1 matched START/END pair
+        //         SESSION_COMPLETED × 1. jfk.wav should produce ≥ 1 matched pair.
     }
 
     func testAudioVadWrongSampleRateRejects() throws {
         try skipNativePath(capability: ContractCapabilityName.audioVad)
-        // 8khz_mono.wav → OCT_STATUS_INVALID_INPUT, last_error contains "sample_rate"
+        // Artifact-gated. 8khz_mono.wav → OCT_STATUS_INVALID_INPUT,
+        // last_error contains "sample_rate".
     }
 
     // ── audio.speaker.embedding ───────────────────────────────────────────
 
     func testAudioSpeakerEmbeddingLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.audioSpeakerEmbedding)
-        // When FFI bridge lands:
-        // Send speaker_1to3s_16k_mono_pcm_s16le.wav
+        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_SHERPA_SPEAKER_MODEL.
+        // Model-bound path: oct_model_open(sherpa-eres2netv2-base) →
+        // oct_session_open(capability:"audio.speaker.embedding") →
+        // oct_session_send_audio(speaker_1to3s_16k_mono_pcm_s16le.wav) →
+        // poll_event → oct_session_close → oct_model_close → oct_runtime_close.
         // Events: SESSION_STARTED × 1, METRIC × 0+,
-        //         EMBEDDING_VECTOR × 1 (pooled fp32 speaker embedding),
-        //         SESSION_COMPLETED × 1
+        //         EMBEDDING_VECTOR × 1 (pooled fp32 L2-normalized), SESSION_COMPLETED × 1.
     }
 
     func testAudioSpeakerEmbeddingWrongSampleRateRejects() throws {
         try skipNativePath(capability: ContractCapabilityName.audioSpeakerEmbedding)
-        // 8khz_mono.wav → OCT_STATUS_INVALID_INPUT, last_error contains "sample_rate"
+        // Artifact-gated. 8khz_mono.wav → OCT_STATUS_INVALID_INPUT,
+        // last_error contains "sample_rate".
     }
 
     // ── audio.tts.batch ───────────────────────────────────────────────────
 
     func testAudioTtsBatchLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTtsBatch)
-        // When FFI bridge lands:
-        // Send short_english_phrase.json (default voice sid=0)
+        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_SHERPA_TTS_MODEL.
+        // Send short_english_phrase.json (default voice sid=0).
         // Events: SESSION_STARTED × 1, METRIC × 0+,
-        //         TTS_AUDIO_CHUNK ≥ 1 (PCM-f32 mono), SESSION_COMPLETED × 1
+        //         TTS_AUDIO_CHUNK ≥ 1 (PCM-f32 mono), SESSION_COMPLETED × 1.
         // Expected metrics: tts.audio_duration_ms, tts.real_time_factor,
-        //                   tts.session_open_ms, tts.synthesize_ms
-        // Privacy: deny audio_bytes, raw_audio, audio_pcm, wav_bytes, input_text, prompt_text
+        //                   tts.session_open_ms, tts.synthesize_ms.
+        // Privacy: deny audio_bytes, raw_audio, audio_pcm, wav_bytes, input_text, prompt_text.
     }
 
     func testAudioTtsBatchEmptyTextRejects() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTtsBatch)
-        // empty_text.json → OCT_STATUS_INVALID_INPUT, last_error contains "text"
-        // SDK: ErrorCode.invalidInput
+        // Artifact-gated. empty_text.json → OCT_STATUS_INVALID_INPUT,
+        // last_error contains "text". SDK: ErrorCode.invalidInput.
     }
 
     func testAudioTtsBatchBadDigestRejectsAsRuntimeUnavailable() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTtsBatch)
-        // bad_digest.json → OCT_STATUS_UNSUPPORTED
+        // Artifact-gated. bad_digest.json → OCT_STATUS_UNSUPPORTED.
         // SDK maps to ErrorCode.runtimeUnavailable (NOT .checksumMismatch)
-        // per error_mapping.yaml: OCT_STATUS_UNSUPPORTED → runtimeUnavailable for audio backend
+        // per error_mapping.yaml: OCT_STATUS_UNSUPPORTED → runtimeUnavailable for audio backend.
     }
 
     func testAudioTtsBatchMissingArtifactRejectsAsModelNotFound() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTtsBatch)
-        // missing_artifact.json → OCT_STATUS_NOT_FOUND → ErrorCode.modelNotFound
+        // Artifact-gated. missing_artifact.json → OCT_STATUS_NOT_FOUND → ErrorCode.modelNotFound.
     }
 
     // ── audio.tts.stream ──────────────────────────────────────────────────
 
     func testAudioTtsStreamLifecycle() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTtsStream)
-        // When FFI bridge lands (v0.1.9 progressive delivery):
-        // Send short_english_phrase.json → single TTS_AUDIO_CHUNK with is_final=1
-        // Send long_english_paragraph.json → multiple chunks (is_final=0 ... is_final=1)
-        // Events: SESSION_STARTED × 1, TTS_AUDIO_CHUNK ≥ 1, METRIC × 0+, SESSION_COMPLETED × 1
+        // Artifact-gated: set OCTOMIL_RUNTIME_LIBRARY + OCTOMIL_SHERPA_TTS_MODEL.
+        // Progressive delivery (v0.1.9): oct_session_send_text → drain poll_event.
+        // short_english_phrase.json → single TTS_AUDIO_CHUNK with is_final=1.
+        // long_english_paragraph.json → multiple chunks (is_final=0 ... is_final=1).
+        // Events: SESSION_STARTED × 1, TTS_AUDIO_CHUNK ≥ 1, METRIC × 0+, SESSION_COMPLETED × 1.
         // Expected metrics: tts.audio_duration_ms, tts.chunk_count,
         //                   tts.first_chunk_after_synth_ms, tts.real_time_factor,
-        //                   tts.synthesize_ms, tts.first_audio_ms (v0.1.9)
-        // Assert first_audio_ratio < 0.75 (progressive gate from proof artifact)
-        // Assert RTF < 1.0
-        // is_final=0 on non-final chunks, is_final=1 on last chunk — enforced by contract
+        //                   tts.synthesize_ms, tts.first_audio_ms.
+        // Assert first_audio_ratio < 0.75. Assert RTF < 1.0.
+        // is_final=0 on non-final chunks, is_final=1 on last chunk.
     }
 
     func testAudioTtsStreamIsStandaloneCapability() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTtsStream)
-        // audio.tts.stream is NOT a streaming_profile_of audio.tts.batch in v0.1.9.
-        // The runtime MUST advertise it as its own literal capability.
-        // Assert: "audio.tts.stream" in oct_runtime_capabilities().supported_capabilities
-        // (distinct from "audio.tts.batch" — both must appear when both are advertised)
+        // Artifact-gated. audio.tts.stream is NOT a streaming_profile_of audio.tts.batch
+        // in v0.1.9. The runtime MUST advertise it as its own literal capability.
+        // Assert "audio.tts.stream" in oct_runtime_capabilities().supported_capabilities
+        // distinct from "audio.tts.batch".
     }
 
     func testAudioTtsStreamBadDigestRejectsAsRuntimeUnavailable() throws {
         try skipNativePath(capability: ContractCapabilityName.audioTtsStream)
-        // Same bad_digest rejection path as audio.tts.batch
-        // bad_digest.json → OCT_STATUS_UNSUPPORTED → ErrorCode.runtimeUnavailable
+        // Artifact-gated. Same bad_digest rejection path as audio.tts.batch.
+        // bad_digest.json → OCT_STATUS_UNSUPPORTED → ErrorCode.runtimeUnavailable.
     }
 
     // MARK: - Cross-Cutting: No Silent Cloud Fallback

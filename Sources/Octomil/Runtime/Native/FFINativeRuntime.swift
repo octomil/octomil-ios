@@ -9,10 +9,11 @@ import Glibc
 
 /// Dynamic bridge to `liboctomil_runtime`.
 ///
-/// The bridge loads runtime open/capabilities plus the native
-/// model/session/event symbols needed for parity tests. It still
-/// refuses telemetry sink bridging; that path is separate from the
-/// session poll loop and remains unsupported in this slice.
+/// The bridge loads all native symbols via dlsym and wires the full
+/// session lifecycle: runtime open, model open, session open (model-bound
+/// and model-free), send_audio, send_text, poll_event, cancel, and close.
+/// Telemetry sink bridging is still refused; that path is separate from
+/// the session poll loop and is tracked for a later release.
 public actor FFINativeRuntime: NativeRuntime {
     public static let libraryPathEnvironmentVariable = "OCTOMIL_RUNTIME_LIBRARY"
 

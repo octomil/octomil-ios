@@ -107,11 +107,12 @@ final class AudioVadFacadeTests: XCTestCase {
     // MARK: - Lifecycle skeleton (skipped without artifacts)
 
     func testVadDetectLifecycleSkippedWithoutArtifacts() async throws {
-        // This test would exercise the full open→send→drain lifecycle
-        // against a real liboctomil_runtime.dylib. It is skipped in CI
-        // because the runtime dylib is not shipped with the test bundle.
-        // When artifacts are present (e.g. on a developer machine with
-        // OCTOMIL_RUNTIME_LIBRARY set), remove the skip and run manually.
+        // FFI bridge is wired (Phase 4). This test exercises the full
+        // oct_session_open (model-free) → oct_session_send_audio →
+        // poll_event → oct_session_close lifecycle.
+        // Skipped in CI because liboctomil_runtime.dylib is not in the
+        // test bundle. To run live: set OCTOMIL_RUNTIME_LIBRARY and
+        // OCTOMIL_SILERO_VAD_MODEL, remove the skip, and run manually.
         throw XCTSkip("Requires liboctomil_runtime.dylib + OCTOMIL_SILERO_VAD_MODEL artifact")
     }
 

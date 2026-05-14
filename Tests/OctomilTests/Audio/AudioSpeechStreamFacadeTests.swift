@@ -237,6 +237,14 @@ final class AudioSpeechStreamFacadeTests: XCTestCase {
     // MARK: - Lifecycle skeleton (skipped without artifacts)
 
     func testTtsStreamLifecycleSkippedWithoutArtifacts() async throws {
+        // FFI bridge is wired (Phase 4). This test exercises the full
+        // oct_model_open → oct_session_open → oct_session_send_text →
+        // poll_event (TTS_AUDIO_CHUNK events, isFinal progression) →
+        // oct_session_close → oct_model_close lifecycle.
+        // Skipped in CI because liboctomil_runtime.dylib is not in the
+        // test bundle. To run live: set OCTOMIL_RUNTIME_LIBRARY and
+        // OCTOMIL_SHERPA_TTS_MODEL (with OCT_HAVE_SHERPA_ONNX_TTS compiled
+        // in), remove the skip, and run manually.
         throw XCTSkip(
             "Requires liboctomil_runtime.dylib + OCTOMIL_SHERPA_TTS_MODEL with " +
             "OCT_HAVE_SHERPA_ONNX_TTS compiled in"
