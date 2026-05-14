@@ -83,9 +83,11 @@ public struct TtsStreamChunk: Sendable {
 /// }
 /// ```
 ///
-/// `openSession` for ``audio.tts.stream`` is not yet wired in the iOS
-/// FFI — the stream will throw ``OctomilError/runtimeUnavailable``
-/// until that work lands.
+/// When ``liboctomil_runtime.dylib`` is loaded and the sherpa-onnx TTS
+/// model is present, calls route through the FFI session lifecycle and
+/// stream real PCM-f32 chunks. When the dylib is absent, the stream
+/// throws ``OctomilError/runtimeUnavailable(reason:)`` on the first
+/// ``next()`` call.
 public final class FacadeTtsStream: @unchecked Sendable {
 
     // MARK: - Dependencies
@@ -118,8 +120,9 @@ public final class FacadeTtsStream: @unchecked Sendable {
     /// - Returns: `AsyncThrowingStream` yielding ``TtsStreamChunk``
     ///   elements progressively. The stream terminates after the
     ///   chunk with ``isFinal == true``.
-    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` until
-    ///   the FFI session path is wired.
+    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` when
+    ///   ``liboctomil_runtime.dylib`` is unavailable or the sherpa-onnx
+    ///   TTS model artifact is not present.
     public func stream(
         model: String,
         input: String,

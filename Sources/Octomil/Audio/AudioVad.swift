@@ -59,8 +59,10 @@ public struct VadTransition: Sendable {
 /// }
 /// ```
 ///
-/// `openSession` is not yet wired in the iOS FFI path — all calls return
-/// ``OctomilError/runtimeUnavailable(reason:)`` until that work lands.
+/// When ``liboctomil_runtime.dylib`` is loaded and ``OCTOMIL_SILERO_VAD_MODEL``
+/// is set, calls route through the FFI session lifecycle and return real results.
+/// When the dylib is absent, every call throws
+/// ``OctomilError/runtimeUnavailable(reason:)``.
 public final class FacadeVad: @unchecked Sendable {
 
     // MARK: - Dependencies
@@ -98,9 +100,9 @@ public final class FacadeVad: @unchecked Sendable {
     ///     ``OctomilError/invalidInput(reason:)``.
     /// - Returns: All ``VadTransition`` edges detected in the clip.
     ///   Empty array when no speech activity was found.
-    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` until
-    ///   ``FFINativeRuntime/openSession(config:model:)`` is wired
-    ///   for ``audio.vad``.
+    /// - Throws: ``OctomilError/runtimeUnavailable(reason:)`` when
+    ///   ``liboctomil_runtime.dylib`` is unavailable or the
+    ///   ``OCTOMIL_SILERO_VAD_MODEL`` artifact is not set.
     public func detect(
         audio: Data,
         sampleRate: Int = 16000
@@ -236,7 +238,7 @@ func nativeRuntimeErrorToOctomilError(
     case .unsupported, .busy, .versionMismatch:
         return .runtimeUnavailable(
             reason: "\(capability): native runtime unavailable (\(operation)) — \(msg). " +
-                "openSession for \(capability) will be wired in a future release."
+                "Ensure liboctomil_runtime is present and the required artifact env var is set."
         )
     case .invalidInput:
         return .invalidInput(reason: "\(capability) \(operation): \(msg)")
