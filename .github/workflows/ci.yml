@@ -132,3 +132,25 @@ jobs:
         with:
           name: swiftlint-report
           path: swiftlint-report.json
+
+  ci-complete:
+    timeout-minutes: 5
+    name: CI Complete
+    runs-on: macos-14
+    needs:
+      - test
+      - swiftlint
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Verify CI jobs succeeded
+        run: |
+          set -euo pipefail
+          results='${{ toJSON(needs.*.result) }}'
+          echo "Needed job results: ${results}"
+          if echo "${results}" | grep -Eq '"(failure|cancelled|skipped)"'; then
+            echo "::error::One or more CI jobs failed, were cancelled, or were skipped."
+            exit 1
+          fi
+          echo "CI complete."

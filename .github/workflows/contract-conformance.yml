@@ -80,3 +80,24 @@ jobs:
           name: parity-ios-${{ steps.contract.outputs.version }}
           path: parity_report.json
           retention-days: 90
+
+  conformance-complete:
+    name: Contract Conformance Complete
+    runs-on: macos-15
+    timeout-minutes: 5
+    needs:
+      - conformance
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Verify conformance succeeded
+        run: |
+          set -euo pipefail
+          results='${{ toJSON(needs.*.result) }}'
+          echo "Needed job results: ${results}"
+          if echo "${results}" | grep -Eq '"(failure|cancelled|skipped)"'; then
+            echo "::error::Contract conformance failed, was cancelled, or was skipped."
+            exit 1
+          fi
+          echo "Contract conformance complete."
