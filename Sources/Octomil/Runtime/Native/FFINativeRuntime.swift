@@ -315,6 +315,13 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
         UnsafePointer<CChar>?
     ) -> oct_status_t
 
+    /// Optional ABI-11 image-input symbol. Resolved lazily via dlsym;
+    /// absent on minor-10 runtimes. See octomil-runtime PR #86.
+    fileprivate typealias SessionSendImage = @convention(c) (
+        UnsafeMutableRawPointer?,
+        UnsafePointer<oct_image_view_t>?
+    ) -> oct_status_t
+
     fileprivate typealias SessionPollEvent = @convention(c) (
         UnsafeMutableRawPointer?,
         UnsafeMutablePointer<oct_event_t>?,
@@ -367,6 +374,8 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
     fileprivate let sessionClose: SessionClose
     fileprivate let sessionSendAudio: SessionSendAudio
     fileprivate let sessionSendText: SessionSendText
+    /// Optional — only present when runtime ABI minor >= 11.
+    fileprivate let sessionSendImage: SessionSendImage?
     fileprivate let sessionPollEvent: SessionPollEvent
     fileprivate let sessionCancel: SessionCancel
     private let runtimeLastError: RuntimeLastError
@@ -378,6 +387,8 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
     private let modelConfigSize: StructSize
     private let sessionConfigSize: StructSize
     private let audioViewSize: StructSize
+    /// Optional — only present when runtime ABI minor >= 11.
+    fileprivate let imageViewSize: StructSize?
     private let eventSize: StructSize
     private let cacheClearAll: CacheClearAll
     private let cacheClearCapability: CacheClearCapability
@@ -398,6 +409,7 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
         sessionClose: @escaping SessionClose,
         sessionSendAudio: @escaping SessionSendAudio,
         sessionSendText: @escaping SessionSendText,
+        sessionSendImage: SessionSendImage?,
         sessionPollEvent: @escaping SessionPollEvent,
         sessionCancel: @escaping SessionCancel,
         runtimeLastError: @escaping RuntimeLastError,
@@ -409,6 +421,7 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
         modelConfigSize: @escaping StructSize,
         sessionConfigSize: @escaping StructSize,
         audioViewSize: @escaping StructSize,
+        imageViewSize: StructSize?,
         eventSize: @escaping StructSize,
         cacheClearAll: @escaping CacheClearAll,
         cacheClearCapability: @escaping CacheClearCapability,
@@ -428,6 +441,7 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
         self.sessionClose = sessionClose
         self.sessionSendAudio = sessionSendAudio
         self.sessionSendText = sessionSendText
+        self.sessionSendImage = sessionSendImage
         self.sessionPollEvent = sessionPollEvent
         self.sessionCancel = sessionCancel
         self.runtimeLastError = runtimeLastError
@@ -439,6 +453,7 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
         self.modelConfigSize = modelConfigSize
         self.sessionConfigSize = sessionConfigSize
         self.audioViewSize = audioViewSize
+        self.imageViewSize = imageViewSize
         self.eventSize = eventSize
         self.cacheClearAll = cacheClearAll
         self.cacheClearCapability = cacheClearCapability
@@ -542,6 +557,21 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
             )
         }
 
+        // ABI-11 optional: validate image-view sizeof only if the
+        // runtime exposes the symbol. Missing symbol on a minor-10
+        // dylib is NOT a runtime-open failure — image-input callers
+        // fail at the point of call with `.unsupported`.
+        if let imageViewSize {
+            let expectedImageViewSize = MemoryLayout<oct_image_view_t>.size
+            let actualImageViewSize = imageViewSize()
+            guard actualImageViewSize == expectedImageViewSize else {
+                throw NativeRuntimeError(
+                    status: .versionMismatch,
+                    message: "oct_image_view_t size mismatch: dylib=\(actualImageViewSize), Swift shim=\(expectedImageViewSize)."
+                )
+            }
+        }
+
         let expectedEventSize = MemoryLayout<oct_event_t>.size
         let actualEventSize = eventSize()
         guard actualEventSize == expectedEventSize else {
@@ -609,7 +639,15 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
     private static func loadSymbols(
         from handle: UnsafeMutableRawPointer
     ) throws -> NativeRuntimeDynamicLibrary {
-        NativeRuntimeDynamicLibrary(
+        // Optional ABI-11 image-input symbols. Absent on minor-10
+        // runtimes — `optionalSymbol` returns nil rather than throwing
+        // so the binding can still load. Inner gates in
+        // `FFINativeSession.sendImage` and `validateABI` enforce the
+        // minimum minor; image absence does NOT block runtime open.
+        let sessionSendImage: SessionSendImage? = optionalSymbol("oct_session_send_image", from: handle)
+        let imageViewSize: StructSize? = optionalSymbol("oct_image_view_size", from: handle)
+
+        return NativeRuntimeDynamicLibrary(
             libraryHandle: handle,
             runtimeOpen: try symbol("oct_runtime_open", from: handle),
             runtimeClose: try symbol("oct_runtime_close", from: handle),
@@ -623,6 +661,7 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
             sessionClose: try symbol("oct_session_close", from: handle),
             sessionSendAudio: try symbol("oct_session_send_audio", from: handle),
             sessionSendText: try symbol("oct_session_send_text", from: handle),
+            sessionSendImage: sessionSendImage,
             sessionPollEvent: try symbol("oct_session_poll_event", from: handle),
             sessionCancel: try symbol("oct_session_cancel", from: handle),
             runtimeLastError: try symbol("oct_runtime_last_error", from: handle),
@@ -634,6 +673,7 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
             modelConfigSize: try symbol("oct_model_config_size", from: handle),
             sessionConfigSize: try symbol("oct_session_config_size", from: handle),
             audioViewSize: try symbol("oct_audio_view_size", from: handle),
+            imageViewSize: imageViewSize,
             eventSize: try symbol("oct_event_size", from: handle),
             cacheClearAll: try symbol("oct_runtime_cache_clear_all", from: handle),
             cacheClearCapability: try symbol("oct_runtime_cache_clear_capability", from: handle),
@@ -653,6 +693,29 @@ private final class NativeRuntimeDynamicLibrary: @unchecked Sendable {
             )
         }
         return unsafeBitCast(raw, to: T.self)
+    }
+
+    /// Like ``symbol`` but returns nil instead of throwing on missing
+    /// symbol — for optional ABI surfaces (e.g. minor-11 image input)
+    /// that may legitimately be absent on older runtime dylibs.
+    private static func optionalSymbol<T>(
+        _ name: String,
+        from handle: UnsafeMutableRawPointer
+    ) -> T? {
+        guard let raw = dlsym(handle, name) else {
+            // Drain `dlerror()` so the next required `symbol()` lookup
+            // doesn't surface a stale error message.
+            _ = dlerror()
+            return nil
+        }
+        return unsafeBitCast(raw, to: T.self)
+    }
+
+    /// Reads the runtime's advertised ABI minor at the call site.
+    /// Used by the image-send inner gate; runtime-open already
+    /// validated `>= NativeABI.requiredMinor`.
+    fileprivate func negotiatedAbiMinor() -> UInt32 {
+        abiMinor()
     }
 
     private func readRuntimeLastError(_ runtimeHandle: UnsafeMutableRawPointer) -> String? {
@@ -1043,6 +1106,98 @@ public actor FFINativeSession: NativeSession {
         }
         guard status == OCT_STATUS_OK else {
             throw library.error(status: status, operation: "oct_session_send_text", runtimeHandle: runtimeHandle)
+        }
+    }
+
+    /// Optional ABI-11 image-input path (octomil-runtime PR #86,
+    /// `oct_session_send_image`). Inner gates — runtime open is NOT
+    /// gated by this:
+    ///
+    ///   1. ``library.negotiatedAbiMinor()`` >= ``NativeABI/imageInputMinimumMinor`` (11).
+    ///   2. ``library.sessionSendImage`` symbol is non-nil (dylib export present).
+    ///   3. Runtime capabilities advertise ``embeddings.image``.
+    ///
+    /// If any gate fails, throws
+    /// ``NativeRuntimeError(status: .unsupported, message: "embeddings.image: ...")``
+    /// — the SDK-error mapper translates this to
+    /// ``OctomilError/runtimeUnavailable(reason:)`` per
+    /// ``NativeStatus/nativeBridgeErrorCode``. The capability stays
+    /// BLOCKED_WITH_PROOF at this commit: the runtime advertises the
+    /// symbol but rejects with UNSUPPORTED until the embeddings.image
+    /// adapter lands and removes the capability from the blocked set.
+    public func sendImage(_ view: NativeImageView) async throws {
+        try checkOpen()
+
+        // Gate 1: ABI minor floor.
+        let minor = library.negotiatedAbiMinor()
+        guard minor >= NativeABI.imageInputMinimumMinor else {
+            throw NativeRuntimeError(
+                status: .unsupported,
+                message: "embeddings.image: runtime ABI minor \(minor) < \(NativeABI.imageInputMinimumMinor); image input requires v0.1.12+."
+            )
+        }
+
+        // Gate 2: optional symbol present (defensive — minor >= 11
+        // should imply symbol present, but a malformed dylib could
+        // advertise the minor without exporting the symbol).
+        guard let sessionSendImage = library.sessionSendImage else {
+            throw NativeRuntimeError(
+                status: .unsupported,
+                message: "embeddings.image: oct_session_send_image symbol missing from runtime dylib."
+            )
+        }
+
+        // Gate 3: capability advertisement. Re-fetched per call rather
+        // than cached so capability flips (when the adapter PR lands)
+        // are picked up without a session reopen. Cheap — the runtime
+        // returns a static cstring array.
+        let advertised: Bool
+        if let runtime {
+            let caps = try await runtime.capabilities()
+            advertised = caps.supportedCapabilities.contains(RuntimeCapability.embeddingsImage.rawValue)
+        } else {
+            advertised = false
+        }
+        guard advertised else {
+            throw NativeRuntimeError(
+                status: .unsupported,
+                message: "embeddings.image: capability not advertised by runtime (BLOCKED_WITH_PROOF until adapter PR lands)."
+            )
+        }
+
+        // Validate Swift-side discriminator before crossing the FFI
+        // boundary — `.unknown` is a forward-compat sentinel that
+        // callers must never set.
+        guard view.mime != .unknown else {
+            throw NativeRuntimeError(
+                status: .invalidInput,
+                message: "embeddings.image: NativeImageMime.unknown is a forward-compat sentinel and may not be sent."
+            )
+        }
+        guard !view.bytes.isEmpty else {
+            throw NativeRuntimeError(
+                status: .invalidInput,
+                message: "embeddings.image: empty image buffer."
+            )
+        }
+
+        let status = view.bytes.withUnsafeBytes { raw -> oct_status_t in
+            guard let base = raw.baseAddress else {
+                return OCT_STATUS_INVALID_INPUT
+            }
+            var cView = oct_image_view_t()
+            cView.bytes = base.assumingMemoryBound(to: UInt8.self)
+            cView.n_bytes = raw.count
+            cView.mime = view.mime.rawValue
+            cView._reserved0 = 0
+            return sessionSendImage(sessionHandle, &cView)
+        }
+        guard status == OCT_STATUS_OK else {
+            throw library.error(
+                status: status,
+                operation: "oct_session_send_image",
+                runtimeHandle: runtimeHandle
+            )
         }
     }
 
