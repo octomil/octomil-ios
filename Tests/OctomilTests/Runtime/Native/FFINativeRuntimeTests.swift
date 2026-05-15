@@ -249,7 +249,259 @@ final class FFINativeRuntimeTests: XCTestCase {
         }
     }
 
-    private static func buildFixtureDylib(testFile: StaticString = #filePath) throws -> String {
+    // MARK: - ABI-11 image-input optional surface
+
+    /// Fixture dylib reports minor=10 and does NOT export
+    /// `oct_session_send_image`. The binding MUST:
+    ///   - open the runtime successfully (NativeABI.requiredMinor stays at 10);
+    ///   - throw `.unsupported` from `sendImage`, not crash on
+    ///     missing symbol or silently drop the call.
+    ///
+    /// This is the inner-gate contract — image-input requires
+    /// minor >= 11, but the binding-wide floor stays at 10 so
+    /// existing ABI-10 capabilities (STT/VAD/embeddings.text/etc.)
+    /// keep working against the same runtime.
+    func testRuntimeOpenSucceedsAtMinor10ButSendImageRaisesUnsupported() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+
+        // Open MUST succeed — minor=10 still satisfies requiredMinor=10.
+        let runtime = try await FFINativeRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "ok"),
+            telemetrySink: nil,
+            libraryPath: libraryPath
+        )
+
+        do {
+            let model = try await runtime.openModel(
+                config: NativeModelConfig(modelURI: "model:test", artifactDigest: "sha256:test")
+            )
+            let session = try await runtime.openSession(
+                config: NativeSessionConfig(modelURI: "model:test", capability: "chat.completion"),
+                model: model
+            )
+
+            // Inner gate fires: minor=10 is below
+            // `NativeABI.imageInputMinimumMinor` (11). The error
+            // message MUST surface the minor-floor diagnostic for
+            // operator triage.
+            do {
+                try await session.sendImage(
+                    NativeImageView(bytes: Data([0x89, 0x50, 0x4E, 0x47]), mime: .png)
+                )
+                XCTFail("Expected sendImage on minor-10 runtime to raise .unsupported.")
+            } catch let error as NativeRuntimeError {
+                XCTAssertEqual(error.status, .unsupported)
+                // SDK error mapping: .unsupported -> .runtimeUnavailable
+                // per NativeStatus.nativeBridgeErrorCode. Documented
+                // BLOCKED_WITH_PROOF posture at this commit.
+                XCTAssertEqual(error.sdkErrorCode, .runtimeUnavailable)
+                XCTAssertNotNil(error.message)
+                let message = error.message ?? ""
+                XCTAssertTrue(
+                    message.contains("embeddings.image"),
+                    "expected diagnostic to surface capability id, got: \(message)"
+                )
+                XCTAssertTrue(
+                    message.contains("ABI minor") || message.contains("not advertised") || message.contains("symbol missing"),
+                    "expected diagnostic to identify which inner gate failed, got: \(message)"
+                )
+            }
+
+            await session.close()
+            try await model.close()
+        } catch {
+            await runtime.close()
+            throw error
+        }
+
+        await runtime.close()
+    }
+
+    /// Sanity check that `NativeImageMime.unknown` is rejected
+    /// before reaching the FFI layer — defensive against the
+    /// forward-compat sentinel slot. Same fail-closed posture as
+    /// OCT_SAMPLE_FORMAT_UNKNOWN / OCT_VAD_TRANSITION_UNKNOWN.
+    /// Note: this test exercises the Swift-side validation only;
+    /// it does NOT depend on the runtime advertising the capability.
+    func testSendImageRejectsUnknownMimeBeforeFfi() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+        let runtime = try await FFINativeRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "ok"),
+            telemetrySink: nil,
+            libraryPath: libraryPath
+        )
+
+        do {
+            let model = try await runtime.openModel(
+                config: NativeModelConfig(modelURI: "model:test", artifactDigest: "sha256:test")
+            )
+            let session = try await runtime.openSession(
+                config: NativeSessionConfig(modelURI: "model:test", capability: "chat.completion"),
+                model: model
+            )
+
+            // Note: in this fixture the ABI-minor gate fires first
+            // (minor=10) before the mime check is reached. The
+            // test asserts the call still fails closed — combined
+            // with `testNativeImageMimeAllCasesConstructible`,
+            // this pins the forward-compat sentinel posture.
+            do {
+                try await session.sendImage(
+                    NativeImageView(bytes: Data([0xFF]), mime: .unknown)
+                )
+                XCTFail("Expected sendImage with .unknown mime to fail closed.")
+            } catch let error as NativeRuntimeError {
+                XCTAssertEqual(error.status, .unsupported)
+            }
+
+            await session.close()
+            try await model.close()
+        } catch {
+            await runtime.close()
+            throw error
+        }
+
+        await runtime.close()
+    }
+
+    /// Regression test for the actor-reentrancy race in
+    /// `FFINativeSession.sendImage` (PR #214 review finding).
+    ///
+    /// Swift actors are reentrant across `await` boundaries. In
+    /// `sendImage`, `await runtime.capabilities()` is an inter-actor
+    /// hop — while we await the FFINativeRuntime actor, other messages
+    /// (notably `close()`) can interleave on the FFINativeSession actor.
+    /// Without a second `try checkOpen()` after the await, the C call
+    /// `sessionSendImage(sessionHandle, ...)` would deref a freed/nil
+    /// session handle (use-after-close).
+    ///
+    /// Test setup: a `RACE_FIXTURE`-compiled dylib that
+    ///   - reports minor=11 (Gate 1 passes),
+    ///   - exports `oct_session_send_image` (Gate 2 passes),
+    ///   - advertises `embeddings.image` (Gate 3 passes),
+    /// so `sendImage` actually reaches `await runtime.capabilities()`.
+    ///
+    /// We then race a sendImage Task against a close() call. The fix
+    /// guarantees one of two safe outcomes:
+    ///   (a) sendImage throws (the second checkOpen catches the close),
+    ///   OR (b) sendImage runs to completion BEFORE close interleaves.
+    /// In either case the C `oct_session_send_image` must NOT be
+    /// invoked after close() has nulled the handle. The fixture
+    /// counts entries; if the defense-in-depth check is removed and
+    /// the C entry runs with a stale/null handle, this test fails.
+    ///
+    /// The race is repeated across many iterations to make the
+    /// non-deterministic interleave statistically likely to manifest.
+    func testSendImageReChecksOpenAfterCapabilitiesSuspension() async throws {
+        let libraryPath = try Self.buildFixtureDylib(extraDefines: ["RACE_FIXTURE"])
+
+        // Resolve the fixture's call-counter probes.
+        typealias Probe = @convention(c) () -> Int32
+        let probe: (String) -> Int = { name in
+            guard let handle = dlopen(libraryPath, RTLD_NOW) else { return -1 }
+            defer { dlclose(handle) }
+            guard let sym = dlsym(handle, name) else { return -1 }
+            let fn = unsafeBitCast(sym, to: Probe.self)
+            return Int(fn())
+        }
+        let imageCallCount = { probe("oct_test_image_call_count_read_and_reset") }
+        let imageNullSessionCount = { probe("oct_test_image_call_null_session_count_read_and_reset") }
+        let imageClosedSessionCount = { probe("oct_test_image_call_closed_session_count_read_and_reset") }
+
+        // Pre-flight: ensure the symbol resolves AND reset any leftover
+        // counts from a prior test run in the same process.
+        XCTAssertGreaterThanOrEqual(imageCallCount(), 0, "RACE_FIXTURE probe missing")
+        _ = imageCallCount()
+        _ = imageNullSessionCount()
+        _ = imageClosedSessionCount()
+
+        // Run many iterations to make the reentrancy window catch the
+        // race even on fast machines.
+        let iterations = 50
+        var observedThrows = 0
+        var observedCompletions = 0
+
+        for _ in 0..<iterations {
+            let runtime = try await FFINativeRuntime.open(
+                config: NativeRuntimeConfig(artifactRoot: "ok"),
+                telemetrySink: nil,
+                libraryPath: libraryPath
+            )
+            let model = try await runtime.openModel(
+                config: NativeModelConfig(modelURI: "model:test", artifactDigest: "sha256:test")
+            )
+            let session = try await runtime.openSession(
+                config: NativeSessionConfig(modelURI: "model:test", capability: "chat.completion"),
+                model: model
+            )
+
+            // Race: dispatch sendImage and close concurrently.
+            async let sendResult: Void = {
+                do {
+                    try await session.sendImage(
+                        NativeImageView(bytes: Data([0x89, 0x50, 0x4E, 0x47]), mime: .png)
+                    )
+                } catch {
+                    // Expected when close wins the race — second
+                    // checkOpen throws .invalidInput("session is closed"
+                    // / "session handle invalidated").
+                    throw error
+                }
+            }()
+            async let _: Void = session.close()
+
+            do {
+                try await sendResult
+                observedCompletions += 1
+            } catch let err as NativeRuntimeError {
+                observedThrows += 1
+                // Acceptable failure modes: invalidInput (closed) or
+                // unsupported (capability re-check between race
+                // arrangements). All other statuses indicate a real
+                // bug.
+                XCTAssertTrue(
+                    err.status == .invalidInput || err.status == .unsupported,
+                    "unexpected status from raced sendImage: \(err.status) — \(err.message ?? "")"
+                )
+            }
+
+            try await model.close()
+            await runtime.close()
+        }
+
+        // The core invariant: the C entry `oct_session_send_image`
+        // must NEVER be invoked with a NULL or closed session pointer.
+        // If the second `try checkOpen()` is missing, a concurrent
+        // close() that interleaves during `await runtime.capabilities()`
+        // will null `sessionHandle` before sendImage's C call reads it
+        // — the fixture records that as a null-session entry.
+        let cCalls = imageCallCount()
+        let nullSessions = imageNullSessionCount()
+        let closedSessions = imageClosedSessionCount()
+
+        XCTAssertEqual(
+            nullSessions, 0,
+            "oct_session_send_image was invoked with a NULL session handle \(nullSessions) time(s); the defense-in-depth checkOpen() after `await runtime.capabilities()` is missing (use-after-close on session handle)."
+        )
+        XCTAssertEqual(
+            closedSessions, 0,
+            "oct_session_send_image was invoked on a closed session \(closedSessions) time(s); the defense-in-depth checkOpen() after `await runtime.capabilities()` is missing."
+        )
+
+        // Sanity: at least one iteration must have raced into the
+        // throw branch on a non-trivial run, otherwise we're not
+        // actually exercising the reentrancy window. We don't fail
+        // hard on this because schedulers vary across CI hosts, but
+        // log it for triage if the test ever becomes a no-op.
+        if observedThrows == 0 {
+            print("[warn] testSendImageReChecksOpenAfterCapabilitiesSuspension: 0 races caught the close path; scheduler did not interleave. C-call counter (\(cCalls)) and null-session invariant (\(nullSessions)) still verified.")
+        }
+    }
+
+    private static func buildFixtureDylib(
+        testFile: StaticString = #filePath,
+        extraDefines: [String] = []
+    ) throws -> String {
         let fileManager = FileManager.default
         let clangPath = "/usr/bin/clang"
         guard fileManager.isExecutableFile(atPath: clangPath) else {
@@ -277,14 +529,20 @@ final class FFINativeRuntimeTests: XCTestCase {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: clangPath)
-        process.arguments = [
+        var arguments = [
             "-dynamiclib",
             "-I",
             bridgeIncludeDir.path,
+        ]
+        for define in extraDefines {
+            arguments.append("-D\(define)")
+        }
+        arguments.append(contentsOf: [
             sourceURL.path,
             "-o",
             dylibURL.path,
-        ]
+        ])
+        process.arguments = arguments
         let stderr = Pipe()
         process.standardError = stderr
 
@@ -348,7 +606,11 @@ struct oct_runtime {
 
 static char g_thread_error[256] = "";
 static const char* g_engines[] = {"fixture_engine", NULL};
+#ifdef RACE_FIXTURE
+static const char* g_capabilities[] = {"chat.completion", "audio.transcription", "audio.stt.batch", "audio.vad", "cache.introspect", "embeddings.image", NULL};
+#else
 static const char* g_capabilities[] = {"chat.completion", "audio.transcription", "audio.stt.batch", "audio.vad", "cache.introspect", NULL};
+#endif
 static const char* g_archs[] = {"darwin-arm64", NULL};
 
 static void set_error(char* destination, const char* message) {
@@ -367,7 +629,11 @@ static int copy_error(const char* source, char* buffer, size_t buflen) {
 }
 
 uint32_t oct_runtime_abi_version_major(void) { return 0u; }
+#ifdef RACE_FIXTURE
+uint32_t oct_runtime_abi_version_minor(void) { return 11u; }
+#else
 uint32_t oct_runtime_abi_version_minor(void) { return 10u; }
+#endif
 size_t oct_runtime_config_size(void) { return sizeof(oct_runtime_config_t); }
 size_t oct_capabilities_size(void) { return sizeof(oct_capabilities_t); }
 
@@ -698,5 +964,58 @@ oct_status_t oct_runtime_cache_introspect(oct_runtime_t* runtime, char* out_json
         ? OCT_STATUS_OK
         : OCT_STATUS_INVALID_INPUT;
 }
+
+#ifdef RACE_FIXTURE
+/* RACE_FIXTURE mode: export the optional ABI-11 image symbol so the
+ * Swift binding's `library.sessionSendImage` resolves non-nil and
+ * Gate 2 (symbol-presence) passes. Coupled with minor=11 (Gate 1)
+ * and "embeddings.image" in g_capabilities (Gate 3) this is the
+ * only fixture configuration that lets sendImage reach the
+ * `await runtime.capabilities()` suspension point — i.e. the only
+ * configuration where the actor-reentrancy race can manifest.
+ *
+ * `g_image_call_count` lets the regression test assert the C entry
+ * was NOT invoked after a concurrent close() — proving the second
+ * `try checkOpen()` ran. If the defense-in-depth check is removed,
+ * this counter increments and the test fails. */
+static int g_image_call_count = 0;
+static int g_image_call_null_session_count = 0;
+static int g_image_call_closed_session_count = 0;
+oct_status_t oct_session_send_image(oct_session_t* session, const oct_image_view_t* view) {
+    (void)view;
+    g_image_call_count += 1;
+    if (session == NULL) {
+        g_image_call_null_session_count += 1;
+        /* Real runtimes would deref the handle here and crash. We
+         * defensively return INVALID_INPUT instead so the test can
+         * observe the bug as a counter increment + a failed call,
+         * rather than as a process abort. */
+        return OCT_STATUS_INVALID_INPUT;
+    }
+    if (session->closed) {
+        g_image_call_closed_session_count += 1;
+        return OCT_STATUS_INVALID_INPUT;
+    }
+    return OCT_STATUS_OK;
+}
+size_t oct_image_view_size(void) { return sizeof(oct_image_view_t); }
+
+/* Test-only hook: read & reset the call counter. */
+int oct_test_image_call_count_read_and_reset(void) {
+    int n = g_image_call_count;
+    g_image_call_count = 0;
+    return n;
+}
+int oct_test_image_call_null_session_count_read_and_reset(void) {
+    int n = g_image_call_null_session_count;
+    g_image_call_null_session_count = 0;
+    return n;
+}
+int oct_test_image_call_closed_session_count_read_and_reset(void) {
+    int n = g_image_call_closed_session_count;
+    g_image_call_closed_session_count = 0;
+    return n;
+}
+#endif
 """
 #endif

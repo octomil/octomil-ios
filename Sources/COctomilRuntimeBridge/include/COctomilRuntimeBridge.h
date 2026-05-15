@@ -55,6 +55,31 @@ typedef uint32_t oct_cache_scope_t;
 #define OCT_SAMPLE_FORMAT_PCM_S16LE   ((uint32_t)1)
 #define OCT_SAMPLE_FORMAT_PCM_F32LE   ((uint32_t)2)
 
+/* v0.1.12 — image input ABI surface (ABI minor 11).
+ *
+ * Per octomil-runtime PR #86 (1d92e35): the embeddings.image lane adds
+ * a dedicated input view + send function. The runtime export is a STUB
+ * that returns OCT_STATUS_UNSUPPORTED on every non-NULL input until the
+ * adapter PR lands. The capability "embeddings.image" remains
+ * BLOCKED_WITH_PROOF and is not advertised by oct_runtime_capabilities.
+ *
+ * Symbols (oct_image_view_t, oct_session_send_image, oct_image_view_size,
+ * OCT_IMAGE_MIME_*, OCT_EMBED_POOLING_IMAGE_CLIP) are forward-declared
+ * here so the Swift binding can cdef against them and dlsym at load
+ * time. Symbol PRESENCE is gated by the runtime ABI minor (>= 11);
+ * symbol BEHAVIOUR (whether the capability is live) is gated by the
+ * runtime capability probe at session-open time. This binding's
+ * required ABI floor (NativeABI.requiredMinor) stays at 10 — the image
+ * path enforces the >= 11 check inline.
+ */
+#define OCT_IMAGE_MIME_UNKNOWN  ((uint32_t)0)  /* future-compat sentinel; never set by callers */
+#define OCT_IMAGE_MIME_PNG      ((uint32_t)1)  /* image/png — encoded */
+#define OCT_IMAGE_MIME_JPEG     ((uint32_t)2)  /* image/jpeg — encoded */
+#define OCT_IMAGE_MIME_WEBP     ((uint32_t)3)  /* image/webp — encoded */
+#define OCT_IMAGE_MIME_RGB8     ((uint32_t)4)  /* raw decoded uint8 RGB pixel buffer */
+
+#define OCT_EMBED_POOLING_IMAGE_CLIP ((uint32_t)5) /* CLIP/SigLIP-style image embedding */
+
 typedef void (*oct_telemetry_sink_fn)(
     const void* event,
     void* user_data
@@ -100,6 +125,18 @@ typedef struct {
     uint16_t channels;
     uint16_t _reserved0;
 } oct_audio_view_t;
+
+/* v0.1.12 — image-input view, caller-owned for the duration of the
+ * oct_session_send_image call. Layout MUST match the runtime header
+ * exactly (PR #86 1d92e35); the size/offsets are pinned by
+ * NativeRuntimeTypeTests + the runtime-side
+ * test_oct_session_send_image_shape.cpp regression. */
+typedef struct {
+    const uint8_t* bytes;        /* borrowed; lifetime = call duration only */
+    size_t         n_bytes;      /* encoded byte length; 0 => INVALID_INPUT */
+    uint32_t       mime;         /* OCT_IMAGE_MIME_* closed enum */
+    uint32_t       _reserved0;   /* padding; always 0 */
+} oct_image_view_t;
 
 typedef struct {
     uint32_t version;
@@ -313,10 +350,17 @@ oct_status_t oct_session_open(
 void oct_session_close(oct_session_t* session);
 oct_status_t oct_session_send_audio(oct_session_t* session, const oct_audio_view_t* audio);
 oct_status_t oct_session_send_text(oct_session_t* session, const char* utf8);
+/* v0.1.12 — image-input stub. Returns OCT_STATUS_UNSUPPORTED until the
+ * embeddings.image adapter lands; NULL session/view returns
+ * OCT_STATUS_INVALID_INPUT. Symbol presence requires ABI minor >= 11. */
+oct_status_t oct_session_send_image(oct_session_t* session, const oct_image_view_t* view);
 oct_status_t oct_session_poll_event(oct_session_t* session, oct_event_t* out, uint32_t timeout_ms);
 oct_status_t oct_session_cancel(oct_session_t* session);
 size_t oct_session_config_size(void);
 size_t oct_audio_view_size(void);
+/* v0.1.12 — sizeof(oct_image_view_t) introspection. Symbol presence
+ * requires ABI minor >= 11. Mirrors oct_audio_view_size. */
+size_t oct_image_view_size(void);
 size_t oct_event_size(void);
 
 oct_status_t oct_runtime_cache_clear_all(oct_runtime_t* runtime);

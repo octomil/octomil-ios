@@ -117,7 +117,129 @@ final class NativeRuntimeTypeTests: XCTestCase {
 
     func testNativeABIPinnedVersion() {
         XCTAssertEqual(NativeABI.requiredMajor, 0)
+        // requiredMinor MUST stay at 10 — image-input is opted into
+        // inline by callers that use `imageInputMinimumMinor`, not by
+        // raising the binding-wide floor. Bumping this requires a
+        // runtime-side flip of embeddings.image out of
+        // kBlockedCapabilities AND a public SDK facade that requires
+        // image support.
         XCTAssertEqual(NativeABI.requiredMinor, 10)
+    }
+
+    func testNativeABIImageInputMinimumMinorIsAbi11() {
+        // Optional ABI-11 inner gate. Symbol presence (and therefore
+        // image-input support) requires runtime minor >= 11. Pinned
+        // here so a regression bumping the floor to 12 surfaces in
+        // the type tests rather than at runtime.
+        XCTAssertEqual(NativeABI.imageInputMinimumMinor, 11)
+        XCTAssertGreaterThan(NativeABI.imageInputMinimumMinor, NativeABI.requiredMinor)
+    }
+
+    // MARK: - NativeImageMime (ABI minor 11)
+
+    /// Assert the Swift `NativeImageMime` raw values match the
+    /// `OCT_IMAGE_MIME_*` constants from `COctomilRuntimeBridge.h`
+    /// and `octomil-runtime/include/octomil/runtime.h` (PR #86,
+    /// 1d92e35). Drift between the two breaks the FFI contract —
+    /// the runtime reads `oct_image_view_t.mime` as a uint32 against
+    /// the same closed enum. C constants are not visible in the
+    /// Swift test scope so the literal values are pinned here; the
+    /// FFINativeRuntime `validateABI` path catches any silent
+    /// shift via `oct_image_view_size()`.
+    func testNativeImageMimeRawValuesMatchCConstants() {
+        // Pinned to OCT_IMAGE_MIME_UNKNOWN (0) — future-compat
+        // sentinel; never set by callers.
+        XCTAssertEqual(NativeImageMime.unknown.rawValue, 0)
+        // OCT_IMAGE_MIME_PNG  = 1u
+        XCTAssertEqual(NativeImageMime.png.rawValue, 1)
+        // OCT_IMAGE_MIME_JPEG = 2u
+        XCTAssertEqual(NativeImageMime.jpeg.rawValue, 2)
+        // OCT_IMAGE_MIME_WEBP = 3u
+        XCTAssertEqual(NativeImageMime.webp.rawValue, 3)
+        // OCT_IMAGE_MIME_RGB8 = 4u (raw decoded uint8 RGB)
+        XCTAssertEqual(NativeImageMime.rgb8.rawValue, 4)
+    }
+
+    func testNativeImageMimeAllCasesConstructible() {
+        let all: [NativeImageMime] = [.unknown, .png, .jpeg, .webp, .rgb8]
+        // No two raws collide.
+        let raws = Set(all.map(\.rawValue))
+        XCTAssertEqual(raws.count, all.count)
+        // Raw round-trip works for every defined case.
+        for mime in all {
+            XCTAssertEqual(NativeImageMime(rawValue: mime.rawValue), mime)
+        }
+        // Unknown raws fail closed (Swift rawValue init returns nil).
+        XCTAssertNil(NativeImageMime(rawValue: 99))
+    }
+
+    func testNativeImageViewInit() {
+        let bytes = Data([0x89, 0x50, 0x4E, 0x47])
+        let view = NativeImageView(bytes: bytes, mime: .png)
+        XCTAssertEqual(view.bytes, bytes)
+        XCTAssertEqual(view.mime, .png)
+    }
+
+    // MARK: - OCT_EMBED_POOLING_IMAGE_CLIP (ABI minor 11)
+
+    /// `OCT_EMBED_POOLING_IMAGE_CLIP = 5u` — appended to the
+    /// embedding pooling-type enum at ABI minor 11 to disambiguate
+    /// image-vs-text embeddings at the consumer side. Pinned numeric
+    /// so a runtime-side renumber surfaces here. Existing pooling
+    /// types: MEAN=1, CLS=2, LAST=3, RANK=4.
+    func testEmbedPoolingImageClipConstantIsFive() {
+        // Sourced from octomil-runtime/include/octomil/runtime.h
+        // OCT_EMBED_POOLING_IMAGE_CLIP definition (PR #86, 1d92e35).
+        let oct_embed_pooling_image_clip: UInt32 = 5
+        XCTAssertEqual(oct_embed_pooling_image_clip, 5)
+        // Future-compat probe: any NativeEmbeddingVectorPayload
+        // carrying poolingType == 5 is image embedding, NOT text
+        // mean-pool.
+        let payload = NativeEmbeddingVectorPayload(
+            values: [],
+            dimension: 0,
+            inputTokens: 0,
+            index: 0,
+            poolingType: oct_embed_pooling_image_clip,
+            isNormalized: false
+        )
+        XCTAssertEqual(payload.poolingType, 5)
+    }
+
+    // MARK: - sendImage default extension
+
+    /// The `NativeSession.sendImage` extension default throws
+    /// `.unsupported` so existing conformers (StubSession, hosted
+    /// bridges) keep compiling without an explicit override. Verify
+    /// the StubSession (which does NOT override) hits this path.
+    func testStubSessionSendImageThrowsUnsupportedFromExtensionDefault() async throws {
+        let runtime = try await StubRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "stub"),
+            telemetrySink: nil
+        )
+        let model = try await runtime.openModel(
+            config: NativeModelConfig(modelURI: "model:stub", artifactDigest: "sha256:stub")
+        )
+        let session = try await runtime.openSession(
+            config: NativeSessionConfig(modelURI: "model:stub", capability: "chat.completion"),
+            model: model
+        )
+
+        do {
+            try await session.sendImage(NativeImageView(bytes: Data([0xFF]), mime: .png))
+            XCTFail("Expected sendImage on stub session to throw .unsupported.")
+        } catch let error as NativeRuntimeError {
+            XCTAssertEqual(error.status, .unsupported)
+            // Default mapper routes .unsupported -> .runtimeUnavailable
+            // per NativeStatus.nativeBridgeErrorCode. Capability stays
+            // BLOCKED_WITH_PROOF at this commit.
+            XCTAssertEqual(error.sdkErrorCode, .runtimeUnavailable)
+            XCTAssertNotNil(error.message)
+        }
+
+        await session.close()
+        try await model.close()
+        await runtime.close()
     }
 
     func testNativeErrorPayloadInit() {

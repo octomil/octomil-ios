@@ -16,9 +16,24 @@ import Foundation
 /// handshake at load (pin major exact, minor ≥ required) and fails fast
 /// with `.versionMismatch` on drift; the stub ignores this but keeps it
 /// here to document intent for Approach B.
+///
+/// IMPORTANT: ``requiredMinor`` stays at 10 even though the binding
+/// declares optional ABI-11 image symbols (`oct_session_send_image`
+/// etc.). Image-input callers enforce ``imageInputMinimumMinor`` (11)
+/// inline so that existing ABI-10 capabilities continue to work
+/// against an older runtime; only the image path requires the higher
+/// floor. The image symbols are looked up via dlsym lazily and may be
+/// absent on minor-10 runtimes — that absence surfaces as
+/// ``NativeRuntimeError(status: .unsupported)`` at the point of call
+/// rather than at runtime open. See octomil-runtime PR #86 (1d92e35).
 public enum NativeABI {
     public static let requiredMajor: UInt32 = 0
     public static let requiredMinor: UInt32 = 10
+    /// Minimum runtime ABI minor that exposes the image-input surface
+    /// (``oct_session_send_image`` + ``oct_image_view_t``). Enforced as
+    /// an inner gate inside the image-send path; runtime-open is NOT
+    /// gated by this.
+    public static let imageInputMinimumMinor: UInt32 = 11
 }
 
 // MARK: - Status (oct_status_t — runtime.h:161-169)
@@ -158,6 +173,54 @@ public struct NativeOperationalEnvelope: Sendable {
 public enum NativeSampleFormat: UInt32, Sendable {
     case pcmS16LE = 1
     case pcmF32LE = 2
+}
+
+// MARK: - Image input (oct_image_view_t / OCT_IMAGE_MIME_* — runtime.h ABI minor 11)
+//
+// Optional ABI-11 surface. Symbol presence is gated by the runtime's
+// reported minor (>= 11); the binding's required minor stays at 10
+// (see ``NativeABI``). The capability `embeddings.image` is
+// BLOCKED_WITH_PROOF at this commit — the runtime advertises the
+// symbol but `oct_session_send_image` returns OCT_STATUS_UNSUPPORTED
+// unconditionally until the adapter PR lands and removes the
+// capability from the blocked set. Surfaced here so SDK callers can
+// cdef against the shape without flipping the required floor.
+
+/// MIME discriminator for ``NativeImageView``. Closed enum with a
+/// `unknown` sentinel matching the C-side `OCT_IMAGE_MIME_UNKNOWN`
+/// forward-compat slot — bindings that observe an unknown raw value
+/// SHOULD treat it as `unknown` and surface `INVALID_INPUT` instead
+/// of crashing.
+public enum NativeImageMime: UInt32, Sendable {
+    /// Future-compat sentinel; never set by callers. Reserved for
+    /// runtime-side enum extension. (matches `OCT_IMAGE_MIME_UNKNOWN`).
+    case unknown = 0
+    /// `image/png` — encoded byte buffer.
+    case png = 1
+    /// `image/jpeg` — encoded byte buffer.
+    case jpeg = 2
+    /// `image/webp` — encoded byte buffer.
+    case webp = 3
+    /// Raw decoded uint8 RGB pixel buffer (`width * height * 3`).
+    case rgb8 = 4
+}
+
+/// Swift-friendly mirror of `oct_image_view_t`. Callers pass an
+/// encoded (PNG/JPEG/WEBP) or raw (`rgb8`) byte buffer; the runtime
+/// copies internally if it needs to retain. Lifetime is the duration
+/// of the ``NativeSession/sendImage(_:mime:)`` call.
+public struct NativeImageView: Sendable {
+    /// Encoded image bytes (PNG/JPEG/WEBP) or raw decoded RGB8 pixel
+    /// buffer. Empty data is rejected as INVALID_INPUT by the runtime.
+    public let bytes: Data
+    /// Content-type discriminator. Unknown values reject as
+    /// INVALID_INPUT before reaching the runtime.
+    public let mime: NativeImageMime
+
+    public init(bytes: Data, mime: NativeImageMime) {
+        self.bytes = bytes
+        self.mime = mime
+    }
 }
 
 // MARK: - Event payloads (subset of the oct_event union)
@@ -589,10 +652,42 @@ public protocol NativeSession: Actor {
     func sendAudio(_ pcm: Data, sampleRate: UInt32, channels: UInt16) async throws
     func sendText(_ utf8: String) async throws
 
+    /// Optional ABI-11 image-input surface (matches
+    /// `oct_session_send_image` introduced in octomil-runtime PR #86).
+    ///
+    /// Conformers SHOULD gate this on `runtimeAbiMinor >= 11` AND a
+    /// capabilities probe that contains `embeddings.image`; otherwise
+    /// throw ``NativeRuntimeError(status: .unsupported, message:
+    /// "embeddings.image")``. The default implementation throws
+    /// `.unsupported` so existing conformers (notably the in-process
+    /// stub) remain backward-compatible.
+    ///
+    /// BLOCKED_WITH_PROOF at this commit — the runtime export is a
+    /// stub that returns OCT_STATUS_UNSUPPORTED unconditionally until
+    /// the embeddings.image adapter lands and removes the capability
+    /// from the blocked set. No public SDK facade advertises image
+    /// embeddings as live; calling this against a v0.1.10 (minor=10)
+    /// runtime fails with `.unsupported` as a clean inner gate.
+    func sendImage(_ view: NativeImageView) async throws
+
     /// Returns the next event. Returns nil on TIMEOUT (mirrors the C
     /// `OCT_STATUS_TIMEOUT` + `out->type = OCT_EVENT_NONE` convention).
     func pollEvent(timeout: TimeInterval) async throws -> NativeEvent?
 
     func cancel() async throws
     func close() async
+}
+
+extension NativeSession {
+    /// Fail-safe default: image input is unsupported unless the
+    /// concrete conformer overrides this method. Matches the
+    /// ``NativeRuntime/openSessionModelFree(config:)`` extension
+    /// pattern so existing conformers (Stub, hosted bridges) don't
+    /// need to change.
+    public func sendImage(_ view: NativeImageView) async throws {
+        throw NativeRuntimeError(
+            status: .unsupported,
+            message: "embeddings.image is BLOCKED_WITH_PROOF: this NativeSession does not implement sendImage."
+        )
+    }
 }
