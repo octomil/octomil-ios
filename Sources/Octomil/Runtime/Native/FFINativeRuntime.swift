@@ -1154,6 +1154,13 @@ public actor FFINativeSession: NativeSession {
         let advertised: Bool
         if let runtime {
             let caps = try await runtime.capabilities()
+            // Defense-in-depth: Swift actors are reentrant across `await`.
+            // Between the suspension above and the C-handle deref below,
+            // a concurrent `close()` could have invalidated this session.
+            // Re-check before crossing the FFI boundary to avoid a
+            // use-after-close on `sessionHandle`. Same pattern used in
+            // URLSession-style actor wrappers around suspension points.
+            try checkOpen()
             advertised = caps.supportedCapabilities.contains(RuntimeCapability.embeddingsImage.rawValue)
         } else {
             advertised = false
