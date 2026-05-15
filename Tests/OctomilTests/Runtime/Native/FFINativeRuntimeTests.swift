@@ -249,6 +249,121 @@ final class FFINativeRuntimeTests: XCTestCase {
         }
     }
 
+    // MARK: - ABI-11 image-input optional surface
+
+    /// Fixture dylib reports minor=10 and does NOT export
+    /// `oct_session_send_image`. The binding MUST:
+    ///   - open the runtime successfully (NativeABI.requiredMinor stays at 10);
+    ///   - throw `.unsupported` from `sendImage`, not crash on
+    ///     missing symbol or silently drop the call.
+    ///
+    /// This is the inner-gate contract — image-input requires
+    /// minor >= 11, but the binding-wide floor stays at 10 so
+    /// existing ABI-10 capabilities (STT/VAD/embeddings.text/etc.)
+    /// keep working against the same runtime.
+    func testRuntimeOpenSucceedsAtMinor10ButSendImageRaisesUnsupported() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+
+        // Open MUST succeed — minor=10 still satisfies requiredMinor=10.
+        let runtime = try await FFINativeRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "ok"),
+            telemetrySink: nil,
+            libraryPath: libraryPath
+        )
+
+        do {
+            let model = try await runtime.openModel(
+                config: NativeModelConfig(modelURI: "model:test", artifactDigest: "sha256:test")
+            )
+            let session = try await runtime.openSession(
+                config: NativeSessionConfig(modelURI: "model:test", capability: "chat.completion"),
+                model: model
+            )
+
+            // Inner gate fires: minor=10 is below
+            // `NativeABI.imageInputMinimumMinor` (11). The error
+            // message MUST surface the minor-floor diagnostic for
+            // operator triage.
+            do {
+                try await session.sendImage(
+                    NativeImageView(bytes: Data([0x89, 0x50, 0x4E, 0x47]), mime: .png)
+                )
+                XCTFail("Expected sendImage on minor-10 runtime to raise .unsupported.")
+            } catch let error as NativeRuntimeError {
+                XCTAssertEqual(error.status, .unsupported)
+                // SDK error mapping: .unsupported -> .runtimeUnavailable
+                // per NativeStatus.nativeBridgeErrorCode. Documented
+                // BLOCKED_WITH_PROOF posture at this commit.
+                XCTAssertEqual(error.sdkErrorCode, .runtimeUnavailable)
+                XCTAssertNotNil(error.message)
+                let message = error.message ?? ""
+                XCTAssertTrue(
+                    message.contains("embeddings.image"),
+                    "expected diagnostic to surface capability id, got: \(message)"
+                )
+                XCTAssertTrue(
+                    message.contains("ABI minor") || message.contains("not advertised") || message.contains("symbol missing"),
+                    "expected diagnostic to identify which inner gate failed, got: \(message)"
+                )
+            }
+
+            await session.close()
+            try await model.close()
+        } catch {
+            await runtime.close()
+            throw error
+        }
+
+        await runtime.close()
+    }
+
+    /// Sanity check that `NativeImageMime.unknown` is rejected
+    /// before reaching the FFI layer — defensive against the
+    /// forward-compat sentinel slot. Same fail-closed posture as
+    /// OCT_SAMPLE_FORMAT_UNKNOWN / OCT_VAD_TRANSITION_UNKNOWN.
+    /// Note: this test exercises the Swift-side validation only;
+    /// it does NOT depend on the runtime advertising the capability.
+    func testSendImageRejectsUnknownMimeBeforeFfi() async throws {
+        let libraryPath = try Self.buildFixtureDylib()
+        let runtime = try await FFINativeRuntime.open(
+            config: NativeRuntimeConfig(artifactRoot: "ok"),
+            telemetrySink: nil,
+            libraryPath: libraryPath
+        )
+
+        do {
+            let model = try await runtime.openModel(
+                config: NativeModelConfig(modelURI: "model:test", artifactDigest: "sha256:test")
+            )
+            let session = try await runtime.openSession(
+                config: NativeSessionConfig(modelURI: "model:test", capability: "chat.completion"),
+                model: model
+            )
+
+            // Note: in this fixture the ABI-minor gate fires first
+            // (minor=10) before the mime check is reached. The
+            // test asserts the call still fails closed — combined
+            // with `testNativeImageMimeAllCasesConstructible`,
+            // this pins the forward-compat sentinel posture.
+            do {
+                try await session.sendImage(
+                    NativeImageView(bytes: Data([0xFF]), mime: .unknown)
+                )
+                XCTFail("Expected sendImage with .unknown mime to fail closed.")
+            } catch let error as NativeRuntimeError {
+                XCTAssertEqual(error.status, .unsupported)
+            }
+
+            await session.close()
+            try await model.close()
+        } catch {
+            await runtime.close()
+            throw error
+        }
+
+        await runtime.close()
+    }
+
     private static func buildFixtureDylib(testFile: StaticString = #filePath) throws -> String {
         let fileManager = FileManager.default
         let clangPath = "/usr/bin/clang"
