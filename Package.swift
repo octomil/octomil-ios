@@ -24,6 +24,16 @@ let package = Package(
             name: "OctomilClip",
             targets: ["OctomilClip"]
         ),
+        // OctomilRuntimeBinary — staging product that re-exports the
+        // unified octomil-runtime v0.1.10 XCFramework (chat flavor).
+        // Consumers depend on this product to link the new runtime
+        // alongside (or eventually instead of) the legacy per-engine
+        // XCFrameworks. SwiftPM only exposes products to external
+        // packages — a bare binaryTarget would otherwise be unreachable.
+        .library(
+            name: "OctomilRuntimeBinary",
+            targets: ["OctomilRuntime"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
