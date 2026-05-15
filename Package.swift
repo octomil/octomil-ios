@@ -24,6 +24,16 @@ let package = Package(
             name: "OctomilClip",
             targets: ["OctomilClip"]
         ),
+        // OctomilRuntimeBinary — staging product that re-exports the
+        // unified octomil-runtime v0.1.10 XCFramework (chat flavor).
+        // Consumers depend on this product to link the new runtime
+        // alongside (or eventually instead of) the legacy per-engine
+        // XCFrameworks. SwiftPM only exposes products to external
+        // packages — a bare binaryTarget would otherwise be unreachable.
+        .library(
+            name: "OctomilRuntimeBinary",
+            targets: ["OctomilRuntime"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
@@ -141,6 +151,28 @@ let package = Package(
         // Binary targets — pre-built C engine XCFrameworks
         // ──────────────────────────────────────────────
         // Hosted on GitHub Releases. Checksums populated after build.
+        //
+        // OctomilRuntime — the unified C runtime XCFramework from
+        // octomil/octomil-runtime v0.1.10 (chat flavor: llama.cpp +
+        // embeddings). Combines what the legacy per-engine XCFrameworks
+        // below produce. The legacy `llama` / `sherpa_onnx` /
+        // `onnxruntime` / `whisper` targets remain wired into the
+        // existing `OctomilRuntime*` adapters until those adapters are
+        // migrated to the unified runtime in a follow-up PR.
+        //
+        // No stt XCFramework is published for v0.1.10 — sherpa-onnx's
+        // onnxruntime.cmake rejects CMAKE_SYSTEM_NAME=iOS upstream
+        // (sherpa_onnx/cmake/onnxruntime.cmake:116). iOS stt requires
+        // vendoring an iOS onnxruntime binary; tracked separately.
+        // Re-hosted on public octomil-ios releases because SwiftPM cannot
+        // authenticate to private octomil/octomil-runtime release assets.
+        // The zip is byte-identical to the canonical runtime-side asset;
+        // checksum is preserved.
+        .binaryTarget(
+            name: "OctomilRuntime",
+            url: "https://github.com/octomil/octomil-ios/releases/download/runtime-v0.1.10/liboctomil-runtime-v0.1.10-chat-ios.xcframework.zip",
+            checksum: "dc765491deaf65bb7f3127936bc29cfb0b10c0dd838072ede71e79a7c3a3370c"
+        ),
         .binaryTarget(
             name: "llama",
             url: "https://github.com/octomil/octomil-ios/releases/download/engines-v1/llama.xcframework.zip",
