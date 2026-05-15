@@ -170,8 +170,8 @@ let package = Package(
         // checksum is preserved.
         .binaryTarget(
             name: "OctomilRuntime",
-            url: "https://github.com/octomil/octomil-ios/releases/download/runtime-v0.1.10/liboctomil-runtime-v0.1.10-chat-ios.xcframework.zip",
-            checksum: "dc765491deaf65bb7f3127936bc29cfb0b10c0dd838072ede71e79a7c3a3370c"
+            url: "https://github.com/octomil/octomil-ios/releases/download/runtime-v0.1.13/liboctomil-runtime-v0.1.13-chat-ios.xcframework.zip",
+            checksum: "e3b1888a478be8e98334e827233ca07da0476a95017512977914692a30195665"
         ),
         .binaryTarget(
             name: "llama",
