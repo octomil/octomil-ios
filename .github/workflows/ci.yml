@@ -133,6 +133,46 @@ jobs:
           name: swiftlint-report
           path: swiftlint-report.json
 
+  ios-build:
+    timeout-minutes: 25
+    name: iOS Build (xcodebuild)
+    runs-on: macos-15
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Preflight — toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # Build the full OctomilClient product for iOS Simulator. This compiles
+      # the iOS-only adapter targets (OctomilRuntimeSherpa, OctomilRuntimeSherpaTTS,
+      # OctomilRuntimeWhisper, OctomilRuntimeLlama) which are gated
+      # `.when(platforms: [.iOS])` in Package.swift and are silently SKIPPED
+      # by `swift build` on macOS.
+      #
+      # Without this step the SDK can ship Swift-↔-C-API drift in the
+      # adapters (struct field rename, nullable change, protocol type
+      # rename) that breaks every iOS consumer at xcodebuild time but
+      # passes the macOS-only CI clean. See:
+      # https://github.com/octomil/octomil-workspace/pull/66 for the
+      # post-mortem on the two bugs this catches.
+      #
+      # `generic/platform=iOS Simulator` is a destination placeholder
+      # that requires only the SDK headers (pre-installed on macos-15
+      # runners), not a running simulator. Compile-only — no tests.
+      - name: Build OctomilClient for iOS Simulator
+        run: |
+          xcodebuild -scheme OctomilClient \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            build
+
   ci-complete:
     timeout-minutes: 5
     name: CI Complete
@@ -140,6 +180,7 @@ jobs:
     needs:
       - test
       - swiftlint
+      - ios-build
     if: always()
     permissions:
       contents: read
