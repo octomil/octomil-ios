@@ -1,4 +1,8 @@
 #if canImport(sherpa_onnx)
+import Foundation  // needed for `strdup`; sibling Sherpa files import it
+                   // transitively. Without this explicit import,
+                   // `xcodebuild` on macos-15 GitHub runners fails with
+                   // `cannot find 'strdup' in scope`.
 import sherpa_onnx
 
 /// Empty string pointer for sherpa-onnx config fields.

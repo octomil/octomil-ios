@@ -108,7 +108,12 @@ public final class SherpaTtsEngine: @unchecked Sendable {
 
         let sampleRate = Int(audio.pointee.sample_rate)
         let n = Int(audio.pointee.n)
-        let samplesPtr = audio.pointee.samples
+        // sherpa_onnx C ABI now declares `samples` as nullable
+        // (`const float *` returned via Swift as `UnsafePointer<Float>?`).
+        // Treat null as zero-length output rather than crashing.
+        guard let samplesPtr = audio.pointee.samples else {
+            throw SherpaTtsEngineError.synthesizeFailed("native generate returned null samples")
+        }
         let wav = Self.samplesToWav(samples: samplesPtr, count: n, sampleRate: sampleRate)
         let durationMs = sampleRate > 0 ? (1000 * n / sampleRate) : 0
 
@@ -135,22 +140,43 @@ public final class SherpaTtsEngine: @unchecked Sendable {
 
         var modelConfig = SherpaOnnxOfflineTtsModelConfig()
         modelConfig.num_threads = 2
-        modelConfig.provider = strdup("cpu")
+        // sherpa_onnx C ABI: `provider` is `const char *` → Swift wants
+        // `UnsafePointer<CChar>?`. `strdup` returns `UnsafeMutablePointer<CChar>?`;
+        // re-cast to immutable. Allocation lifetime matches the OpaquePointer
+        // owned by the engine; freed indirectly when the TTS handle is destroyed.
+        modelConfig.provider = UnsafePointer(strdup("cpu"))
 
         switch family {
         case .kokoro:
             let voices = modelPath.appendingPathComponent("voices.bin").path
+            // sherpa_onnx struct fields (in declaration order):
+            //   model, voices, tokens, data_dir,
+            //   length_scale (default 1.0), dict_dir (unused), lexicon, lang
             modelConfig.kokoro = SherpaOnnxOfflineTtsKokoroModelConfig(
                 model: strdup(modelOnnx),
                 voices: strdup(voices),
                 tokens: strdup(tokens),
-                data_dir: strdup(dataDir)
+                data_dir: strdup(dataDir),
+                length_scale: 1.0,
+                dict_dir: nil,
+                lexicon: nil,
+                lang: nil
             )
         case .vits:
+            // sherpa_onnx struct fields (in declaration order):
+            //   model, lexicon, tokens, data_dir,
+            //   noise_scale, noise_scale_w, length_scale, dict_dir (unused)
+            // VITS defaults are the canonical values from the upstream model
+            // configs: noise_scale=0.667, noise_scale_w=0.8, length_scale=1.0.
             modelConfig.vits = SherpaOnnxOfflineTtsVitsModelConfig(
                 model: strdup(modelOnnx),
+                lexicon: nil,
                 tokens: strdup(tokens),
-                data_dir: strdup(dataDir)
+                data_dir: strdup(dataDir),
+                noise_scale: 0.667,
+                noise_scale_w: 0.8,
+                length_scale: 1.0,
+                dict_dir: nil
             )
         }
 
