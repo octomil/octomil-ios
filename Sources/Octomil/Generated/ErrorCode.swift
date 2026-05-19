@@ -4,6 +4,8 @@ public enum ErrorCode: String, Codable, Sendable {
     case invalidApiKey = "invalid_api_key"
     case authenticationFailed = "authentication_failed"
     case forbidden = "forbidden"
+    case insufficientScope = "insufficient_scope"
+    case missingOrgContext = "missing_org_context"
     case deviceNotRegistered = "device_not_registered"
     case tokenExpired = "token_expired"
     case deviceRevoked = "device_revoked"
@@ -15,6 +17,13 @@ public enum ErrorCode: String, Codable, Sendable {
     case unsupportedModality = "unsupported_modality"
     case contextTooLarge = "context_too_large"
     case modelNotFound = "model_not_found"
+    case noDefaultModel = "no_default_model"
+    case capabilityNotSupported = "capability_not_supported"
+    case previousResponseNotFound = "previous_response_not_found"
+    case appNotFound = "app_not_found"
+    case capabilityNotConfigured = "capability_not_configured"
+    case appContextConflict = "app_context_conflict"
+    case invalidModelRef = "invalid_model_ref"
     case modelDisabled = "model_disabled"
     case versionNotFound = "version_not_found"
     case downloadFailed = "download_failed"
@@ -25,9 +34,16 @@ public enum ErrorCode: String, Codable, Sendable {
     case acceleratorUnavailable = "accelerator_unavailable"
     case modelLoadFailed = "model_load_failed"
     case inferenceFailed = "inference_failed"
+    case providerError = "provider_error"
+    case upstreamProviderError = "upstream_provider_error"
+    case tooManyTools = "too_many_tools"
+    case unsupportedToolCalling = "unsupported_tool_calling"
     case streamInterrupted = "stream_interrupted"
     case policyDenied = "policy_denied"
     case cloudFallbackDisallowed = "cloud_fallback_disallowed"
+    case cloudInferenceNotAllowed = "cloud_inference_not_allowed"
+    case hostedTtsDisabled = "hosted_tts_disabled"
+    case planLimitExceeded = "plan_limit_exceeded"
     case cloudCredentialsMissing = "cloud_credentials_missing"
     case cloudCredentialsRevoked = "cloud_credentials_revoked"
     case cloudProviderAuthFailed = "cloud_provider_auth_failed"
@@ -37,6 +53,16 @@ public enum ErrorCode: String, Codable, Sendable {
     case weightUploadFailed = "weight_upload_failed"
     case controlSyncFailed = "control_sync_failed"
     case assignmentNotFound = "assignment_not_found"
+    case incidentNotFound = "incident_not_found"
+    case deploymentNotFound = "deployment_not_found"
+    case experimentNotFound = "experiment_not_found"
+    case experimentStateInvalid = "experiment_state_invalid"
+    case apiKeyNotFound = "api_key_not_found"
+    case apiKeyAlreadyRevoked = "api_key_already_revoked"
+    case integrationNotFound = "integration_not_found"
+    case billingCustomerNotFound = "billing_customer_not_found"
+    case actionNotFound = "action_not_found"
+    case actionStateInvalid = "action_state_invalid"
     case cancelled = "cancelled"
     case appBackgrounded = "app_backgrounded"
     case unknown = "unknown"
@@ -97,6 +123,8 @@ extension ErrorCode {
         case .invalidApiKey: return .auth
         case .authenticationFailed: return .auth
         case .forbidden: return .auth
+        case .insufficientScope: return .auth
+        case .missingOrgContext: return .auth
         case .deviceNotRegistered: return .auth
         case .tokenExpired: return .auth
         case .deviceRevoked: return .auth
@@ -108,6 +136,13 @@ extension ErrorCode {
         case .unsupportedModality: return .input
         case .contextTooLarge: return .input
         case .modelNotFound: return .catalog
+        case .noDefaultModel: return .catalog
+        case .capabilityNotSupported: return .catalog
+        case .previousResponseNotFound: return .catalog
+        case .appNotFound: return .catalog
+        case .capabilityNotConfigured: return .catalog
+        case .appContextConflict: return .catalog
+        case .invalidModelRef: return .catalog
         case .modelDisabled: return .catalog
         case .versionNotFound: return .catalog
         case .downloadFailed: return .download
@@ -118,9 +153,16 @@ extension ErrorCode {
         case .acceleratorUnavailable: return .device
         case .modelLoadFailed: return .runtime
         case .inferenceFailed: return .runtime
+        case .providerError: return .runtime
+        case .upstreamProviderError: return .runtime
+        case .tooManyTools: return .runtime
+        case .unsupportedToolCalling: return .runtime
         case .streamInterrupted: return .runtime
         case .policyDenied: return .policy
         case .cloudFallbackDisallowed: return .policy
+        case .cloudInferenceNotAllowed: return .policy
+        case .hostedTtsDisabled: return .policy
+        case .planLimitExceeded: return .policy
         case .cloudCredentialsMissing: return .auth
         case .cloudCredentialsRevoked: return .auth
         case .cloudProviderAuthFailed: return .auth
@@ -130,6 +172,16 @@ extension ErrorCode {
         case .weightUploadFailed: return .training
         case .controlSyncFailed: return .control
         case .assignmentNotFound: return .control
+        case .incidentNotFound: return .control
+        case .deploymentNotFound: return .control
+        case .experimentNotFound: return .control
+        case .experimentStateInvalid: return .control
+        case .apiKeyNotFound: return .auth
+        case .apiKeyAlreadyRevoked: return .auth
+        case .integrationNotFound: return .control
+        case .billingCustomerNotFound: return .control
+        case .actionNotFound: return .control
+        case .actionStateInvalid: return .control
         case .cancelled: return .lifecycle
         case .appBackgrounded: return .lifecycle
         case .unknown: return .unknown
@@ -141,6 +193,8 @@ extension ErrorCode {
         case .invalidApiKey: return .never
         case .authenticationFailed: return .never
         case .forbidden: return .never
+        case .insufficientScope: return .never
+        case .missingOrgContext: return .never
         case .deviceNotRegistered: return .never
         case .tokenExpired: return .never
         case .deviceRevoked: return .never
@@ -152,6 +206,13 @@ extension ErrorCode {
         case .unsupportedModality: return .never
         case .contextTooLarge: return .never
         case .modelNotFound: return .never
+        case .noDefaultModel: return .never
+        case .capabilityNotSupported: return .never
+        case .previousResponseNotFound: return .never
+        case .appNotFound: return .never
+        case .capabilityNotConfigured: return .never
+        case .appContextConflict: return .never
+        case .invalidModelRef: return .never
         case .modelDisabled: return .never
         case .versionNotFound: return .never
         case .downloadFailed: return .backoffSafe
@@ -162,9 +223,16 @@ extension ErrorCode {
         case .acceleratorUnavailable: return .never
         case .modelLoadFailed: return .conditional
         case .inferenceFailed: return .conditional
+        case .providerError: return .never
+        case .upstreamProviderError: return .backoffSafe
+        case .tooManyTools: return .never
+        case .unsupportedToolCalling: return .never
         case .streamInterrupted: return .immediateSafe
         case .policyDenied: return .never
         case .cloudFallbackDisallowed: return .never
+        case .cloudInferenceNotAllowed: return .never
+        case .hostedTtsDisabled: return .never
+        case .planLimitExceeded: return .never
         case .cloudCredentialsMissing: return .never
         case .cloudCredentialsRevoked: return .never
         case .cloudProviderAuthFailed: return .never
@@ -174,6 +242,16 @@ extension ErrorCode {
         case .weightUploadFailed: return .backoffSafe
         case .controlSyncFailed: return .backoffSafe
         case .assignmentNotFound: return .never
+        case .incidentNotFound: return .never
+        case .deploymentNotFound: return .never
+        case .experimentNotFound: return .never
+        case .experimentStateInvalid: return .never
+        case .apiKeyNotFound: return .never
+        case .apiKeyAlreadyRevoked: return .never
+        case .integrationNotFound: return .never
+        case .billingCustomerNotFound: return .never
+        case .actionNotFound: return .never
+        case .actionStateInvalid: return .never
         case .cancelled: return .never
         case .appBackgrounded: return .conditional
         case .unknown: return .never
@@ -185,6 +263,8 @@ extension ErrorCode {
         case .invalidApiKey: return false
         case .authenticationFailed: return false
         case .forbidden: return false
+        case .insufficientScope: return false
+        case .missingOrgContext: return false
         case .deviceNotRegistered: return false
         case .tokenExpired: return false
         case .deviceRevoked: return false
@@ -196,6 +276,13 @@ extension ErrorCode {
         case .unsupportedModality: return false
         case .contextTooLarge: return true
         case .modelNotFound: return false
+        case .noDefaultModel: return false
+        case .capabilityNotSupported: return true
+        case .previousResponseNotFound: return false
+        case .appNotFound: return false
+        case .capabilityNotConfigured: return false
+        case .appContextConflict: return false
+        case .invalidModelRef: return false
         case .modelDisabled: return true
         case .versionNotFound: return false
         case .downloadFailed: return true
@@ -206,9 +293,16 @@ extension ErrorCode {
         case .acceleratorUnavailable: return true
         case .modelLoadFailed: return true
         case .inferenceFailed: return true
+        case .providerError: return true
+        case .upstreamProviderError: return true
+        case .tooManyTools: return false
+        case .unsupportedToolCalling: return true
         case .streamInterrupted: return true
         case .policyDenied: return false
         case .cloudFallbackDisallowed: return false
+        case .cloudInferenceNotAllowed: return false
+        case .hostedTtsDisabled: return false
+        case .planLimitExceeded: return false
         case .cloudCredentialsMissing: return false
         case .cloudCredentialsRevoked: return false
         case .cloudProviderAuthFailed: return false
@@ -218,6 +312,16 @@ extension ErrorCode {
         case .weightUploadFailed: return false
         case .controlSyncFailed: return false
         case .assignmentNotFound: return false
+        case .incidentNotFound: return false
+        case .deploymentNotFound: return false
+        case .experimentNotFound: return false
+        case .experimentStateInvalid: return false
+        case .apiKeyNotFound: return false
+        case .apiKeyAlreadyRevoked: return false
+        case .integrationNotFound: return false
+        case .billingCustomerNotFound: return false
+        case .actionNotFound: return false
+        case .actionStateInvalid: return false
         case .cancelled: return false
         case .appBackgrounded: return false
         case .unknown: return false
@@ -229,6 +333,8 @@ extension ErrorCode {
         case .invalidApiKey: return .fixCredentials
         case .authenticationFailed: return .reauthenticate
         case .forbidden: return .checkPermissions
+        case .insufficientScope: return .checkPermissions
+        case .missingOrgContext: return .checkPermissions
         case .deviceNotRegistered: return .registerDevice
         case .tokenExpired: return .reauthenticate
         case .deviceRevoked: return .registerDevice
@@ -240,6 +346,13 @@ extension ErrorCode {
         case .unsupportedModality: return .fixRequest
         case .contextTooLarge: return .reduceInputOrFallback
         case .modelNotFound: return .checkModelId
+        case .noDefaultModel: return .checkModelId
+        case .capabilityNotSupported: return .useAlternateModel
+        case .previousResponseNotFound: return .fixRequest
+        case .appNotFound: return .fixRequest
+        case .capabilityNotConfigured: return .fixRequest
+        case .appContextConflict: return .fixRequest
+        case .invalidModelRef: return .fixRequest
         case .modelDisabled: return .useAlternateModel
         case .versionNotFound: return .checkVersion
         case .downloadFailed: return .retryOrFallback
@@ -250,9 +363,16 @@ extension ErrorCode {
         case .acceleratorUnavailable: return .tryCpuOrFallback
         case .modelLoadFailed: return .retryOrFallback
         case .inferenceFailed: return .retryOrFallback
+        case .providerError: return .retryOrFallback
+        case .upstreamProviderError: return .retryOrFallback
+        case .tooManyTools: return .fixRequest
+        case .unsupportedToolCalling: return .useAlternateModel
         case .streamInterrupted: return .retry
         case .policyDenied: return .checkPolicy
         case .cloudFallbackDisallowed: return .changePolicyOrFixLocal
+        case .cloudInferenceNotAllowed: return .checkPolicy
+        case .hostedTtsDisabled: return .checkPolicy
+        case .planLimitExceeded: return .increaseLimitOrSimplify
         case .cloudCredentialsMissing: return .fixCredentials
         case .cloudCredentialsRevoked: return .fixCredentials
         case .cloudProviderAuthFailed: return .fixCredentials
@@ -262,6 +382,16 @@ extension ErrorCode {
         case .weightUploadFailed: return .retry
         case .controlSyncFailed: return .retry
         case .assignmentNotFound: return .checkAssignment
+        case .incidentNotFound: return .none
+        case .deploymentNotFound: return .fixRequest
+        case .experimentNotFound: return .fixRequest
+        case .experimentStateInvalid: return .fixRequest
+        case .apiKeyNotFound: return .fixRequest
+        case .apiKeyAlreadyRevoked: return .fixRequest
+        case .integrationNotFound: return .fixRequest
+        case .billingCustomerNotFound: return .fixRequest
+        case .actionNotFound: return .fixRequest
+        case .actionStateInvalid: return .fixRequest
         case .cancelled: return .none
         case .appBackgrounded: return .resumeOnForeground
         case .unknown: return .reportBug

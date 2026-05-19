@@ -15,9 +15,15 @@ public enum OctomilError: LocalizedError, Sendable {
     case serverError(statusCode: Int, message: String)
 
     /// Failed to decode server response.
+    ///
+    /// - Note: Maps to ``ErrorCode/unknown`` — no dedicated catalog code exists
+    ///   for client-side decoding failures.
     case decodingError(underlying: String)
 
     /// Invalid URL or request configuration.
+    ///
+    /// - Note: Maps to ``ErrorCode/invalidInput`` — closest catalog equivalent
+    ///   for a malformed request.
     case invalidRequest(reason: String)
 
     // MARK: - Authentication Errors
@@ -46,14 +52,23 @@ public enum OctomilError: LocalizedError, Sendable {
     case checksumMismatch
 
     /// Failed to compile CoreML model.
+    ///
+    /// - Note: Maps to ``ErrorCode/modelLoadFailed`` — compilation failure is
+    ///   a load-phase error in the contract taxonomy.
     case modelCompilationFailed(reason: String)
 
     /// Model format is not supported.
+    ///
+    /// - Note: Maps to ``ErrorCode/runtimeUnavailable`` — an unsupported format
+    ///   means no runtime can handle it.
     case unsupportedModelFormat(format: String)
 
     // MARK: - Cache Errors
 
     /// Cache operation failed.
+    ///
+    /// - Note: Maps to ``ErrorCode/unknown`` — too implementation-specific for
+    ///   a canonical code.
     case cacheError(reason: String)
 
     /// Insufficient storage space.
@@ -68,6 +83,9 @@ public enum OctomilError: LocalizedError, Sendable {
     case trainingNotSupported
 
     /// Weight extraction failed.
+    ///
+    /// - Note: Maps to ``ErrorCode/weightUploadFailed`` — extraction is the
+    ///   pre-upload step in the same training-upload flow.
     case weightExtractionFailed(reason: String)
 
     /// Weight upload failed.
@@ -76,6 +94,9 @@ public enum OctomilError: LocalizedError, Sendable {
     // MARK: - Keychain Errors
 
     /// Keychain operation failed.
+    ///
+    /// - Note: Maps to ``ErrorCode/unknown`` — platform keychain status codes
+    ///   have no direct catalog counterpart.
     case keychainError(status: OSStatus)
 
     // MARK: - Contract Error Codes (added for full parity)
@@ -312,12 +333,12 @@ public enum OctomilError: LocalizedError, Sendable {
 
     // MARK: - Contract Error Code Mapping
 
-    /// Maps this error to the canonical ``ErrorCode`` from the contract.
+    /// The canonical ``ErrorCode`` from the contract taxonomy.
     ///
     /// Every ``OctomilError`` case maps to exactly one ``ErrorCode``.
     /// SDK-specific cases that have no direct contract counterpart
     /// (e.g. ``decodingError``, ``keychainError``) map to ``ErrorCode/unknown``.
-    public var errorCode: ErrorCode {
+    public var code: ErrorCode {
         switch self {
         case .networkUnavailable:
             return .networkUnavailable
@@ -346,8 +367,10 @@ public enum OctomilError: LocalizedError, Sendable {
         case .insufficientStorage:
             return .insufficientStorage
         case .runtimeUnavailable, .unsupportedModelFormat:
+            // unsupportedModelFormat: no runtime can handle the format
             return .runtimeUnavailable
         case .modelLoadFailed, .modelCompilationFailed:
+            // modelCompilationFailed: compilation is a load-phase error
             return .modelLoadFailed
         case .inferenceFailed:
             return .inferenceFailed
@@ -356,6 +379,7 @@ public enum OctomilError: LocalizedError, Sendable {
         case .rateLimited:
             return .rateLimited
         case .invalidInput, .invalidRequest:
+            // invalidRequest: malformed URL/config is closest to invalidInput
             return .invalidInput
         case .unsupportedModality:
             return .unsupportedModality
@@ -388,46 +412,98 @@ public enum OctomilError: LocalizedError, Sendable {
         case .trainingNotSupported:
             return .trainingNotSupported
         case .uploadFailed, .weightExtractionFailed:
+            // weightExtractionFailed: extraction is the pre-upload step
             return .weightUploadFailed
-        // SDK-specific cases with no direct contract counterpart.
-        // cacheError is too implementation-specific for a canonical code.
+        // SDK-specific cases with no direct contract counterpart:
+        // cacheError and keychainError are too implementation-specific.
+        // decodingError is a client-side transport concern.
         case .unknown, .decodingError, .cacheError, .keychainError:
             return .unknown
         }
     }
 
+    /// Maps this error to the canonical ``ErrorCode`` from the contract.
+    ///
+    /// - Note: Prefer ``code`` over this property. This alias is preserved
+    ///   for source compatibility with existing call sites.
+    public var errorCode: ErrorCode { code }
+
     /// Whether this error is retryable, per the contract spec.
     ///
-    /// Delegates to the ``RetryClass`` from the contract taxonomy.
-    public var isRetryable: Bool {
-        errorCode.retryClass != .never
+    /// Delegates to ``ErrorCode/retryClass`` — `.never` means not retryable.
+    public var retryable: Bool {
+        code.retryClass != .never
     }
+
+    /// Whether this error is retryable, per the contract spec.
+    ///
+    /// - Note: Prefer ``retryable`` over this property. This alias is preserved
+    ///   for source compatibility with existing call sites.
+    public var isRetryable: Bool { retryable }
 
     /// The error category from the contract taxonomy.
     public var category: ErrorCategory {
-        errorCode.category
+        code.category
     }
 
     /// The retry classification from the contract taxonomy.
     public var retryClass: RetryClass {
-        errorCode.retryClass
+        code.retryClass
     }
 
     /// Whether this error is eligible for cloud fallback.
     public var fallbackEligible: Bool {
-        errorCode.fallbackEligible
+        code.fallbackEligible
     }
 
     /// The suggested remediation action from the contract taxonomy.
     public var suggestedAction: SuggestedAction {
-        errorCode.suggestedAction
+        code.suggestedAction
     }
 
-    /// Creates an ``OctomilError`` from an ``ErrorCode`` and a message string.
+    /// Milliseconds the caller should wait before retrying, when available.
     ///
-    /// Useful when deserializing server error responses that include a
-    /// contract-defined error code.
-    public static func from(errorCode: ErrorCode, message: String) -> OctomilError {
+    /// Populated by the HTTP layer from the `Retry-After` response header.
+    /// `nil` means no server-specified delay — use your own backoff strategy.
+    ///
+    /// Accepts bare integers (`"30"`) or values with a trailing `s` suffix
+    /// (`"30s"`) as seconds. HTTP-date strings are not parsed and return `nil`.
+    public var retryAfterMs: Int64? {
+        switch self {
+        case .rateLimited(let retryAfter):
+            guard let raw = retryAfter else { return nil }
+            // Strip optional "s" suffix (produced by the from(code:message:retryAfterMs:) factory)
+            // then parse as integer seconds. HTTP-date strings won't parse and return nil.
+            let stripped = raw.trimmingCharacters(in: .whitespaces)
+                              .hasSuffix("s")
+                ? String(raw.trimmingCharacters(in: .whitespaces).dropLast())
+                : raw.trimmingCharacters(in: .whitespaces)
+            if let seconds = Int64(stripped) {
+                return seconds * 1_000
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    // MARK: - Factory
+
+    /// Creates an ``OctomilError`` from a catalog error code, a descriptive
+    /// message, and an optional retry delay parsed from the `Retry-After`
+    /// HTTP header.
+    ///
+    /// This is the preferred construction path when deserializing error
+    /// responses from the Octomil API.
+    ///
+    /// ```swift
+    /// let error = OctomilError.from(
+    ///     code: .rateLimited,
+    ///     message: "Too many requests",
+    ///     retryAfterMs: 30_000
+    /// )
+    /// ```
+    public static func from(code errorCode: ErrorCode, message: String, retryAfterMs: Int64? = nil) -> OctomilError {
         switch errorCode {
         case .networkUnavailable:
             return .networkUnavailable
@@ -435,11 +511,17 @@ public enum OctomilError: LocalizedError, Sendable {
             return .requestTimeout
         case .serverError:
             return .serverError(statusCode: 500, message: message)
-        case .invalidApiKey:
+        case .invalidApiKey, .apiKeyNotFound, .apiKeyAlreadyRevoked:
+            // apiKeyNotFound/apiKeyAlreadyRevoked: no dedicated OctomilError case;
+            // closest is invalidAPIKey (auth failure at key level).
             return .invalidAPIKey
         case .authenticationFailed:
             return .authenticationFailed(reason: message)
         case .forbidden:
+            return .forbidden(reason: message)
+        case .insufficientScope, .missingOrgContext:
+            // insufficientScope/missingOrgContext: permission-level auth errors;
+            // map to forbidden as the closest user-facing case.
             return .forbidden(reason: message)
         case .deviceNotRegistered:
             return .deviceNotRegistered
@@ -454,7 +536,9 @@ public enum OctomilError: LocalizedError, Sendable {
         case .cloudProviderAuthFailed:
             return .authenticationFailed(reason: message)
         case .rateLimited:
-            return .rateLimited(retryAfter: nil)
+            // Convert retryAfterMs back to a string for the retryAfter field.
+            let retryAfterStr: String? = retryAfterMs.map { "\($0 / 1_000)s" }
+            return .rateLimited(retryAfter: retryAfterStr)
         case .invalidInput:
             return .invalidInput(reason: message)
         case .unsupportedModality:
@@ -463,6 +547,20 @@ public enum OctomilError: LocalizedError, Sendable {
             return .contextTooLarge(reason: message)
         case .modelNotFound:
             return .modelNotFound(modelId: message)
+        case .noDefaultModel:
+            // noDefaultModel: no dedicated OctomilError case; closest is
+            // modelNotFound since no model is resolvable.
+            return .modelNotFound(modelId: message)
+        case .capabilityNotSupported, .capabilityNotConfigured:
+            // No dedicated OctomilError case; unsupportedModelFormat is the
+            // closest iOS-specific surface (feature not available on this model).
+            return .unsupportedModelFormat(format: message)
+        case .previousResponseNotFound, .appNotFound, .appContextConflict,
+             .invalidModelRef, .integrationNotFound, .actionNotFound,
+             .actionStateInvalid, .billingCustomerNotFound:
+            // Catalog/resource lookup failures with no direct OctomilError case;
+            // map to invalidRequest as a general "bad reference" bucket.
+            return .invalidRequest(reason: message)
         case .modelDisabled:
             return .modelDisabled(modelId: message)
         case .versionNotFound:
@@ -483,17 +581,38 @@ public enum OctomilError: LocalizedError, Sendable {
             return .modelLoadFailed(reason: message)
         case .inferenceFailed:
             return .inferenceFailed(reason: message)
+        case .providerError, .upstreamProviderError:
+            // No dedicated OctomilError case; inference failure is the closest
+            // runtime-layer error visible to callers.
+            return .inferenceFailed(reason: message)
+        case .tooManyTools, .unsupportedToolCalling:
+            // Tool-calling policy errors; map to invalidRequest (caller must fix
+            // the tool configuration).
+            return .invalidRequest(reason: message)
         case .streamInterrupted:
             return .streamInterrupted(reason: message)
         case .policyDenied:
             return .policyDenied(reason: message)
         case .cloudFallbackDisallowed:
             return .cloudFallbackDisallowed(reason: message)
+        case .cloudInferenceNotAllowed, .hostedTtsDisabled:
+            // Policy-level disablement; cloudFallbackDisallowed is the closest
+            // existing OctomilError case for cloud policy enforcement.
+            return .cloudFallbackDisallowed(reason: message)
+        case .planLimitExceeded:
+            // Billing plan ceiling hit; rateLimited is the closest surface
+            // (caller must upgrade or wait for limit reset).
+            return .rateLimited(retryAfter: nil)
         case .maxToolRoundsExceeded:
             return .maxToolRoundsExceeded(reason: message)
         case .controlSyncFailed:
             return .controlSyncFailed(reason: message)
         case .assignmentNotFound:
+            return .assignmentNotFound(reason: message)
+        case .incidentNotFound, .deploymentNotFound, .experimentNotFound,
+             .experimentStateInvalid:
+            // Control-plane resource not found; no dedicated OctomilError case;
+            // map to assignmentNotFound as the closest control-plane lookup error.
             return .assignmentNotFound(reason: message)
         case .trainingFailed:
             return .trainingFailed(reason: message)
@@ -508,5 +627,13 @@ public enum OctomilError: LocalizedError, Sendable {
         case .unknown:
             return .unknown(underlying: nil)
         }
+    }
+
+    /// Creates an ``OctomilError`` from an ``ErrorCode`` and a message string.
+    ///
+    /// - Important: Deprecated. Use ``from(code:message:retryAfterMs:)`` instead.
+    @available(*, deprecated, renamed: "from(code:message:retryAfterMs:)")
+    public static func from(errorCode: ErrorCode, message: String) -> OctomilError {
+        from(code: errorCode, message: message, retryAfterMs: nil)
     }
 }
