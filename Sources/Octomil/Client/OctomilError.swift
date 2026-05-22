@@ -636,4 +636,26 @@ public enum OctomilError: LocalizedError, Sendable {
     public static func from(errorCode: ErrorCode, message: String) -> OctomilError {
         from(code: errorCode, message: message, retryAfterMs: nil)
     }
+
+    // MARK: - Generated type bridge (swift-openapi-generator pilot)
+
+    /// Creates an ``OctomilError`` from a generated API error payload.
+    ///
+    /// This overload bridges the generated `_OctomilAPIErrorPayload` type
+    /// (produced by swift-openapi-generator from the Octomil OpenAPI contract)
+    /// to the SDK's public error surface.
+    ///
+    /// ```swift
+    /// // When the server returns a structured error body:
+    /// let payload = _OctomilAPIErrorPayload(code: "model_not_found", message: "llama-3")
+    /// let error = OctomilError.from(apiPayload: payload)
+    /// // -> OctomilError.modelNotFound(modelId: "llama-3")
+    /// ```
+    ///
+    /// - Parameter apiPayload: A generated error payload decoded from the API response.
+    /// - Returns: The corresponding ``OctomilError``.
+    internal static func from(apiPayload: _OctomilAPIErrorPayload) -> OctomilError {
+        let code = ErrorCode(rawValue: apiPayload.code) ?? .unknown
+        return from(code: code, message: apiPayload.message, retryAfterMs: apiPayload.retry_after_ms)
+    }
 }

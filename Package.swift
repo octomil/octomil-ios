@@ -36,6 +36,9 @@ let package = Package(
         ),
     ],
     dependencies: [
+        .package(url: "https://github.com/apple/swift-openapi-generator", exact: "1.6.0"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.0.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.25.4"),
         .package(url: "https://github.com/kunal732/MLX-Swift-TS", revision: "8659cf20c4382e94233e4de287e68f6e575fef23"),
@@ -63,7 +66,12 @@ let package = Package(
         // ──────────────────────────────────────────────
         .target(
             name: "Octomil",
-            dependencies: ["COctomilBZ2", "COctomilRuntimeBridge"],
+            dependencies: [
+                "COctomilBZ2",
+                "COctomilRuntimeBridge",
+                .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
+                .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
+            ],
             path: "Sources/Octomil"
         ),
 
