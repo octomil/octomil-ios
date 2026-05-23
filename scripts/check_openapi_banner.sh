@@ -34,7 +34,12 @@ if [ ! -d "$GENERATED_DIR" ]; then
 fi
 
 # Collect .swift files at any depth under Generated/.
-mapfile -t GENERATED_FILES < <(find "$GENERATED_DIR" -type f -name "*.swift" | sort)
+# Use a Bash 3.2-compatible read loop (macOS / macos-14 GitHub runners
+# ship /bin/bash 3.2.57 which has no `mapfile`).
+GENERATED_FILES=()
+while IFS= read -r line; do
+    GENERATED_FILES+=("$line")
+done < <(find "$GENERATED_DIR" -type f -name "*.swift" | sort)
 
 if [ "${#GENERATED_FILES[@]}" -eq 0 ]; then
     echo "ERROR: no .swift files found under $GENERATED_DIR" >&2
