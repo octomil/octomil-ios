@@ -1,5 +1,25 @@
 import Foundation
 
+// MARK: - Internal request bodies
+
+/// Private request body for the adaptation endpoint.
+///
+/// Replaces the former `[String: Any]` dict to enable type-safe `jsonEncoder.encode()`.
+///
+/// TODO(generated-migration): Once the public `getAdaptationRecommendation` API surface
+/// bumps to accept typed parameters, replace `thermalState: String` with
+/// `Generated/ThermalState.swift` (`ThermalState`) and `currentFormat: String` with
+/// `Generated/ArtifactFormat.swift` (`ArtifactFormat`). The wire key names are already
+/// contract-aligned. Regenerate `Sources/Octomil/Generated/` when CI runs the
+/// openapi-types-fresh workflow with a compatible Swift toolchain (Swift <= 6.0 or an
+/// updated swift-openapi-generator pin in octomil-contracts).
+private struct _AdaptationRequestBody: Codable {
+    let battery_level: Float
+    let thermal_state: String
+    let current_format: String
+    let current_executor: String
+}
+
 // MARK: - Telemetry & Adaptation
 
 extension APIClient {
@@ -52,13 +72,13 @@ extension APIClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         try configureHeaders(&urlRequest)
 
-        let body: [String: Any] = [
-            "battery_level": batteryLevel,
-            "thermal_state": thermalState,
-            "current_format": currentFormat,
-            "current_executor": currentExecutor,
-        ]
-        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let body = _AdaptationRequestBody(
+            battery_level: batteryLevel,
+            thermal_state: thermalState,
+            current_format: currentFormat,
+            current_executor: currentExecutor
+        )
+        urlRequest.httpBody = try jsonEncoder.encode(body)
 
         return try await performRequest(urlRequest)
     }

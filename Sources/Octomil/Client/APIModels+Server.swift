@@ -152,6 +152,15 @@ public struct SecAggUnmaskResponse: Codable, Sendable {
 /// `retryable` and `category` are optional derived fields the server may include.
 /// Product metadata like `suggested_action` and `fallback_eligible` are NOT on the
 /// wire — SDKs derive them locally from the contract classification table.
+///
+/// TODO(generated-migration): `code: String?` should become `ErrorCode?` (generated in
+/// `Sources/Octomil/Generated/ErrorCode.swift`). This is a source-breaking change on
+/// the public field type; defer to the next minor API bump. The internal factory
+/// `OctomilError.from(apiPayload:)` in `OctomilError.swift` already bridges via
+/// `_OctomilAPIErrorPayload` (see `Sources/Octomil/Types.swift`). Regenerate
+/// `Sources/Octomil/Generated/` when CI runs the openapi-types-fresh workflow with
+/// a compatible Swift toolchain (Swift <= 6.0 or an updated swift-openapi-generator
+/// pin in octomil-contracts).
 public struct APIErrorResponse: Codable, Sendable {
     /// Error message (new wire format).
     public let message: String?
@@ -188,6 +197,15 @@ public struct APIErrorResponse: Codable, Sendable {
 // MARK: - Round Management
 
 /// A federated learning round returned from the server.
+///
+/// TODO(generated-migration): `state: String` should become `FederatedRoundState`
+/// (generated in `Sources/Octomil/Generated/FederatedRoundState.swift`). This is a
+/// source-breaking change on the public field type; defer to the next minor API bump.
+/// `platform` on `DeviceRegistrationRequest` similarly maps to `DevicePlatform`
+/// (generated in `Sources/Octomil/Generated/DevicePlatform.swift`). Regenerate
+/// `Sources/Octomil/Generated/` when CI runs the openapi-types-fresh workflow with
+/// a compatible Swift toolchain (Swift <= 6.0 or an updated swift-openapi-generator
+/// pin in octomil-contracts).
 public struct RoundAssignment: Codable, Sendable {
     /// Round UUID.
     public let id: String
@@ -198,6 +216,7 @@ public struct RoundAssignment: Codable, Sendable {
     /// Version ID.
     public let versionId: String
     /// Round state.
+    // TODO(generated-migration): change to FederatedRoundState once public API bumps.
     public let state: String
     /// Minimum clients required.
     public let minClients: Int

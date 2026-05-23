@@ -4,12 +4,21 @@ import Foundation
 
 /// Request body for device registration.
 /// Aligns with server's DeviceRegistrationRequest schema.
+///
+/// TODO(generated-migration): `platform: String` should become `DevicePlatform`
+/// (generated in `Sources/Octomil/Generated/DevicePlatform.swift`). This is a
+/// source-breaking change on the public init parameter type; defer to the next minor
+/// API bump. Callers currently pass the string literal `"ios"` which maps to
+/// `DevicePlatform.ios`. Regenerate `Sources/Octomil/Generated/` when CI runs the
+/// openapi-types-fresh workflow with a compatible Swift toolchain (Swift <= 6.0 or an
+/// updated swift-openapi-generator pin in octomil-contracts).
 public struct DeviceRegistrationRequest: Codable, Sendable {
     /// Client-provided device identifier (e.g., IDFV on iOS).
     public let deviceIdentifier: String
     /// Organization identifier.
     public let orgId: String
     /// Device platform (ios, android, python).
+    // TODO(generated-migration): change to DevicePlatform once public API bumps.
     public let platform: String
     /// Operating system version.
     public let osVersion: String?

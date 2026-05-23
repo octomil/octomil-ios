@@ -3,6 +3,14 @@ import Foundation
 // MARK: - Model Metadata
 
 /// Metadata about a model version.
+///
+/// TODO(generated-migration): `format: String` should become `ArtifactFormat`
+/// (generated in `Sources/Octomil/Generated/ArtifactFormat.swift`). This is a
+/// source-breaking change on the public field type; defer to the next minor API bump.
+/// The same applies to `ModelVersionResponse.format` and `ModelResolveResponse.format`
+/// below. Regenerate `Sources/Octomil/Generated/` when CI runs the
+/// openapi-types-fresh workflow with a compatible Swift toolchain (Swift <= 6.0 or an
+/// updated swift-openapi-generator pin in octomil-contracts).
 public struct ModelMetadata: Codable, Sendable {
     /// Model identifier.
     public let modelId: String
@@ -15,6 +23,7 @@ public struct ModelMetadata: Codable, Sendable {
     /// When this version was created.
     public let createdAt: Date
     /// Model format.
+    // TODO(generated-migration): change to ArtifactFormat once public API bumps.
     public let format: String
     /// Whether training is supported.
     public let supportsTraining: Bool
