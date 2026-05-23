@@ -47,7 +47,10 @@ jobs:
         with:
           repository: octomil/octomil-contracts
           path: .contracts-checkout/
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Cross-repo checkout of a private repo — github.token cannot
+          # read it. CROSS_REPO_READ_TOKEN must be a PAT with
+          # `contents: read` on octomil/octomil-contracts.
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Preflight — toolchain versions
         run: |
