@@ -515,7 +515,9 @@ public enum OctomilError: LocalizedError, Sendable {
             // apiKeyNotFound/apiKeyAlreadyRevoked: no dedicated OctomilError case;
             // closest is invalidAPIKey (auth failure at key level).
             return .invalidAPIKey
-        case .authenticationFailed:
+        case .authenticationFailed, .passkeyChallengeExpired, .passkeyCredentialNotFound,
+             .invalidToken, .emailAlreadyVerified, .emailAlreadyInUse, .lastAuthMethod,
+             .oauthProviderNotLinked, .credentialNotFound:
             return .authenticationFailed(reason: message)
         case .forbidden:
             return .forbidden(reason: message)
@@ -575,6 +577,8 @@ public enum OctomilError: LocalizedError, Sendable {
             return .insufficientMemory(reason: message)
         case .runtimeUnavailable:
             return .runtimeUnavailable(reason: message)
+        case .localRuntimeNotFound:
+            return .runtimeUnavailable(reason: message)
         case .acceleratorUnavailable:
             return .acceleratorUnavailable(reason: message)
         case .modelLoadFailed:
@@ -585,6 +589,9 @@ public enum OctomilError: LocalizedError, Sendable {
             // No dedicated OctomilError case; inference failure is the closest
             // runtime-layer error visible to callers.
             return .inferenceFailed(reason: message)
+        case .upstreamProviderUnavailable, .agentSystemUnavailable:
+            // Transient upstream/platform outages are server-side availability errors.
+            return .serverError(statusCode: 503, message: message)
         case .tooManyTools, .unsupportedToolCalling:
             // Tool-calling policy errors; map to invalidRequest (caller must fix
             // the tool configuration).
@@ -609,11 +616,22 @@ public enum OctomilError: LocalizedError, Sendable {
             return .controlSyncFailed(reason: message)
         case .assignmentNotFound:
             return .assignmentNotFound(reason: message)
-        case .incidentNotFound, .deploymentNotFound, .experimentNotFound,
-             .experimentStateInvalid:
+        case .incidentNotFound, .alertRuleNotFound, .deploymentNotFound, .experimentNotFound,
+             .experimentStateInvalid, .threadNotFound, .runNotFound, .runStateInvalid,
+             .approvalNotFound, .approvalAlreadyResolved, .jobNotFound, .jobStateInvalid:
             // Control-plane resource not found; no dedicated OctomilError case;
             // map to assignmentNotFound as the closest control-plane lookup error.
             return .assignmentNotFound(reason: message)
+        case .connectionNotFound, .checkoutNotComplete, .resourceNotFound,
+             .catalogFamilyNotFound, .catalogVariantNotFound, .catalogVersionNotFound,
+             .catalogPackageNotFound, .catalogResourceNotFound, .catalogSlugConflict,
+             .catalogLifecycleInvalid, .billingExportNotFound, .cloudCatalogSourceNotFound,
+             .cloudCatalogMappingNotFound, .cloudCatalogRunNotFound, .conflict, .gone,
+             .payloadTooLarge:
+            // Catalog and lifecycle lookup failures do not have dedicated public
+            // cases; invalidRequest is the SDK's catch-all for bad references or
+            // request state.
+            return .invalidRequest(reason: message)
         case .trainingFailed:
             return .trainingFailed(reason: message)
         case .trainingNotSupported:
