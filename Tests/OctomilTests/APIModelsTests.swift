@@ -645,7 +645,7 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(info.id, "dev-uuid-1")
         XCTAssertEqual(info.deviceIdentifier, "idfv-abc")
         XCTAssertEqual(info.orgId, "org-1")
-        XCTAssertEqual(info.platform, .ios)
+        XCTAssertEqual(info.platform, "ios")
         XCTAssertEqual(info.osVersion, "17.0")
         XCTAssertEqual(info.sdkVersion, "1.0.0")
         XCTAssertEqual(info.appVersion, "2.0.0")
@@ -662,6 +662,31 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNotNil(info.lastHeartbeat)
         XCTAssertEqual(info.heartbeatIntervalSeconds, 300)
         XCTAssertNotNil(info.capabilities)
+    }
+
+    /// Regression: getDeviceInfo(deviceId:) fetches arbitrary devices, and
+    /// cross-platform SDKs register platform values outside the iOS
+    /// DevicePlatform enum (e.g. "node"/"python"). DeviceInfo.platform must
+    /// stay String so such a fetch decodes instead of throwing.
+    func testDeviceInfoDecodesCrossPlatformDevice() throws {
+        let json = """
+        {
+            "id": "dev-uuid-node",
+            "device_identifier": "node-host-1",
+            "org_id": "org-1",
+            "platform": "node",
+            "status": "active",
+            "gpu_available": false,
+            "heartbeat_interval_seconds": 300,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-02-09T12:00:00Z"
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let info = try decoder.decode(
+            DeviceInfo.self, from: json.data(using: .utf8)!)
+        XCTAssertEqual(info.platform, "node")
     }
 
     func testDeviceInfoDecodingWithNulls() throws {

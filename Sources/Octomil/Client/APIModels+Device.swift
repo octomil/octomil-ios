@@ -268,8 +268,12 @@ public struct DeviceInfo: Codable, Sendable {
     public let deviceIdentifier: String
     /// Organization ID.
     public let orgId: String
-    /// Platform.
-    public let platform: DevicePlatform
+    /// Platform. Kept as `String` (not `DevicePlatform`) on this decode
+    /// path: `getDeviceInfo(deviceId:)` fetches arbitrary devices, and
+    /// cross-platform SDKs register values outside the DevicePlatform enum
+    /// (e.g. the node/python SDKs send "node"/"python"). A strict enum here
+    /// would turn a valid cross-platform device fetch into a decode error.
+    public let platform: String
     /// OS version.
     public let osVersion: String?
     /// SDK version.
