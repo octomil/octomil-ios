@@ -9,8 +9,8 @@ public struct DeviceRegistrationRequest: Codable, Sendable {
     public let deviceIdentifier: String
     /// Organization identifier.
     public let orgId: String
-    /// Device platform (ios, android, python).
-    public let platform: String
+    /// Device platform (ios, android, macos, ...).
+    public let platform: DevicePlatform
     /// Operating system version.
     public let osVersion: String?
     /// Octomil SDK version.
@@ -269,7 +269,7 @@ public struct DeviceInfo: Codable, Sendable {
     /// Organization ID.
     public let orgId: String
     /// Platform.
-    public let platform: String
+    public let platform: DevicePlatform
     /// OS version.
     public let osVersion: String?
     /// SDK version.

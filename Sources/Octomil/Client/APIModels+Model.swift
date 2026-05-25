@@ -14,8 +14,10 @@ public struct ModelMetadata: Codable, Sendable {
     public let fileSize: UInt64
     /// When this version was created.
     public let createdAt: Date
-    /// Model format.
-    public let format: String
+    /// Model artifact format. `nil` for locally-created placeholders whose
+    /// format is resolved server-side (previously represented by the `"auto"`
+    /// sentinel string).
+    public let format: ArtifactFormat?
     /// Whether training is supported.
     public let supportsTraining: Bool
     /// Model description.
@@ -47,7 +49,7 @@ public struct ModelMetadata: Codable, Sendable {
         checksum: String,
         fileSize: UInt64,
         createdAt: Date,
-        format: String,
+        format: ArtifactFormat?,
         supportsTraining: Bool,
         description: String?,
         inputSchema: [String: String]?,
@@ -74,7 +76,7 @@ public struct ModelVersionResponse: Codable, Sendable {
     public let version: String
     public let checksum: String
     public let sizeBytes: UInt64
-    public let format: String
+    public let format: ArtifactFormat
     public let description: String?
     public let createdAt: Date
     public let metrics: [String: AnyCodable]?
@@ -144,7 +146,7 @@ public struct VersionResolutionResponse: Codable, Sendable {
 
 /// Request body for model format resolution.
 public struct ModelResolveRequest: Codable, Sendable {
-    public let platform: String
+    public let platform: DevicePlatform
     public let model: String?
     public let manufacturer: String?
     public let cpuArchitecture: String?
@@ -156,7 +158,7 @@ public struct ModelResolveRequest: Codable, Sendable {
     public let computeUnits: String?
 
     public init(
-        platform: String,
+        platform: DevicePlatform,
         model: String?,
         manufacturer: String?,
         cpuArchitecture: String?,
@@ -197,7 +199,7 @@ public struct ModelResolveRequest: Codable, Sendable {
 public struct ModelResolveResponse: Codable, Sendable {
     public let modelId: String
     public let version: String
-    public let format: String
+    public let format: ArtifactFormat
     public let quantization: String?
     public let executor: String?
     public let downloadUrl: String

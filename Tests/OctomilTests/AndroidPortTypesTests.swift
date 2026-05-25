@@ -260,7 +260,7 @@ final class AndroidPortTypesTests: XCTestCase {
         let info = ModelInfo(
             modelId: "resnet50",
             version: "2.0.0",
-            format: "coreml",
+            format: .coreml,
             sizeBytes: 104857600,
             inputShape: [1, 224, 224, 3],
             outputShape: [1, 1000],
@@ -269,7 +269,7 @@ final class AndroidPortTypesTests: XCTestCase {
 
         XCTAssertEqual(info.modelId, "resnet50")
         XCTAssertEqual(info.version, "2.0.0")
-        XCTAssertEqual(info.format, "coreml")
+        XCTAssertEqual(info.format, .coreml)
         XCTAssertEqual(info.sizeBytes, 104857600)
         XCTAssertEqual(info.inputShape, [1, 224, 224, 3])
         XCTAssertEqual(info.outputShape, [1, 1000])

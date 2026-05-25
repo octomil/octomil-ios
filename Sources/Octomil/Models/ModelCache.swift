@@ -240,15 +240,16 @@ public final class ModelCache: ModelCaching, @unchecked Sendable {
         do {
             let mlModel = try MLModel(contentsOf: path)
 
-            // Create placeholder metadata — use "auto" rather than hardcoding a
-            // specific format; the actual format is resolved server-side.
+            // Create placeholder metadata — leave `format` nil rather than
+            // hardcoding a specific format; the actual format is resolved
+            // server-side. (`nil` replaces the former `"auto"` sentinel.)
             let metadata = ModelMetadata(
                 modelId: modelId,
                 version: version,
                 checksum: "",
                 fileSize: 0,
                 createdAt: Date(),
-                format: "auto",
+                format: nil,
                 supportsTraining: mlModel.modelDescription.isUpdatable,
                 description: nil,
                 inputSchema: nil,
