@@ -1,9 +1,42 @@
 # Epic: Adopt the generated swift-openapi client (octomil-ios)
 
-Status: Proposed
+Status: Implemented (see "Outcome" below)
 Owner: TBD
 Related: octomil-ios#231 (gate narrowed to spec-copy), octomil-contracts#192
 (deterministic spec), #189/#190/#191/#193 (generator hardening)
+
+## Outcome (2026-05-28)
+
+Implemented on branch `feat/swift-openapi-client-adoption-20260528-102635`
+(octomil-ios) + `fix/generate-swift-out-dir-20260528-102902` (octomil-contracts).
+
+- **P0** ✅ swift-openapi-generator 1.12.2 output (Client.swift 34k + Types.swift
+  110k lines) compiles cleanly under the 5.9 tools-version / Swift 5 language mode
+  on the Swift 6.2 toolchain. No Swift 6 mode flip needed; the
+  Sendable/lock-from-async hazard never materialized.
+- **P1** ✅ `_OctomilAPIErrorPayload` relocated to `Client/APIErrorPayload.swift`;
+  the mislabeled shims `Client.swift` / `Types.swift` deleted. The dead
+  `_OctomilGeneratedClientProtocol` placeholder was removed (unused).
+- **P2** ✅ Decision 1(a) chosen: COMMAND plugin → committed
+  `Sources/Octomil/GeneratedSources/` with the stable banner. `generate-swift.sh`
+  `OUT` + banner loop + git-status summary re-pointed there (away from
+  `Generated/`, the contract-domain-enum dir).
+- **P3** ✅ Types-only review: NO clean pass-through binding exists. Every facade
+  DTO either reshapes the wire contract (camelCase + CodingKeys), targets an
+  endpoint absent from the spec (`/route`, `/inference`, `/adapt`, `/fallback`
+  are undocumented), or is an empty sentinel. Per
+  `sdk_facade_vs_generated_binding_rule`, binding any would make the type lie, so
+  the facade stays hand-owned. Reshape decision documented in code; stale
+  "regenerate when CI has a compatible toolchain" TODOs removed.
+- **P4** ✅ Real regenerate-and-diff gate re-enabled: new macOS job in
+  `openapi-types-fresh.yml` regenerates via `generate-swift.sh`, diffs
+  `GeneratedSources/` + `openapi.yaml`, runs the banner check, and builds the
+  Octomil target. `check_openapi_banner.sh` re-pointed at `GeneratedSources/`.
+  Determinism verified locally: a fresh regen yields 0 file changes.
+
+Cross-repo merge order: merge the octomil-contracts PR (generate-swift.sh OUT
+fix) BEFORE the octomil-ios PR — the iOS gate checks out octomil-contracts@main
+and runs its `generate-swift.sh`.
 
 ## 1. Summary
 
