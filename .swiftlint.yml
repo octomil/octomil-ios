@@ -3,7 +3,13 @@
 
 excluded:
   - .build
+  - .claude  # local-only nested git worktrees — full repo copies, not lintable source
   - Package.swift
+  # Generated code — not hand-edited, so not linted. GeneratedSources/ is the
+  # swift-openapi-generator output (Client.swift + Types.swift); Generated/ is
+  # the contract domain enums from octomil-contracts codegen.
+  - Sources/Octomil/Generated
+  - Sources/Octomil/GeneratedSources
 
 # --- Rule Configuration ---
 
