@@ -143,7 +143,7 @@ final class FacadeWiringTests: XCTestCase {
             checksum: "abc123",
             fileSize: 1024,
             createdAt: Date(),
-            format: "coreml",
+            format: .coreml,
             supportsTraining: false,
             description: nil,
             inputSchema: nil,
@@ -153,7 +153,7 @@ final class FacadeWiringTests: XCTestCase {
         // We need a real MLModel for the init, but we can test that
         // the format accessor works by checking the metadata path.
         // The format property is defined as `metadata.format`.
-        XCTAssertEqual(metadata.format, "coreml")
+        XCTAssertEqual(metadata.format, .coreml)
     }
 
     // MARK: - AuthConfig init variants

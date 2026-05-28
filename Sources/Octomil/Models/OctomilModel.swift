@@ -27,10 +27,11 @@ public final class OctomilModel: @unchecked Sendable {
     /// URL of the compiled model.
     public let compiledModelURL: URL
 
-    /// The model format (e.g. "coreml", "mlx", "onnx", "auto").
+    /// The model artifact format (e.g. `.coreml`, `.mlx`, `.onnx`).
     ///
-    /// Sourced from the server-provided ``ModelMetadata/format``.
-    public var format: String {
+    /// Sourced from the server-provided ``ModelMetadata/format``. `nil` for
+    /// locally-created placeholders whose format is resolved server-side.
+    public var format: ArtifactFormat? {
         return metadata.format
     }
 

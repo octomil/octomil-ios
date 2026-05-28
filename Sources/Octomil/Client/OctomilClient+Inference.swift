@@ -38,7 +38,7 @@ extension OctomilClient {
                         "model.version": .string(model.version),
                         "inference.modality": .string(modality.rawValue),
                         "inference.session_id": .string(sessionId),
-                        "model.format": .string(model.metadata.format),
+                        "model.format": .string(model.metadata.format?.rawValue ?? "auto"),
                     ]
                 )
                 let envelope = TelemetryEnvelope(resource: resource, events: [event])
@@ -75,7 +75,7 @@ extension OctomilClient {
                         "inference.duration_ms": .double(result.totalDurationMs),
                         "inference.total_chunks": .int(result.totalChunks),
                         "inference.throughput": .double(result.throughput),
-                        "model.format": .string(model.metadata.format),
+                        "model.format": .string(model.metadata.format?.rawValue ?? "auto"),
                     ]
                     if failed {
                         attrs["inference.success"] = .bool(false)

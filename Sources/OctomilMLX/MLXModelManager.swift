@@ -58,7 +58,7 @@ public actor MLXModelManager {
                 modelId: modelId,
                 version: version,
                 capabilities: ModelResolveRequest(
-                    platform: "ios",
+                    platform: .ios,
                     model: self.deviceMetadata.model,
                     manufacturer: self.deviceMetadata.manufacturer,
                     cpuArchitecture: self.deviceMetadata.cpuArchitecture,
@@ -74,7 +74,7 @@ public actor MLXModelManager {
             let downloadInfo = try await apiClient.getDownloadURL(
                 modelId: modelId,
                 version: resolution.version,
-                format: resolution.format
+                format: resolution.format.rawValue
             )
 
             guard let downloadURL = URL(string: downloadInfo.url) else {
