@@ -36,7 +36,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-openapi-generator", exact: "1.6.0"),
+        .package(url: "https://github.com/apple/swift-openapi-generator", exact: "1.12.2"),
         .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.0.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),

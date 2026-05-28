@@ -72,7 +72,7 @@ extension OctomilClient {
         let request = DeviceRegistrationRequest(
             deviceIdentifier: identifier,
             orgId: orgId,
-            platform: "ios",
+            platform: .ios,
             osVersion: deviceInfo.osVersion,
             sdkVersion: OctomilVersion.current,
             appVersion: appVersion,

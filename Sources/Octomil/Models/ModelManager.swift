@@ -108,7 +108,7 @@ public actor ModelManager {
 
             // Resolve optimal model format from device capabilities.
             let resolveRequest = ModelResolveRequest(
-                platform: "ios",
+                platform: .ios,
                 model: self.deviceMetadata.model,
                 manufacturer: self.deviceMetadata.manufacturer,
                 cpuArchitecture: self.deviceMetadata.cpuArchitecture,
@@ -129,7 +129,7 @@ public actor ModelManager {
             let downloadInfo = try await apiClient.getDownloadURL(
                 modelId: modelId,
                 version: resolution.version,
-                format: resolvedFormat
+                format: resolvedFormat.rawValue
             )
 
             guard let downloadURL = URL(string: downloadInfo.url) else {
@@ -261,7 +261,7 @@ public actor ModelManager {
             let sizeBytes = Int64(metadata.fileSize)
 
             let resolveRequest = ModelResolveRequest(
-                platform: "ios",
+                platform: .ios,
                 model: deviceMetadata.model,
                 manufacturer: deviceMetadata.manufacturer,
                 cpuArchitecture: deviceMetadata.cpuArchitecture,
@@ -280,7 +280,7 @@ public actor ModelManager {
             let downloadInfo = try await apiClient.getDownloadURL(
                 modelId: modelId,
                 version: resolution.version,
-                format: resolution.format
+                format: resolution.format.rawValue
             )
             guard let downloadURL = URL(string: downloadInfo.url) else {
                 return .unavailable(reason: "Invalid download URL for model \(modelId)@\(version)")

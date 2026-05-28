@@ -9,6 +9,13 @@ public enum ErrorCode: String, Codable, Sendable {
     case deviceNotRegistered = "device_not_registered"
     case tokenExpired = "token_expired"
     case deviceRevoked = "device_revoked"
+    case passkeyChallengeExpired = "passkey_challenge_expired"
+    case passkeyCredentialNotFound = "passkey_credential_not_found"
+    case invalidToken = "invalid_token"
+    case emailAlreadyVerified = "email_already_verified"
+    case emailAlreadyInUse = "email_already_in_use"
+    case lastAuthMethod = "last_auth_method"
+    case oauthProviderNotLinked = "oauth_provider_not_linked"
     case networkUnavailable = "network_unavailable"
     case requestTimeout = "request_timeout"
     case serverError = "server_error"
@@ -54,6 +61,7 @@ public enum ErrorCode: String, Codable, Sendable {
     case controlSyncFailed = "control_sync_failed"
     case assignmentNotFound = "assignment_not_found"
     case incidentNotFound = "incident_not_found"
+    case alertRuleNotFound = "alert_rule_not_found"
     case deploymentNotFound = "deployment_not_found"
     case experimentNotFound = "experiment_not_found"
     case experimentStateInvalid = "experiment_state_invalid"
@@ -63,8 +71,36 @@ public enum ErrorCode: String, Codable, Sendable {
     case billingCustomerNotFound = "billing_customer_not_found"
     case actionNotFound = "action_not_found"
     case actionStateInvalid = "action_state_invalid"
+    case credentialNotFound = "credential_not_found"
+    case connectionNotFound = "connection_not_found"
+    case localRuntimeNotFound = "local_runtime_not_found"
+    case checkoutNotComplete = "checkout_not_complete"
+    case upstreamProviderUnavailable = "upstream_provider_unavailable"
+    case agentSystemUnavailable = "agent_system_unavailable"
+    case threadNotFound = "thread_not_found"
+    case runNotFound = "run_not_found"
+    case runStateInvalid = "run_state_invalid"
+    case approvalNotFound = "approval_not_found"
+    case approvalAlreadyResolved = "approval_already_resolved"
+    case jobNotFound = "job_not_found"
+    case jobStateInvalid = "job_state_invalid"
     case cancelled = "cancelled"
     case appBackgrounded = "app_backgrounded"
+    case resourceNotFound = "resource_not_found"
+    case catalogFamilyNotFound = "catalog_family_not_found"
+    case catalogVariantNotFound = "catalog_variant_not_found"
+    case catalogVersionNotFound = "catalog_version_not_found"
+    case catalogPackageNotFound = "catalog_package_not_found"
+    case catalogResourceNotFound = "catalog_resource_not_found"
+    case catalogSlugConflict = "catalog_slug_conflict"
+    case catalogLifecycleInvalid = "catalog_lifecycle_invalid"
+    case billingExportNotFound = "billing_export_not_found"
+    case cloudCatalogSourceNotFound = "cloud_catalog_source_not_found"
+    case cloudCatalogMappingNotFound = "cloud_catalog_mapping_not_found"
+    case cloudCatalogRunNotFound = "cloud_catalog_run_not_found"
+    case conflict = "conflict"
+    case gone = "gone"
+    case payloadTooLarge = "payload_too_large"
     case unknown = "unknown"
 }
 
@@ -95,10 +131,10 @@ public enum SuggestedAction: String, Codable, Sendable {
     case reauthenticate = "reauthenticate"
     case checkPermissions = "check_permissions"
     case registerDevice = "register_device"
+    case fixRequest = "fix_request"
     case retryOrFallback = "retry_or_fallback"
     case retry = "retry"
     case retryAfter = "retry_after"
-    case fixRequest = "fix_request"
     case reduceInputOrFallback = "reduce_input_or_fallback"
     case checkModelId = "check_model_id"
     case useAlternateModel = "use_alternate_model"
@@ -128,6 +164,13 @@ extension ErrorCode {
         case .deviceNotRegistered: return .auth
         case .tokenExpired: return .auth
         case .deviceRevoked: return .auth
+        case .passkeyChallengeExpired: return .auth
+        case .passkeyCredentialNotFound: return .auth
+        case .invalidToken: return .auth
+        case .emailAlreadyVerified: return .auth
+        case .emailAlreadyInUse: return .auth
+        case .lastAuthMethod: return .auth
+        case .oauthProviderNotLinked: return .auth
         case .networkUnavailable: return .network
         case .requestTimeout: return .network
         case .serverError: return .network
@@ -173,6 +216,7 @@ extension ErrorCode {
         case .controlSyncFailed: return .control
         case .assignmentNotFound: return .control
         case .incidentNotFound: return .control
+        case .alertRuleNotFound: return .control
         case .deploymentNotFound: return .control
         case .experimentNotFound: return .control
         case .experimentStateInvalid: return .control
@@ -182,8 +226,36 @@ extension ErrorCode {
         case .billingCustomerNotFound: return .control
         case .actionNotFound: return .control
         case .actionStateInvalid: return .control
+        case .credentialNotFound: return .auth
+        case .connectionNotFound: return .control
+        case .localRuntimeNotFound: return .control
+        case .checkoutNotComplete: return .control
+        case .upstreamProviderUnavailable: return .network
+        case .agentSystemUnavailable: return .network
+        case .threadNotFound: return .control
+        case .runNotFound: return .control
+        case .runStateInvalid: return .control
+        case .approvalNotFound: return .control
+        case .approvalAlreadyResolved: return .control
+        case .jobNotFound: return .control
+        case .jobStateInvalid: return .control
         case .cancelled: return .lifecycle
         case .appBackgrounded: return .lifecycle
+        case .resourceNotFound: return .catalog
+        case .catalogFamilyNotFound: return .catalog
+        case .catalogVariantNotFound: return .catalog
+        case .catalogVersionNotFound: return .catalog
+        case .catalogPackageNotFound: return .catalog
+        case .catalogResourceNotFound: return .catalog
+        case .catalogSlugConflict: return .catalog
+        case .catalogLifecycleInvalid: return .catalog
+        case .billingExportNotFound: return .catalog
+        case .cloudCatalogSourceNotFound: return .catalog
+        case .cloudCatalogMappingNotFound: return .catalog
+        case .cloudCatalogRunNotFound: return .catalog
+        case .conflict: return .input
+        case .gone: return .input
+        case .payloadTooLarge: return .input
         case .unknown: return .unknown
         }
     }
@@ -198,6 +270,13 @@ extension ErrorCode {
         case .deviceNotRegistered: return .never
         case .tokenExpired: return .never
         case .deviceRevoked: return .never
+        case .passkeyChallengeExpired: return .never
+        case .passkeyCredentialNotFound: return .never
+        case .invalidToken: return .never
+        case .emailAlreadyVerified: return .never
+        case .emailAlreadyInUse: return .never
+        case .lastAuthMethod: return .never
+        case .oauthProviderNotLinked: return .never
         case .networkUnavailable: return .backoffSafe
         case .requestTimeout: return .conditional
         case .serverError: return .backoffSafe
@@ -243,6 +322,7 @@ extension ErrorCode {
         case .controlSyncFailed: return .backoffSafe
         case .assignmentNotFound: return .never
         case .incidentNotFound: return .never
+        case .alertRuleNotFound: return .never
         case .deploymentNotFound: return .never
         case .experimentNotFound: return .never
         case .experimentStateInvalid: return .never
@@ -252,8 +332,36 @@ extension ErrorCode {
         case .billingCustomerNotFound: return .never
         case .actionNotFound: return .never
         case .actionStateInvalid: return .never
+        case .credentialNotFound: return .never
+        case .connectionNotFound: return .never
+        case .localRuntimeNotFound: return .never
+        case .checkoutNotComplete: return .conditional
+        case .upstreamProviderUnavailable: return .backoffSafe
+        case .agentSystemUnavailable: return .backoffSafe
+        case .threadNotFound: return .never
+        case .runNotFound: return .never
+        case .runStateInvalid: return .never
+        case .approvalNotFound: return .never
+        case .approvalAlreadyResolved: return .never
+        case .jobNotFound: return .never
+        case .jobStateInvalid: return .never
         case .cancelled: return .never
         case .appBackgrounded: return .conditional
+        case .resourceNotFound: return .never
+        case .catalogFamilyNotFound: return .never
+        case .catalogVariantNotFound: return .never
+        case .catalogVersionNotFound: return .never
+        case .catalogPackageNotFound: return .never
+        case .catalogResourceNotFound: return .never
+        case .catalogSlugConflict: return .never
+        case .catalogLifecycleInvalid: return .never
+        case .billingExportNotFound: return .never
+        case .cloudCatalogSourceNotFound: return .never
+        case .cloudCatalogMappingNotFound: return .never
+        case .cloudCatalogRunNotFound: return .never
+        case .conflict: return .never
+        case .gone: return .never
+        case .payloadTooLarge: return .never
         case .unknown: return .never
         }
     }
@@ -268,6 +376,13 @@ extension ErrorCode {
         case .deviceNotRegistered: return false
         case .tokenExpired: return false
         case .deviceRevoked: return false
+        case .passkeyChallengeExpired: return false
+        case .passkeyCredentialNotFound: return false
+        case .invalidToken: return false
+        case .emailAlreadyVerified: return false
+        case .emailAlreadyInUse: return false
+        case .lastAuthMethod: return false
+        case .oauthProviderNotLinked: return false
         case .networkUnavailable: return true
         case .requestTimeout: return true
         case .serverError: return true
@@ -313,6 +428,7 @@ extension ErrorCode {
         case .controlSyncFailed: return false
         case .assignmentNotFound: return false
         case .incidentNotFound: return false
+        case .alertRuleNotFound: return false
         case .deploymentNotFound: return false
         case .experimentNotFound: return false
         case .experimentStateInvalid: return false
@@ -322,8 +438,36 @@ extension ErrorCode {
         case .billingCustomerNotFound: return false
         case .actionNotFound: return false
         case .actionStateInvalid: return false
+        case .credentialNotFound: return false
+        case .connectionNotFound: return false
+        case .localRuntimeNotFound: return false
+        case .checkoutNotComplete: return false
+        case .upstreamProviderUnavailable: return false
+        case .agentSystemUnavailable: return false
+        case .threadNotFound: return false
+        case .runNotFound: return false
+        case .runStateInvalid: return false
+        case .approvalNotFound: return false
+        case .approvalAlreadyResolved: return false
+        case .jobNotFound: return false
+        case .jobStateInvalid: return false
         case .cancelled: return false
         case .appBackgrounded: return false
+        case .resourceNotFound: return false
+        case .catalogFamilyNotFound: return false
+        case .catalogVariantNotFound: return false
+        case .catalogVersionNotFound: return false
+        case .catalogPackageNotFound: return false
+        case .catalogResourceNotFound: return false
+        case .catalogSlugConflict: return false
+        case .catalogLifecycleInvalid: return false
+        case .billingExportNotFound: return false
+        case .cloudCatalogSourceNotFound: return false
+        case .cloudCatalogMappingNotFound: return false
+        case .cloudCatalogRunNotFound: return false
+        case .conflict: return false
+        case .gone: return false
+        case .payloadTooLarge: return false
         case .unknown: return false
         }
     }
@@ -338,6 +482,13 @@ extension ErrorCode {
         case .deviceNotRegistered: return .registerDevice
         case .tokenExpired: return .reauthenticate
         case .deviceRevoked: return .registerDevice
+        case .passkeyChallengeExpired: return .reauthenticate
+        case .passkeyCredentialNotFound: return .fixRequest
+        case .invalidToken: return .fixRequest
+        case .emailAlreadyVerified: return .fixRequest
+        case .emailAlreadyInUse: return .fixRequest
+        case .lastAuthMethod: return .fixRequest
+        case .oauthProviderNotLinked: return .fixRequest
         case .networkUnavailable: return .retryOrFallback
         case .requestTimeout: return .retryOrFallback
         case .serverError: return .retry
@@ -383,6 +534,7 @@ extension ErrorCode {
         case .controlSyncFailed: return .retry
         case .assignmentNotFound: return .checkAssignment
         case .incidentNotFound: return .none
+        case .alertRuleNotFound: return .fixRequest
         case .deploymentNotFound: return .fixRequest
         case .experimentNotFound: return .fixRequest
         case .experimentStateInvalid: return .fixRequest
@@ -392,8 +544,36 @@ extension ErrorCode {
         case .billingCustomerNotFound: return .fixRequest
         case .actionNotFound: return .fixRequest
         case .actionStateInvalid: return .fixRequest
+        case .credentialNotFound: return .fixRequest
+        case .connectionNotFound: return .fixRequest
+        case .localRuntimeNotFound: return .fixRequest
+        case .checkoutNotComplete: return .retry
+        case .upstreamProviderUnavailable: return .retry
+        case .agentSystemUnavailable: return .retry
+        case .threadNotFound: return .fixRequest
+        case .runNotFound: return .fixRequest
+        case .runStateInvalid: return .fixRequest
+        case .approvalNotFound: return .fixRequest
+        case .approvalAlreadyResolved: return .fixRequest
+        case .jobNotFound: return .fixRequest
+        case .jobStateInvalid: return .fixRequest
         case .cancelled: return .none
         case .appBackgrounded: return .resumeOnForeground
+        case .resourceNotFound: return .fixRequest
+        case .catalogFamilyNotFound: return .fixRequest
+        case .catalogVariantNotFound: return .fixRequest
+        case .catalogVersionNotFound: return .fixRequest
+        case .catalogPackageNotFound: return .fixRequest
+        case .catalogResourceNotFound: return .fixRequest
+        case .catalogSlugConflict: return .fixRequest
+        case .catalogLifecycleInvalid: return .fixRequest
+        case .billingExportNotFound: return .fixRequest
+        case .cloudCatalogSourceNotFound: return .fixRequest
+        case .cloudCatalogMappingNotFound: return .fixRequest
+        case .cloudCatalogRunNotFound: return .fixRequest
+        case .conflict: return .fixRequest
+        case .gone: return .fixRequest
+        case .payloadTooLarge: return .fixRequest
         case .unknown: return .reportBug
         }
     }

@@ -83,7 +83,7 @@ public enum Deploy {
             checksum: "",
             fileSize: 0,
             createdAt: Date(),
-            format: resolvedEngine.rawValue,
+            format: ArtifactFormat(rawValue: resolvedEngine.rawValue),
             supportsTraining: mlModel.modelDescription.isUpdatable,
             description: "Locally deployed model",
             inputSchema: nil,

@@ -34,8 +34,9 @@ public struct ModelInfo: Sendable {
     /// Model version.
     public let version: String
 
-    /// Model format (e.g., "coreml", "tflite").
-    public let format: String
+    /// Model artifact format (e.g., `.coreml`, `.tflite`). `nil` for
+    /// locally-created placeholders whose format is resolved server-side.
+    public let format: ArtifactFormat?
 
     /// Model file size in bytes.
     public let sizeBytes: Int64
@@ -52,7 +53,7 @@ public struct ModelInfo: Sendable {
     public init(
         modelId: String,
         version: String,
-        format: String,
+        format: ArtifactFormat?,
         sizeBytes: Int64,
         inputShape: [Int],
         outputShape: [Int],

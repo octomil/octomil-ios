@@ -52,7 +52,7 @@ final class APIModelsTests: XCTestCase {
         let request = DeviceRegistrationRequest(
             deviceIdentifier: "test-device-123",
             orgId: "test-org",
-            platform: "ios",
+            platform: .ios,
             osVersion: nil,
             sdkVersion: nil,
             appVersion: nil,
@@ -133,7 +133,7 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(metadata.version, "1.2.0")
         XCTAssertEqual(metadata.checksum, "abc123def456")
         XCTAssertEqual(metadata.fileSize, 10485760)
-        XCTAssertEqual(metadata.format, "coreml")
+        XCTAssertEqual(metadata.format, .coreml)
         XCTAssertTrue(metadata.supportsTraining)
         XCTAssertEqual(metadata.description, "Fraud detection model")
     }
@@ -664,6 +664,31 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNotNil(info.capabilities)
     }
 
+    /// Regression: getDeviceInfo(deviceId:) fetches arbitrary devices, and
+    /// cross-platform SDKs register platform values outside the iOS
+    /// DevicePlatform enum (e.g. "node"/"python"). DeviceInfo.platform must
+    /// stay String so such a fetch decodes instead of throwing.
+    func testDeviceInfoDecodesCrossPlatformDevice() throws {
+        let json = """
+        {
+            "id": "dev-uuid-node",
+            "device_identifier": "node-host-1",
+            "org_id": "org-1",
+            "platform": "node",
+            "status": "active",
+            "gpu_available": false,
+            "heartbeat_interval_seconds": 300,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-02-09T12:00:00Z"
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let info = try decoder.decode(
+            DeviceInfo.self, from: json.data(using: .utf8)!)
+        XCTAssertEqual(info.platform, "node")
+    }
+
     func testDeviceInfoDecodingWithNulls() throws {
         let json = """
         {
@@ -733,7 +758,7 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(response.version, "2.1.0")
         XCTAssertEqual(response.checksum, "sha256:abc123")
         XCTAssertEqual(response.sizeBytes, 52428800)
-        XCTAssertEqual(response.format, "coreml")
+        XCTAssertEqual(response.format, .coreml)
         XCTAssertEqual(response.description, "Improved fraud detection")
         XCTAssertNotNil(response.metrics)
         XCTAssertEqual(response.metrics?["accuracy"]?.value as? Double, 0.95)
