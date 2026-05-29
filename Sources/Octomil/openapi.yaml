@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Octomil Contract
-  version: 1.28.0
+  version: 1.29.0
   description: Generated from octomil-contracts (RPC-style HTTP).
   contact:
     name: Octomil API
@@ -13481,9 +13481,6 @@ paths:
                 participation_id:
                   type: string
                   description: Participation record identifier for this round.
-                deviceId:
-                  type: string
-                  description: Alias for device_id (camelCase legacy field).
                 participationToken:
                   type: string
                   description: Alias for participation_id (camelCase legacy field).
@@ -30819,7 +30816,6 @@ components:
           description: Server-generated benchmark submission identifier.
         accepted:
           type: boolean
-          const: true
           description: True when the submission passed validation and was stored.
         created_at:
           type: string
