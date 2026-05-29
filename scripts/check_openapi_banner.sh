@@ -20,12 +20,15 @@ REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 SWIFT_OPENAPI_VERSION="1.12.2"
 
-# Files produced by the swift-openapi-generator SwiftPM plugin live under
-# Sources/Octomil/Generated/. The plugin emits a variable file set
-# (Types.swift, Client.swift, Server.swift, transports/…), so scan the
-# directory rather than hard-coding names — a stale list silently passes
-# the gate even when the generator's output shape changes.
-GENERATED_DIR="$REPO_ROOT/Sources/Octomil/Generated"
+# Files produced by the swift-openapi-generator command plugin live under
+# Sources/Octomil/GeneratedSources/ (Client.swift + Types.swift). The plugin
+# emits a variable file set, so scan the directory rather than hard-coding names
+# — a stale list silently passes the gate even when the generator's output shape
+# changes. NOTE: Sources/Octomil/Generated/ is a DIFFERENT directory holding the
+# contract domain enums (codegen/generate.py output, "Auto-generated from
+# octomil-contracts" banner) — it is NOT swift-openapi output and is gated by the
+# contracts repo, so it is deliberately excluded here.
+GENERATED_DIR="$REPO_ROOT/Sources/Octomil/GeneratedSources"
 
 if [ ! -d "$GENERATED_DIR" ]; then
     echo "ERROR: generated directory not found: $GENERATED_DIR" >&2

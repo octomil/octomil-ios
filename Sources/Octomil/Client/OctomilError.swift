@@ -655,13 +655,12 @@ public enum OctomilError: LocalizedError, Sendable {
         from(code: errorCode, message: message, retryAfterMs: nil)
     }
 
-    // MARK: - Generated type bridge (swift-openapi-generator pilot)
+    // MARK: - API error-payload bridge
 
-    /// Creates an ``OctomilError`` from a generated API error payload.
+    /// Creates an ``OctomilError`` from a decoded API error payload.
     ///
-    /// This overload bridges the generated `_OctomilAPIErrorPayload` type
-    /// (produced by swift-openapi-generator from the Octomil OpenAPI contract)
-    /// to the SDK's public error surface.
+    /// This overload bridges the hand-owned `_OctomilAPIErrorPayload` type
+    /// (see `APIErrorPayload.swift`) to the SDK's public error surface.
     ///
     /// ```swift
     /// // When the server returns a structured error body:
