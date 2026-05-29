@@ -1,0 +1,41 @@
+{
+  "sdk": "octomil-ios",
+  "contractVersion": "1.29.0",
+  "methods": [
+    "artifacts.download_urls",
+    "artifacts.manifest",
+    "audio.transcriptions.create",
+    "capabilities.current",
+    "control.heartbeat",
+    "control.refresh",
+    "devices.desired_state",
+    "devices.observed_state",
+    "devices.sync",
+    "federation.heartbeat",
+    "federation.join",
+    "federation.offers",
+    "federation.plan",
+    "federation.upload_complete",
+    "models.load",
+    "models.status",
+    "responses.create",
+    "responses.stream",
+    "telemetry.batch",
+    "text.predictions.create",
+    "training.create_job",
+    "training.job_complete",
+    "training.job_status"
+  ],
+  "coverage": {
+    "errorCodes": "all",
+    "spanNames": "all",
+    "spanEvents": "all",
+    "resourceAttributes": "all"
+  },
+  "generatedSources": ["Sources/Octomil/Generated", "Sources/Octomil/GeneratedSources"],
+  "conformanceTests": [
+    "Tests/OctomilTests/Conformance/ContractConformanceTests.swift",
+    "Tests/OctomilTests/Conformance/GeneratedTypeAdoptionTests.swift",
+    "Tests/OctomilTests/Conformance/NativeCapabilityConformanceTests.swift"
+  ]
+}
