@@ -67214,10 +67214,6 @@ internal enum Operations {
                     ///
                     /// - Remark: Generated from `#/paths/api/v1/federation/rounds/{round_id}/heartbeat/POST/requestBody/json/participation_id`.
                     internal var participation_id: Swift.String
-                    /// Alias for device_id (camelCase legacy field).
-                    ///
-                    /// - Remark: Generated from `#/paths/api/v1/federation/rounds/{round_id}/heartbeat/POST/requestBody/json/deviceId`.
-                    internal var deviceId: Swift.String?
                     /// Alias for participation_id (camelCase legacy field).
                     ///
                     /// - Remark: Generated from `#/paths/api/v1/federation/rounds/{round_id}/heartbeat/POST/requestBody/json/participationToken`.
@@ -67237,7 +67233,6 @@ internal enum Operations {
                     /// - Parameters:
                     ///   - device_id: Device identifier submitting the heartbeat.
                     ///   - participation_id: Participation record identifier for this round.
-                    ///   - deviceId: Alias for device_id (camelCase legacy field).
                     ///   - participationToken: Alias for participation_id (camelCase legacy field).
                     ///   - state: Current FederatedParticipationState enum value.
                     ///   - progressPercent: Training progress 0-100 if state is local_training.
@@ -67245,7 +67240,6 @@ internal enum Operations {
                     internal init(
                         device_id: Swift.String,
                         participation_id: Swift.String,
-                        deviceId: Swift.String? = nil,
                         participationToken: Swift.String? = nil,
                         state: Swift.String? = nil,
                         progressPercent: Swift.Double? = nil,
@@ -67253,7 +67247,6 @@ internal enum Operations {
                     ) {
                         self.device_id = device_id
                         self.participation_id = participation_id
-                        self.deviceId = deviceId
                         self.participationToken = participationToken
                         self.state = state
                         self.progressPercent = progressPercent
@@ -67262,7 +67255,6 @@ internal enum Operations {
                     internal enum CodingKeys: String, CodingKey {
                         case device_id
                         case participation_id
-                        case deviceId
                         case participationToken
                         case state
                         case progressPercent
