@@ -1,6 +1,6 @@
 {
   "sdk": "octomil-ios",
-  "contractVersion": "1.29.0",
+  "contractVersion": "1.30.0",
   "methods": [
     "artifacts.download_urls",
     "artifacts.manifest",
@@ -32,7 +32,10 @@
     "spanEvents": "all",
     "resourceAttributes": "all"
   },
-  "generatedSources": ["Sources/Octomil/Generated", "Sources/Octomil/GeneratedSources"],
+  "generatedSources": [
+    "Sources/Octomil/Generated",
+    "Sources/Octomil/GeneratedSources"
+  ],
   "conformanceTests": [
     "Tests/OctomilTests/Conformance/ContractConformanceTests.swift",
     "Tests/OctomilTests/Conformance/GeneratedTypeAdoptionTests.swift",

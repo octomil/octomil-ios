@@ -19,14 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch contracts
-        uses: actions/checkout@v4
-        with:
-          repository: octomil/octomil-contracts
-          ref: main
-          path: .contract
-          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
-
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -34,16 +26,32 @@ jobs:
       - name: Install codegen dependencies
         run: python -m pip install --upgrade pip pyyaml
 
-      - name: Read contract version
+      - name: Fetch contract bundle
         id: contract
         run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          version="$(python3 - <<'PY'
+          import json
           import pathlib
-          import yaml
 
-          version = yaml.safe_load(pathlib.Path(".contract/contract.yaml").read_text())["version"]
-          print(f"version={version}")
+          manifest = json.loads(pathlib.Path("contract-manifest.json").read_text())
+          print(manifest["contractVersion"])
           PY
+          )"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+          mkdir -p .contract "$RUNNER_TEMP/contract-bundle"
+          # Public, tokenless distribution of the contract bundle (generated
+          # contract surface only; source stays private in octomil-contracts).
+          url="https://github.com/octomil/octomil-contract-bundles/releases/download/v${version}/contract-bundle-${version}.tar.gz"
+          if curl -fsSL "$url" -o "$RUNNER_TEMP/contract-bundle/contract-bundle-${version}.tar.gz"; then
+            tar -xzf "$RUNNER_TEMP/contract-bundle/contract-bundle-${version}.tar.gz" \
+              --strip-components=1 \
+              -C .contract
+          else
+            echo "::error::contract-bundle-${version}.tar.gz is not published at ${url}"
+            exit 1
+          fi
 
       - name: Check generated contracts
         run: python3 .contract/scripts/sync_generated.py --sdk ios --check --target-dir Sources/Octomil/Generated
