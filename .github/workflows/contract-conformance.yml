@@ -19,14 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch contracts
-        uses: actions/checkout@v4
-        with:
-          repository: octomil/octomil-contracts
-          ref: main
-          path: .contract
-          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
-
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -34,15 +26,82 @@ jobs:
       - name: Install codegen dependencies
         run: python -m pip install --upgrade pip pyyaml
 
-      - name: Read contract version
+      - name: Fetch contract bundle
         id: contract
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
         run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          version="$(python3 - <<'PY'
+          import json
           import pathlib
+
+          manifest = json.loads(pathlib.Path("contract-manifest.json").read_text())
+          print(manifest["contractVersion"])
+          PY
+          )"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+          mkdir -p .contract "$RUNNER_TEMP/contract-bundle"
+          if gh release download "v${version}" \
+            --repo octomil/octomil-contracts \
+            --pattern "contract-bundle-${version}.tar.gz" \
+            --dir "$RUNNER_TEMP/contract-bundle"; then
+            tar -xzf "$RUNNER_TEMP/contract-bundle/contract-bundle-${version}.tar.gz" \
+              --strip-components=1 \
+              -C .contract
+            echo "source=bundle" >> "$GITHUB_OUTPUT"
+          elif [ "$version" = "1.29.0" ]; then
+            # v1.29.0 was released before octomil-contracts#211 started
+            # publishing contract-bundle assets. Keep this one pinned
+            # fallback so the transition PR can pass; future versions must
+            # publish a bundle or this gate should fail.
+            echo "::warning::contract-bundle-${version}.tar.gz predates bundle publishing; falling back to pinned source checkout."
+            echo "source=source" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::contract-bundle-${version}.tar.gz is not published or cannot be downloaded."
+            echo "::error::Expected octomil-contracts release v${version} to include the SDK contract bundle."
+            exit 1
+          fi
+
+      - name: Fetch pre-bundle contracts source fallback
+        if: steps.contract.outputs.source != 'bundle'
+        uses: actions/checkout@v4
+        with:
+          repository: octomil/octomil-contracts
+          ref: v${{ steps.contract.outputs.version }}
+          path: .contract
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
+
+      - name: Validate contract root
+        env:
+          EXPECTED_CONTRACT_VERSION: ${{ steps.contract.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import sys
+
           import yaml
 
-          version = yaml.safe_load(pathlib.Path(".contract/contract.yaml").read_text())["version"]
-          print(f"version={version}")
+          root = pathlib.Path(".contract")
+          version = yaml.safe_load((root / "contract.yaml").read_text())["version"]
+          expected = os.environ["EXPECTED_CONTRACT_VERSION"]
+          if version != expected:
+              print(f"::error::.contract version {version} != expected {expected}")
+              sys.exit(1)
+          for required in [
+              "conformance",
+              "generated/swift",
+              "scripts/generate_conformance.py",
+              "scripts/sync_generated.py",
+              "ci/audit-sdks.py",
+              "ci/client_sdk_surface.yaml",
+          ]:
+              if not (root / required).exists():
+                  print(f"::error::.contract is missing {required}")
+                  sys.exit(1)
+          print(f"Contract root ready from ${{ steps.contract.outputs.source }}: v{version}")
           PY
 
       - name: Check generated contracts
