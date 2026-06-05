@@ -53,8 +53,14 @@ public enum RuntimeMetricName {
     public static let vadRealTimeFactor = "vad.real_time_factor"
     public static let vadSetupMs = "vad.setup_ms"
     public static let whisperAudioDurationMs = "whisper.audio_duration_ms"
+    public static let whisperChunkFinalCoverageMs = "whisper.chunk_final_coverage_ms"
+    public static let whisperChunkSegmentsEmitted = "whisper.chunk_segments_emitted"
+    public static let whisperChunkSegmentsKept = "whisper.chunk_segments_kept"
+    public static let whisperChunkWindowCount = "whisper.chunk_window_count"
     public static let whisperDecodeMs = "whisper.decode_ms"
     public static let whisperDigestAdmissionOk = "whisper.digest_admission_ok"
+    public static let whisperFirstFinalSegmentMs = "whisper.first_final_segment_ms"
+    public static let whisperFirstPartialMs = "whisper.first_partial_ms"
     public static let whisperLoadMs = "whisper.load_ms"
     public static let whisperQueueMs = "whisper.queue_ms"
     public static let whisperRealTimeFactor = "whisper.real_time_factor"
@@ -111,8 +117,14 @@ public enum RuntimeMetricName {
         vadRealTimeFactor,
         vadSetupMs,
         whisperAudioDurationMs,
+        whisperChunkFinalCoverageMs,
+        whisperChunkSegmentsEmitted,
+        whisperChunkSegmentsKept,
+        whisperChunkWindowCount,
         whisperDecodeMs,
         whisperDigestAdmissionOk,
+        whisperFirstFinalSegmentMs,
+        whisperFirstPartialMs,
         whisperLoadMs,
         whisperQueueMs,
         whisperRealTimeFactor,
