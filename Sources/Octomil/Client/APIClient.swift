@@ -1,4 +1,5 @@
 import Foundation
+import CommonCrypto
 import os.log
 
 /// HTTP client for communicating with the Octomil server API.
@@ -178,22 +179,21 @@ public actor APIClient {
         throw OctomilError.downloadFailed(reason: lastError?.localizedDescription ?? "Unknown error")
     }
 
-    /// Downloads a file using streaming I/O, writing data incrementally to disk.
-    ///
-    /// Unlike ``downloadData(from:)`` this never holds the full file in memory.
-    /// Progress is reported as bytes accumulate.
+    /// Downloads a file to disk via a URLSession download task (never held in memory).
     ///
     /// - Parameters:
     ///   - url: URL to download from.
     ///   - destination: Local file URL to write the downloaded data to.
     ///   - expectedBytes: Expected total size in bytes (used when the server omits Content-Length).
+    ///   - expectedSHA256: Hex SHA-256 of the file; on mismatch nothing is written and an error is thrown.
     ///   - progress: Closure called as data arrives with `(bytesWritten, totalBytes)`.
     ///               `totalBytes` is -1 when the size is unknown.
     public func downloadFile(
         from url: URL,
         to destination: URL,
         expectedBytes: Int64 = -1,
-        progress: @Sendable (Int64, Int64) -> Void = { _, _ in }
+        expectedSHA256: String? = nil,
+        progress: @escaping @Sendable (Int64, Int64) -> Void = { _, _ in }
     ) async throws {
         if configuration.enableLogging {
             logger.debug("Streaming download from: \(url.absoluteString)")
@@ -204,7 +204,9 @@ public actor APIClient {
 
         while retries < configuration.maxRetryAttempts {
             do {
-                let (asyncBytes, response) = try await session.bytes(from: url)
+                let progressDelegate = DownloadProgressDelegate(fallbackTotal: expectedBytes, onProgress: progress)
+                let (tempURL, response) = try await session.download(from: url, delegate: progressDelegate)
+                defer { try? FileManager.default.removeItem(at: tempURL) }
 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw OctomilError.unknown(underlying: nil)
@@ -214,50 +216,19 @@ public actor APIClient {
                     throw OctomilError.downloadFailed(reason: "HTTP \(httpResponse.statusCode)")
                 }
 
-                let contentLength = httpResponse.expectedContentLength  // -1 if unknown
-                let totalBytes: Int64 = if contentLength > 0 {
-                    contentLength
-                } else if expectedBytes > 0 {
-                    expectedBytes
-                } else {
-                    -1
-                }
-
-                // Open file handle for incremental writes
-                FileManager.default.createFile(atPath: destination.path, contents: nil)
-                let fileHandle = try FileHandle(forWritingTo: destination)
-                defer { try? fileHandle.close() }
-
-                var bytesWritten: Int64 = 0
-                // 256 KB write buffer — balances syscall overhead vs memory use
-                let bufferSize = 256 * 1024
-                var buffer = Data()
-                buffer.reserveCapacity(bufferSize)
-
-                for try await byte in asyncBytes {
-                    buffer.append(byte)
-
-                    if buffer.count >= bufferSize {
-                        fileHandle.write(buffer)
-                        bytesWritten += Int64(buffer.count)
-                        buffer.removeAll(keepingCapacity: true)
-                        progress(bytesWritten, totalBytes)
+                if let expected = expectedSHA256, !expected.isEmpty {
+                    let actual = try Self.sha256Hex(ofFileAt: tempURL)
+                    guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
+                        throw OctomilError.downloadFailed(reason: "Checksum mismatch for downloaded file")
                     }
                 }
 
-                // Flush remaining bytes
-                if !buffer.isEmpty {
-                    fileHandle.write(buffer)
-                    bytesWritten += Int64(buffer.count)
-                    progress(bytesWritten, totalBytes)
-                }
-
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.moveItem(at: tempURL, to: destination)
                 return
             } catch let error as OctomilError {
                 throw error
             } catch {
-                // Clean up partial file on retry
-                try? FileManager.default.removeItem(at: destination)
                 lastError = error
                 retries += 1
                 if retries < configuration.maxRetryAttempts {
@@ -267,6 +238,19 @@ public actor APIClient {
         }
 
         throw OctomilError.downloadFailed(reason: lastError?.localizedDescription ?? "Unknown error")
+    }
+
+    static func sha256Hex(ofFileAt url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var context = CC_SHA256_CTX()
+        CC_SHA256_Init(&context)
+        while let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty {
+            chunk.withUnsafeBytes { _ = CC_SHA256_Update(&context, $0.baseAddress, CC_LONG($0.count)) }
+        }
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        CC_SHA256_Final(&digest, &context)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: - Internal Request Helpers
@@ -436,4 +420,27 @@ internal struct APIEmptyResponse: Decodable {}
 /// The server may return an empty body or a simple acknowledgment.
 internal struct PairingBenchmarkResponse: Decodable {
     init() {}
+}
+
+private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let fallbackTotal: Int64
+    private let onProgress: @Sendable (Int64, Int64) -> Void
+
+    init(fallbackTotal: Int64, onProgress: @escaping @Sendable (Int64, Int64) -> Void) {
+        self.fallbackTotal = fallbackTotal
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : (fallbackTotal > 0 ? fallbackTotal : -1)
+        onProgress(totalBytesWritten, total)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
 }

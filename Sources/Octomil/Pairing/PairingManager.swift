@@ -270,7 +270,8 @@ public actor PairingManager {
                 try await apiClient.downloadFile(
                     from: resourceURL,
                     to: fileURL,
-                    expectedBytes: resourceSize
+                    expectedBytes: resourceSize,
+                    expectedSHA256: resource.checksumSha256
                 ) { written, fileTotal in
                     let currentTotal = capturedCompleted + written
                     let effectiveTotal = totalSize > 0 ? totalSize : fileTotal
