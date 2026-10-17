@@ -595,7 +595,7 @@ public final class TelemetryQueue: @unchecked Sendable {
             let encoder = JSONEncoder()
             request.httpBody = try encoder.encode(otlpPayload)
 
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await PinnedSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse,
                !(200...299).contains(httpResponse.statusCode) {
                 logger.warning("Telemetry upload returned HTTP \(httpResponse.statusCode)")

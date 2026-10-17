@@ -249,7 +249,7 @@ public enum Deploy {
 
             request.httpBody = try JSONEncoder().encode(report)
 
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await PinnedSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                 logger.warning("Benchmark submission returned HTTP \(httpResponse.statusCode) for pairing code: \(code)")
             } else {

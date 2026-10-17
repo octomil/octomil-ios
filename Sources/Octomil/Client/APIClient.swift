@@ -43,6 +43,7 @@ public actor APIClient {
         sessionConfig.timeoutIntervalForRequest = configuration.requestTimeout
         sessionConfig.timeoutIntervalForResource = configuration.downloadTimeout
         sessionConfig.waitsForConnectivity = true
+        PinnedSession.register(hashes: configuration.pinnedCertificateHashes, host: serverURL.host)
         if configuration.pinnedCertificateHashes.isEmpty {
             self.pinningDelegate = nil
             self.session = URLSession(configuration: sessionConfig)
