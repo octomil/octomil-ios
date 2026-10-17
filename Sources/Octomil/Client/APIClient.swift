@@ -47,7 +47,10 @@ public actor APIClient {
             self.pinningDelegate = nil
             self.session = URLSession(configuration: sessionConfig)
         } else {
-            let delegate = CertificatePinningDelegate(pinnedHashes: configuration.pinnedCertificateHashes)
+            let delegate = CertificatePinningDelegate(
+                pinnedHashes: configuration.pinnedCertificateHashes,
+                pinnedHost: serverURL.host
+            )
             self.pinningDelegate = delegate
             self.session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
         }
