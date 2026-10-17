@@ -22,7 +22,7 @@ public final class CloudModelRuntime: ModelRuntime, @unchecked Sendable {
         self.serverURL = serverURL
         self.apiKey = apiKey
         self.model = model
-        self.session = session ?? URLSession(configuration: .default)
+        self.session = session ?? PinnedSession.shared
     }
 
     public var capabilities: RuntimeCapabilities {

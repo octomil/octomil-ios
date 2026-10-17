@@ -26,6 +26,21 @@ final class CertificatePinningTests: XCTestCase {
         XCTAssertNotEqual(hash1, hash2, "Different inputs should produce different hashes")
     }
 
+    // MARK: - SPKI Pins (generated with openssl)
+
+    // openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
+    func testSPKIHashMatchesOpenSSLForECP256() throws {
+        let der = "MIIBjjCCATOgAwIBAgIUWyqhVR8tbONtWt/xDYAXrBDVdBMwCgYIKoZIzj0EAwIwGzEZMBcGA1UEAwwQdGVzdC5vY3RvbWlsLmNvbTAgFw0yNjEwMTcxNzE1MDRaGA8yMTI2MDkyMzE3MTUwNFowGzEZMBcGA1UEAwwQdGVzdC5vY3RvbWlsLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABMBcDiai3plxF6zltZX36EVePvle73+zYWTvNSdfz3j4xRoUoFDjFZgC+WR3J7v0KR7CQKalRVbX8xwIdZclmTCjUzBRMB0GA1UdDgQWBBSO5xOGKtu2vvphMjxYa1kPT7i41TAfBgNVHSMEGDAWgBSO5xOGKtu2vvphMjxYa1kPT7i41TAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0kAMEYCIQCsi0LkkJ4vG8f2q7ABTXfrRNWepeZSyznNGeJ117beMwIhANwj3wv5Z6dp8BR53la6MKRJrsnNkoszqntbKubXeOlo"
+        let cert = try XCTUnwrap(SecCertificateCreateWithData(nil, try XCTUnwrap(Data(base64Encoded: der)) as CFData))
+        XCTAssertEqual(CertificatePinningDelegate.spkiHash(of: cert), "KHdND4n2+FBhQbv+TVDsx6YO9/3/2AZscKs4sM23fAo=")
+    }
+
+    func testSPKIHashMatchesOpenSSLForRSA2048() throws {
+        let der = "MIIDGTCCAgGgAwIBAgIUH1jDmNDbto/C3sE/Jkg/BgHa5jYwDQYJKoZIhvcNAQELBQAwGzEZMBcGA1UEAwwQdGVzdC5vY3RvbWlsLmNvbTAgFw0yNjEwMTcxNzE1MDRaGA8yMTI2MDkyMzE3MTUwNFowGzEZMBcGA1UEAwwQdGVzdC5vY3RvbWlsLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAM4m8i07vOGMg9Jh22u9Q5tulKOU84+2XK8XvHwvT/HqT4+zuPgWqTZ3c+9V1wOX/cuMZEelGE0QCmhX2MqiUJfS5smsK+p/Wgf6tyfqLQA5MtZ/42iXJgAAGM8pyOaFNA5QQsQaY1KpwGUAFa7ExGnMH24LXVTDGITEe9E894zkkNJpkWIodGGwrlKd4e4lBzc3/cZ0lMU6JZ7qLZ0K9kkHlbr2Oi0bjPZzlreZK8axK2/v1GwMiHN1CeUurQBjFN362HHQsCzNVlQEOYWYX5HDT/3JHJ5dAxjhqaIifV8f0aQuKs+PCGRhld1jlo3gvZmj9jTK7eTPteAUpn6GYn8CAwEAAaNTMFEwHQYDVR0OBBYEFPC5hRLf6OBSZndPL9tNSM0t0RI9MB8GA1UdIwQYMBaAFPC5hRLf6OBSZndPL9tNSM0t0RI9MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAB1HVDqlowKZCb/9ECHatwLAydAyJhTxkWdAUEP8YaObgeXGqdPUoopEbacXVIQEtrN11kA0vuR22KlCrJVzX/6gbcCjo0S0VGCSDdDvYMFkVTQpBWU0flPMNgn8HNGZ1iHng1SMtmdZjJVUDEO/ly+qLRZw8eZ5kBgO345pxdKjtwlyVAyLkEdx4UlpgDTIspSzEQ5HcCFE6l2yaOIZSg53Dc/lMjm1o5g1RlqV6eQbCYGtRA36aBHNtA1NNk9RWuYf7jbKh1x5fGwV5SC2N1t0MgNIXeFZISQzqNuALY4b2G8fKdJibIIXkbbCV4uXibT9y73BAf4GGkxDB0fiQUs="
+        let cert = try XCTUnwrap(SecCertificateCreateWithData(nil, try XCTUnwrap(Data(base64Encoded: der)) as CFData))
+        XCTAssertEqual(CertificatePinningDelegate.spkiHash(of: cert), "nDTwqyrAgFUucdBbdGN13UwE7X5/qEC+4YL5iP48YtQ=")
+    }
+
     // MARK: - Delegate Configuration
 
     func testDelegateCreatedWithPins() {

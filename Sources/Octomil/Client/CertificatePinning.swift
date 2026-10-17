@@ -2,23 +2,26 @@ import Foundation
 import CommonCrypto
 import os.log
 
-/// Delegate that validates server certificates against pinned SHA-256 public key hashes.
+/// Delegate that validates the API host's leaf certificate against pinned SPKI SHA-256 hashes.
 ///
-/// When `pinnedHashes` is non-empty, the delegate extracts the server's public key,
-/// computes its SHA-256 hash, and checks it against the provided pins. If no pins
-/// are configured, validation falls through to the system default (development mode).
+/// Pins are the base64 SHA-256 of the DER SubjectPublicKeyInfo, i.e. the output of
+/// `openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64`.
+/// Hosts other than `pinnedHost` (e.g. presigned CDN downloads) and empty pin sets use
+/// system validation.
 public final class CertificatePinningDelegate: NSObject, URLSessionDelegate, Sendable {
 
-    /// SHA-256 hashes of the DER-encoded public keys that the server is allowed to present.
-    /// Each string should be a base64-encoded SHA-256 hash (e.g., from `openssl`).
     private let pinnedHashes: [String]
+    private let pinnedHost: String?
     private let logger = Logger(subsystem: "ai.octomil.sdk", category: "CertificatePinning")
 
     /// Creates a new pinning delegate.
-    /// - Parameter pinnedHashes: Base64-encoded SHA-256 hashes of allowed public keys.
-    ///   Pass an empty array to fall back to system validation.
-    public init(pinnedHashes: [String] = []) {
+    /// - Parameters:
+    ///   - pinnedHashes: Base64-encoded SHA-256 hashes of allowed SPKI structures.
+    ///     Pass an empty array to fall back to system validation.
+    ///   - pinnedHost: Only this host is pinned. `nil` pins every host.
+    public init(pinnedHashes: [String] = [], pinnedHost: String? = nil) {
         self.pinnedHashes = pinnedHashes
+        self.pinnedHost = pinnedHost?.lowercased()
         super.init()
     }
 
@@ -41,6 +44,11 @@ public final class CertificatePinningDelegate: NSObject, URLSessionDelegate, Sen
             return
         }
 
+        if let pinnedHost, challenge.protectionSpace.host.lowercased() != pinnedHost {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
         // Evaluate the trust object using system root certificates first.
         var error: CFError?
         let trustValid = SecTrustEvaluateWithError(serverTrust, &error)
@@ -52,11 +60,7 @@ public final class CertificatePinningDelegate: NSObject, URLSessionDelegate, Sen
 
         // Extract the server's leaf certificate public key and check its hash.
         if let serverCertificate = SecTrustGetCertificateAtIndex(serverTrust, 0),
-           let publicKey = SecCertificateCopyKey(serverCertificate),
-           let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? {
-
-            let hash = sha256(data: publicKeyData)
-            let hashBase64 = hash.base64EncodedString()
+           let hashBase64 = Self.spkiHash(of: serverCertificate) {
 
             if pinnedHashes.contains(hashBase64) {
                 completionHandler(.useCredential, URLCredential(trust: serverTrust))
@@ -74,6 +78,52 @@ public final class CertificatePinningDelegate: NSObject, URLSessionDelegate, Sen
 
     // MARK: - Hashing
 
+    // DER SubjectPublicKeyInfo prefixes; SecKey exports only the raw key bytes.
+    private static let rsa2048Header: [UInt8] = [
+        0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01,
+        0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f, 0x00
+    ]
+    private static let rsa4096Header: [UInt8] = [
+        0x30, 0x82, 0x02, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01,
+        0x01, 0x05, 0x00, 0x03, 0x82, 0x02, 0x0f, 0x00
+    ]
+    private static let ecP256Header: [UInt8] = [
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a,
+        0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00
+    ]
+    private static let ecP384Header: [UInt8] = [
+        0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b,
+        0x81, 0x04, 0x00, 0x22, 0x03, 0x62, 0x00
+    ]
+    private static let ecP521Header: [UInt8] = [
+        0x30, 0x81, 0x9b, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05,
+        0x2b, 0x81, 0x04, 0x00, 0x23, 0x03, 0x81, 0x86, 0x00
+    ]
+
+    /// Base64 SHA-256 of the certificate's SPKI, or nil for unsupported key types.
+    static func spkiHash(of certificate: SecCertificate) -> String? {
+        guard let key = SecCertificateCopyKey(certificate),
+              let raw = SecKeyCopyExternalRepresentation(key, nil) as Data?,
+              let attrs = SecKeyCopyAttributes(key) as? [CFString: Any],
+              let type = attrs[kSecAttrKeyType] as? String,
+              let bits = attrs[kSecAttrKeySizeInBits] as? Int else {
+            return nil
+        }
+
+        let rsa = kSecAttrKeyTypeRSA as String
+        let ec = kSecAttrKeyTypeECSECPrimeRandom as String
+        let header: [UInt8]
+        switch (type, bits) {
+        case (rsa, 2048): header = rsa2048Header
+        case (rsa, 4096): header = rsa4096Header
+        case (ec, 256): header = ecP256Header
+        case (ec, 384): header = ecP384Header
+        case (ec, 521): header = ecP521Header
+        default: return nil
+        }
+        return sha256(data: Data(header) + raw).base64EncodedString()
+    }
+
     /// Computes the SHA-256 hash of the given data.
     static func sha256(data: Data) -> Data {
         var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
@@ -83,7 +133,4 @@ public final class CertificatePinningDelegate: NSObject, URLSessionDelegate, Sen
         return Data(hash)
     }
 
-    private func sha256(data: Data) -> Data {
-        Self.sha256(data: data)
-    }
 }

@@ -45,7 +45,7 @@ public actor RuntimePlannerClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeoutSeconds
         config.waitsForConnectivity = false
-        self.session = URLSession(configuration: config)
+        self.session = PinnedSession.make(configuration: config)
 
         self.jsonEncoder = JSONEncoder()
         self.jsonDecoder = JSONDecoder()

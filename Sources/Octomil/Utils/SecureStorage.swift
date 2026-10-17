@@ -135,18 +135,20 @@ public final class SecureStorage: @unchecked Sendable {
             throw OctomilError.keychainError(status: errSecParam)
         }
 
-        // Delete existing item first
-        try? delete(account: account)
-
-        let query: [String: Any] = [
+        let identity: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account
+        ]
+        let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        var status = SecItemUpdate(identity as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            status = SecItemAdd(identity.merging(attributes) { $1 } as CFDictionary, nil)
+        }
 
         guard status == errSecSuccess else {
             logger.error("Keychain store failed: \(status)")

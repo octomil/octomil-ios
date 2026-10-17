@@ -211,7 +211,7 @@ public actor RoutingClient {
 
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.timeoutIntervalForRequest = 10
-        self.session = URLSession(configuration: sessionConfig)
+        self.session = PinnedSession.make(configuration: sessionConfig)
 
         self.jsonEncoder = JSONEncoder()
         self.jsonDecoder = JSONDecoder()

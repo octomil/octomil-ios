@@ -234,9 +234,15 @@ public actor PairingManager {
     ) async throws -> DeploymentResult {
         let downloadStart = Date()
         let fm = FileManager.default
-        let modelDir = fm.temporaryDirectory
+        try Self.validatePathComponent(deployment.modelName, field: "modelName")
+        try Self.validatePathComponent(deployment.modelVersion, field: "modelVersion")
+        for resource in resources {
+            try Self.validatePathComponent(resource.filename, field: "filename")
+        }
+        let deployRoot = fm.temporaryDirectory
             .appendingPathComponent("ai.octomil.deploy", isDirectory: true)
-            .appendingPathComponent(deployment.modelName, isDirectory: true)
+        let modelDir = deployRoot.appendingPathComponent(deployment.modelName, isDirectory: true)
+        try Self.requireContained(modelDir, in: deployRoot)
 
         try fm.createDirectory(at: modelDir, withIntermediateDirectories: true)
 
@@ -256,6 +262,7 @@ public actor PairingManager {
             }
 
             let fileURL = modelDir.appendingPathComponent(resource.filename)
+            try Self.requireContained(fileURL, in: modelDir)
             let resourceSize = Int64(resource.sizeBytes ?? 0)
             let capturedCompleted = completedBytes
 
@@ -263,7 +270,8 @@ public actor PairingManager {
                 try await apiClient.downloadFile(
                     from: resourceURL,
                     to: fileURL,
-                    expectedBytes: resourceSize
+                    expectedBytes: resourceSize,
+                    expectedSHA256: resource.checksumSha256
                 ) { written, fileTotal in
                     let currentTotal = capturedCompleted + written
                     let effectiveTotal = totalSize > 0 ? totalSize : fileTotal
@@ -354,6 +362,27 @@ public actor PairingManager {
         return result
     }
 
+    // MARK: - Path Safety
+
+    /// Rejects server-supplied names that could escape the base directory.
+    static func validatePathComponent(_ value: String, field: String) throws {
+        let invalid = value.isEmpty
+            || value == "." || value == ".."
+            || value.contains("/") || value.contains("\\")
+            || value.contains("\0")
+        if invalid {
+            throw PairingError.invalidDeployment(reason: "Invalid \(field): \(value)")
+        }
+    }
+
+    static func requireContained(_ url: URL, in base: URL) throws {
+        let basePath = base.standardizedFileURL.resolvingSymlinksInPath().path
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        guard path.hasPrefix(basePath + "/") else {
+            throw PairingError.invalidDeployment(reason: "Path escapes base directory")
+        }
+    }
+
     // MARK: - Model Persistence
 
     /// Moves a model directory to persistent storage.
@@ -365,11 +394,16 @@ public actor PairingManager {
         version: String
     ) throws -> URL {
         let fm = FileManager.default
-        let cacheDir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let targetDir = cacheDir
-            .appendingPathComponent("ai.octomil.models", isDirectory: true)
+        try validatePathComponent(modelName, field: "modelName")
+        try validatePathComponent(version, field: "modelVersion")
+        guard let cacheDir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw PairingError.invalidDeployment(reason: "Application Support directory unavailable")
+        }
+        let modelsRoot = cacheDir.appendingPathComponent("ai.octomil.models", isDirectory: true)
+        let targetDir = modelsRoot
             .appendingPathComponent(modelName, isDirectory: true)
             .appendingPathComponent(version, isDirectory: true)
+        try requireContained(targetDir, in: modelsRoot)
 
         // Remove existing model directory if present
         if fm.fileExists(atPath: targetDir.path) {

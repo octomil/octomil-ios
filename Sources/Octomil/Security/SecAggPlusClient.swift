@@ -160,7 +160,11 @@ public actor SecAggPlusClient {
             threshold: config.threshold,
             totalShares: config.totalClients
         )
-        rdSeedShares = rdShares.map { $0.first! }
+        let rdFirsts = rdShares.compactMap(\.first)
+        guard rdFirsts.count == rdShares.count else {
+            throw OctomilError.invalidInput(reason: "Shamir share generation returned an empty share")
+        }
+        rdSeedShares = rdFirsts
 
         // Shamir-share sk1 private key as a field element
         let sk1Int = dataToFieldElement(sk1.rawRepresentation)
@@ -169,7 +173,11 @@ public actor SecAggPlusClient {
             threshold: config.threshold,
             totalShares: config.totalClients
         )
-        sk1Shares = sk1SharesList.map { $0.first! }
+        let sk1Firsts = sk1SharesList.compactMap(\.first)
+        guard sk1Firsts.count == sk1SharesList.count else {
+            throw OctomilError.invalidInput(reason: "Shamir share generation returned an empty share")
+        }
+        sk1Shares = sk1Firsts
 
         var encrypted: [Int: Data] = [:]
 

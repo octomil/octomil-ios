@@ -38,16 +38,14 @@ public struct KeychainTokenStorage: TokenStorage {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        SecItemDelete(query as CFDictionary)
-
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+        let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            status = SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
+        }
         guard status == errSecSuccess else {
             throw NSError(domain: "Octomil.DeviceAuth", code: Int(status), userInfo: [
                 NSLocalizedDescriptionKey: "Failed to store device token state in Keychain"
