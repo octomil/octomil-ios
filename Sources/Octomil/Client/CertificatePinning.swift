@@ -110,13 +110,15 @@ public final class CertificatePinningDelegate: NSObject, URLSessionDelegate, Sen
             return nil
         }
 
+        let rsa = kSecAttrKeyTypeRSA as String
+        let ec = kSecAttrKeyTypeECSECPrimeRandom as String
         let header: [UInt8]
         switch (type, bits) {
-        case (kSecAttrKeyTypeRSA as String, 2048): header = rsa2048Header
-        case (kSecAttrKeyTypeRSA as String, 4096): header = rsa4096Header
-        case (kSecAttrKeyTypeECSECPrimeRandom as String, 256): header = ecP256Header
-        case (kSecAttrKeyTypeECSECPrimeRandom as String, 384): header = ecP384Header
-        case (kSecAttrKeyTypeECSECPrimeRandom as String, 521): header = ecP521Header
+        case (rsa, 2048): header = rsa2048Header
+        case (rsa, 4096): header = rsa4096Header
+        case (ec, 256): header = ecP256Header
+        case (ec, 384): header = ecP384Header
+        case (ec, 521): header = ecP521Header
         default: return nil
         }
         return sha256(data: Data(header) + raw).base64EncodedString()
