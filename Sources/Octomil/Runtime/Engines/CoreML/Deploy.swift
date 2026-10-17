@@ -199,7 +199,10 @@ public enum Deploy {
             }
         }
 
-        return try MLDictionaryFeatureProvider(dictionary: dict as! [String: Any])
+        guard let features = dict as? [String: Any] else {
+            throw OctomilError.invalidInput(reason: "Unexpected model input feature names")
+        }
+        return try MLDictionaryFeatureProvider(dictionary: features)
     }
 
     // MARK: - Benchmark Submission
