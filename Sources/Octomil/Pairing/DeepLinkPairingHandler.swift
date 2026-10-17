@@ -89,9 +89,18 @@ public actor DeepLinkPairingHandler {
 
     // MARK: - Private
 
+    /// Deep links are attacker-controllable; only https to octomil.com (or the configured default host) is allowed.
+    private func isTrustedHost(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else { return false }
+        return host == "octomil.com" || host.hasSuffix(".octomil.com") || host == defaultServerURL.host?.lowercased()
+    }
+
     private func executePairing(token: String, host: String?) async -> Result<DeploymentResult, DeepLinkError> {
         let serverURL: URL
-        if let host, let parsed = URL(string: host) {
+        if let host {
+            guard let parsed = URL(string: host), isTrustedHost(parsed) else {
+                return .failure(.pairingFailed(underlying: .invalidDeployment(reason: "Untrusted pairing host")))
+            }
             serverURL = parsed
         } else {
             serverURL = defaultServerURL
