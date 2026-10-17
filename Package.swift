@@ -72,7 +72,8 @@ let package = Package(
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
             ],
-            path: "Sources/Octomil"
+            path: "Sources/Octomil",
+            resources: [.copy("PrivacyInfo.xcprivacy")]
         ),
 
         // System library wrapper for libbz2; used by the prepare-
